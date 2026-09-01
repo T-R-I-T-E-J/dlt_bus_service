@@ -311,16 +311,38 @@ async function applyEvent(c: PoolClient, ev: any, provider: PaymentProvider) {
   }
   if (ev.kind_normalized !== 'PAYMENT_SUCCEEDED') return;
 
+  /* A terminal outcome has already been applied to this payment, so a redelivery
+   * or a re-queued event must do nothing. Two reasons this guard is explicit
+   * rather than implied:
+   *
+   *   1. a re-queued mismatch would otherwise raise a SECOND discrepancy refund
+   *   2. because amount now records what was RECEIVED, a re-queued mismatch
+   *      would find the amounts equal and fall through to settle_booking,
+   *      confirming a booking that was deliberately left unconfirmed
+   *
+   * CANCELLED and FAILED are deliberately NOT terminal here: a late capture on
+   * a superseded intent must still reach settle_booking, which is what refuses
+   * to resurrect an abandoned booking (F-01). */
+  if (p.status === 'SUCCESS' || p.status === 'DUPLICATE') return;
+
   /* Amount mismatch is a discrepancy for operations, never a silent accept. */
   if (paidAmount && Math.round(paidAmount) !== p.amount) {
+    const expected = p.amount;                  // what the order asked for
+    const received = Math.round(paidAmount);    // what actually arrived
+    /* amount records MONEY ACTUALLY RECEIVED. booking_money.received sums it,
+     * and the refunds_within_receipts trigger caps refunds by it, so neither can
+     * report or return money the acquirer never sent. The intended figure is not
+     * lost — it stays on bookings.total_amount, and is named in failure_reason
+     * and in the audit entry below. */
     await c.query(
-      `UPDATE payments SET status='SUCCESS', provider_reference=$2,
-              failure_reason=$3, updated_at=now() WHERE id=$1`,
-      [p.id, reference, `amount mismatch: expected ₹${p.amount}, received ₹${Math.round(paidAmount)}`]);
-    await raiseRefund(c, p.booking_id, p.id, Math.round(paidAmount),
+      `UPDATE payments SET amount=$2, status='SUCCESS', provider_reference=$3,
+              failure_reason=$4, updated_at=now() WHERE id=$1`,
+      [p.id, received, reference,
+       `amount mismatch: expected ₹${expected}, received ₹${received}`]);
+    await raiseRefund(c, p.booking_id, p.id, received,
       'Amount received does not match the fare — returned in full', null, false);
     await audit(c, {}, 'payment.amount_mismatch', 'payment', p.id,
-      `₹${p.amount}`, `₹${Math.round(paidAmount)}`, null);
+      `₹${expected}`, `₹${received}`, null);
     return;
   }
 

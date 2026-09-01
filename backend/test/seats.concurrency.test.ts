@@ -37,6 +37,7 @@
 import { test, describe, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
+import * as seats from '../src/domain/seats.ts';
 import { resetTables } from './_reset.ts';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
@@ -183,6 +184,56 @@ describe('two devices, one seat', () => {
 });
 
 /* ================================================================= expiry */
+
+/* ================================================================= §12 cap */
+
+describe('the booking cap is five seats (spec §12)', () => {
+  test('a student may hold five seats, and is refused the sixth', async () => {
+    for (const s of ['1A', '1B', '1C', '1D', '2A'])
+      await seats.holdSeat(TRIP, s, { userId: ALICE });
+    await assert.rejects(seats.holdSeat(TRIP, '2B', { userId: ALICE }),
+      /up to 5 seats/, 'the sixth is refused by the domain');
+  });
+
+  test('the DATABASE refuses a sixth passenger too — not only the domain', async () => {
+    /* The cap has two authoritative homes: the basket check while holding, and
+     * create_booking_from_holds while converting. Migration 012 moved both. A
+     * caller that bypassed the domain must still be refused. */
+    const five = ['3A', '3B', '3C', '3D', '4A'];
+    for (const s of five) await q('SELECT hold_seat($1,$2,$3::uuid,NULL)', [TRIP, s, BOB]);
+    const pax = (arr: string[]) => JSON.stringify(arr.map((s, i) => ({
+      seatNumber: s, name: `Passenger ${i + 1}`, studentId: `WU20000${i}`, phone: '9876543210' })));
+
+    const ok = await q(
+      'SELECT * FROM create_booking_from_holds($1,$2::uuid,NULL,$3,$4::jsonb)',
+      [TRIP, BOB, '9876543210', pax(five)]);
+    assert.equal(ok.rows.length, 1, 'five seats convert into a booking');
+
+    await q('SELECT hold_seat($1,$2,$3::uuid,NULL)', [TRIP, '4B', CAROL]);
+    await assert.rejects(
+      q('SELECT * FROM create_booking_from_holds($1,$2::uuid,NULL,$3,$4::jsonb)',
+        [TRIP, CAROL, '9876543210', pax(['4B', '4C', '4D', '5A', '5B', '5C'])]),
+      /up to 5 passengers in one booking/);
+  });
+
+  test('the cap is per holder — it does not leak between students', async () => {
+    for (const s of ['6A', '6B', '6C', '6D', '7A'])
+      await seats.holdSeat(TRIP, s, { userId: ALICE });
+    /* Alice is full; Bob is not affected by that. */
+    await assert.rejects(seats.holdSeat(TRIP, '7B', { userId: ALICE }), /up to 5 seats/);
+    const s = await seats.holdSeat(TRIP, '7B', { userId: BOB });
+    assert.equal(s.status, 'HELD');
+  });
+
+  test('a full basket still cannot take a seat another student holds', async () => {
+    await seats.holdSeat(TRIP, '8A', { userId: BOB });
+    for (const s of ['8B', '8C', '8D', '9A'])
+      await seats.holdSeat(TRIP, s, { userId: ALICE });
+    /* Alice has four; the fifth is allowed by the cap but is not hers to take. */
+    await assert.rejects(seats.holdSeat(TRIP, '8A', { userId: ALICE }), /8A/);
+    assert.equal((await seatRow('8A')).hold_by, BOB, 'ownership is unchanged');
+  });
+});
 
 describe('hold expiry', () => {
   test('an expired hold reads as available before any sweeper runs', async () => {

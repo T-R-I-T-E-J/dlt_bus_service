@@ -396,6 +396,94 @@ describe('failure, timeout and stale intents [provider-simulated]', () => {
     assert.equal(m.returned, 100, 'the wrong amount goes straight back');
     assert.notEqual((await pay.bookingViewById(b.id)).status, 'CONFIRMED');
   });
+
+  /* ------------------------------------------------ amount semantics (§ledger)
+   *
+   * payments.amount is MONEY ACTUALLY RECEIVED once a payment settles. The
+   * intended figure lives on bookings.total_amount. The ledger previously
+   * recorded the ordered amount as received, which overstated cash in and left
+   * a phantom refundable balance an override could have paid out. */
+
+  test('LEDGER · an underpayment records what arrived, not what was ordered', async () => {
+    const b = await booked(ALICE, ['9B']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    assert.equal(co.amount, FARE, 'the order asks for the full fare');
+    await deliver(co.paymentId, 'captured', { amountRupees: 100 });
+
+    const { rows: [p] } = await q('SELECT amount, status, failure_reason FROM payments WHERE id=$1',
+      [co.paymentId]);
+    assert.equal(p.amount, 100, 'payments.amount is the money actually received');
+    assert.match(p.failure_reason, /expected ₹259, received ₹100/,
+      'the intended figure is still recorded, just not in amount');
+
+    const { rows: [bk] } = await q('SELECT total_amount FROM bookings WHERE id=$1', [b.id]);
+    assert.equal(bk.total_amount, FARE, 'the booking still carries what was owed');
+
+    const m = await money(b.id);
+    assert.equal(m.received, 100);
+    assert.equal(m.total_amount, FARE);
+  });
+
+  test('LEDGER · the refund cap after an underpayment is the money received', async () => {
+    const b = await booked(ALICE, ['9C']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'captured', { amountRupees: 100 });
+
+    /* the discrepancy refund already returned the whole ₹100 */
+    assert.equal((await money(b.id)).refundable, 0, 'nothing is left to give back');
+    /* and an override cannot manufacture the ₹159 that never arrived */
+    await assert.rejects(pay.overrideRefund({ bookingId: b.id, amount: 159,
+      reason: 'trying to refund money we never received', actorId: SUPER }),
+      /Nothing is left to refund/);
+  });
+
+  test('LEDGER · an exact payment is unaffected', async () => {
+    const b = await booked(ALICE, ['9D']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'captured');
+    const { rows: [p] } = await q('SELECT amount, failure_reason FROM payments WHERE id=$1',
+      [co.paymentId]);
+    assert.equal(p.amount, FARE);
+    assert.equal(p.failure_reason, null, 'an exact payment is not a discrepancy');
+    const m = await money(b.id);
+    assert.equal(m.received, FARE);
+    assert.equal(m.returned, 0);
+    assert.equal((await pay.bookingViewById(b.id)).status, 'CONFIRMED');
+  });
+
+  test('LEDGER · an OVERpayment is also a discrepancy, returned in full', async () => {
+    const b = await booked(ALICE, ['10B']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'captured', { amountRupees: 300 });
+    const m = await money(b.id);
+    assert.equal(m.received, 300, 'we received ₹300 and must say so');
+    assert.equal(m.returned, 300, 'all of it goes back');
+    assert.equal(m.refundable, 0);
+    assert.notEqual((await pay.bookingViewById(b.id)).status, 'CONFIRMED');
+  });
+
+  test('LEDGER · a re-queued mismatch event neither double-refunds nor confirms', async () => {
+    /* Because amount now equals what was received, a naive re-run would find the
+     * amounts equal and settle the booking. It must not. */
+    const b = await booked(ALICE, ['10C']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'captured', { amountRupees: 100 });
+
+    await q('UPDATE provider_events SET processed_at = NULL');
+    await pay.processPendingEvents(rp);
+
+    const m = await money(b.id);
+    assert.equal(m.received, 100, 'still one receipt');
+    assert.equal(m.returned, 100, 'still ONE refund — not two');
+    const { rows: [n] } = await q(
+      'SELECT count(*)::int n FROM refunds WHERE booking_id=$1', [b.id]);
+    assert.equal(n.n, 1);
+    assert.notEqual((await pay.bookingViewById(b.id)).status, 'CONFIRMED',
+      'a discrepancy must never be settled by a replay');
+    const { rows: [pass] } = await q(
+      'SELECT count(*)::int n FROM boarding_passes WHERE booking_id=$1', [b.id]);
+    assert.equal(pass.n, 0, 'no pass may be issued for an unconfirmed booking');
+  });
 });
 
 /* ================================================================= F-01 */

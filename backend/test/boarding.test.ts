@@ -200,10 +200,35 @@ describe('the validation chain, in its documented order', () => {
     assert.match(out.detail, /Payment for DLT-10007 is failed/);
   });
 
-  test('a COMPLETED journey is refused', async () => {
+  test('a COMPLETED journey is refused — staff lose the scope with the journey', async () => {
+    /* assigned_trip_for() resolves the ONE departure a staff member is currently
+     * working: OPEN, BOOKING_CLOSED or BOARDING. A completed journey is not one
+     * of them, so a BOARDING_STAFF scanning after the trip ends is refused at
+     * the authorization boundary, before the verdict chain runs.
+     *
+     * That is deliberate and it is kept. Widening assigned_trip_for() to
+     * terminal states would make it ambiguous which of a staff member's many
+     * historical assignments it should return, inside the one function whose
+     * contract is "the single trip you may act on" — a bad trade for a nicer
+     * message. Fail closed, and refuse. */
     const bk = await confirmedBooking(TRIP_A, ['2B'], 'DLT-10008');
     await q(`UPDATE trips SET status='COMPLETED', pinned_status='COMPLETED' WHERE id=$1`, [TRIP_A]);
-    const out = await boarding.scan({ code: bk.passengers[0].token }, staffA());
+    await assert.rejects(
+      boarding.scan({ code: bk.passengers[0].token }, staffA()),
+      (e: any) => {
+        assert.equal(e.code, 'FORBIDDEN');
+        assert.match(e.message, /not assigned to a trip/);
+        return true;
+      });
+  });
+
+  test('a COMPLETED journey reports the precise reason to ops, who are not scoped', async () => {
+    /* Ops carry the trip themselves rather than inheriting it from an
+     * assignment, so they DO reach the chain and get the actionable verdict.
+     * This is what keeps the completed-journey check covered. */
+    const bk = await confirmedBooking(TRIP_A, ['2B'], 'DLT-10009');
+    await q(`UPDATE trips SET status='COMPLETED', pinned_status='COMPLETED' WHERE id=$1`, [TRIP_A]);
+    const out = await boarding.scan({ code: bk.passengers[0].token, tripId: TRIP_A }, ops());
     assert.equal(out.result, 'INVALID');
     assert.match(out.detail, /already complete/);
   });

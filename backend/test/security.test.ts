@@ -177,10 +177,13 @@ describe('H-1 · cancellation quote', () => {
 /* ================================================================= H-2 */
 
 describe('H-2 · guest hold abuse', () => {
-  test('a normal guest still holds up to 4 seats \u2014 documented behaviour preserved', async () => {
-    for (const s of ['5A', '5B', '5C', '5D'])
+  test('a normal guest still holds a full basket \u2014 documented behaviour preserved', async () => {
+    /* Five, per the specification (migration 012). The cap is the same for a
+     * guest as for a signed-in student; H-2 limits how many IDENTITIES one
+     * source may use, never how many seats one legitimate basket holds. */
+    for (const s of ['5A', '5B', '5C', '5D', '6A'])
       await seats.holdSeat(TRIP, s, guest('normal-student'));
-    await assert.rejects(seats.holdSeat(TRIP, '6A', guest('normal-student')), /up to 4 seats/);
+    await assert.rejects(seats.holdSeat(TRIP, '6B', guest('normal-student')), /up to 5 seats/);
   });
 
   test('THE ATTACK · one source cannot lock a 44-seat departure with fresh tokens', async () => {
