@@ -25,6 +25,7 @@ import * as pay from '../src/domain/payments.ts';
 import * as seats from '../src/domain/seats.ts';
 import * as boarding from '../src/domain/boarding.ts';
 import * as authz from '../src/domain/authz.ts';
+import { resetTables } from './_reset.ts';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 12 });
 const q = (sql: string, a: unknown[] = []) => pool.query(sql, a);
@@ -40,11 +41,10 @@ const staffA = () => ({ userId: STAFF, role: 'BOARDING_STAFF' });
 const guest = (t: string) => ({ guestToken: t, ip: '10.0.0.9' });
 
 async function seed() {
-  await q(`TRUNCATE users, trips, routes, vehicles, trip_seats, bookings, booking_passengers,
-           payments, refunds, boarding_passes, boarding_events, trip_staff, waitlist_entries,
-           idempotency_keys, guest_hold_attempts, notification_requests, audit_logs,
-           provider_events, sessions, user_credentials, student_profiles
-           RESTART IDENTITY CASCADE`);
+  await resetTables(pool, `users, trips, routes, vehicles, trip_seats, bookings, booking_passengers,
+    payments, refunds, boarding_passes, boarding_events, trip_staff, waitlist_entries,
+    idempotency_keys, guest_hold_attempts, notification_requests, audit_logs,
+    provider_events, sessions, user_credentials, student_profiles`);
   const mk = async (e: string, n: string, r: string) =>
     (await q(`INSERT INTO users (email,name,role,phone) VALUES ($1,$2,$3,'9876543210') RETURNING id`,
       [e, n, r])).rows[0].id;
@@ -74,7 +74,7 @@ async function paidBooking(user: string, seat: string, code: string) {
   const b = await pay.createBooking({
     tripId: TRIP, holder: { userId: user }, contactPhone: '9876543210',
     idempotencyKey: `k-${code}`,
-    passengers: [{ seatNumber: seat, name: 'Test Passenger', studentId: 'WU1' }],
+    passengers: [{ seatNumber: seat, name: 'Test Passenger', studentId: 'WU0001' }],
   });
   const { rows: [p] } = await q(
     `INSERT INTO payments (booking_id,amount,status,provider,provider_order_id,provider_payment_id)
@@ -119,7 +119,7 @@ describe('C-1 · checkout handback', () => {
     /* pre-fix this returned bookingViewById(): names, student IDs, phone */
     assert.deepEqual(Object.keys(out).sort(), ['bookingId', 'bookingStatus', 'paymentStatus']);
     const blob = JSON.stringify(out);
-    assert.ok(!/Test Passenger|9876543210|WU1/.test(blob), 'no PII may leave through this path');
+    assert.ok(!/Test Passenger|9876543210|WU0001/.test(blob), 'no PII may leave through this path');
   });
 });
 
@@ -282,7 +282,7 @@ describe('H-3 · audit log immutability', () => {
 describe('H-4 · idempotency', () => {
   const req = (seat: string) => ({
     tripId: TRIP, holder: { userId: ALICE }, contactPhone: '9876543210',
-    passengers: [{ seatNumber: seat, name: 'Test Passenger', studentId: 'WU1' }],
+    passengers: [{ seatNumber: seat, name: 'Test Passenger', studentId: 'WU0001' }],
   });
 
   test('same user + same key + same request → the same booking', async () => {
@@ -312,7 +312,7 @@ describe('H-4 · idempotency', () => {
     await assert.rejects(pay.createBooking({
       tripId: TRIP, holder: { userId: BOB }, contactPhone: '9003155218',
       idempotencyKey: 'shared-key',
-      passengers: [{ seatNumber: '8B', name: 'Bob B', studentId: 'WU2' }],
+      passengers: [{ seatNumber: '8B', name: 'Bob B', studentId: 'WU0002' }],
     } as any), /already used for a different request/);
     /* pre-fix, Bob received Alice's stored booking view */
     const { rows } = await q('SELECT id FROM bookings');
@@ -361,7 +361,7 @@ describe('M-1 · guest-hold seat ownership', () => {
     /* guest-B creates a booking on their own seat... */
     const bs = await pay.createBooking({
       tripId: TRIP, holder: { guestToken: 'guest-B' }, contactPhone: '9876543210',
-      idempotencyKey: 'gb', passengers: [{ seatNumber: '1B', name: 'Guest B', studentId: 'WU2' }],
+      idempotencyKey: 'gb', passengers: [{ seatNumber: '1B', name: 'Guest B', studentId: 'WU0002' }],
     });
     const { rows: [seatA] } = await q(
       `SELECT id FROM trip_seats WHERE trip_id=$1 AND seat_number='1A'`, [TRIP]);
@@ -379,7 +379,7 @@ describe('M-1 · guest-hold seat ownership', () => {
     await seats.holdSeat(TRIP, '1C', guest('guest-C'));
     const b = await pay.createBooking({
       tripId: TRIP, holder: { guestToken: 'guest-C' }, contactPhone: '9876543210',
-      idempotencyKey: 'gc', passengers: [{ seatNumber: '1C', name: 'Guest C', studentId: 'WU3' }],
+      idempotencyKey: 'gc', passengers: [{ seatNumber: '1C', name: 'Guest C', studentId: 'WU0003' }],
     });
     const { rows: [row] } = await q('SELECT guest_token, user_id FROM bookings WHERE id=$1', [b.id]);
     assert.equal(row.guest_token, 'guest-C');
@@ -390,7 +390,7 @@ describe('M-1 · guest-hold seat ownership', () => {
     await seats.holdSeat(TRIP, '1D', guest('guest-D'));
     const b = await pay.createBooking({
       tripId: TRIP, holder: { guestToken: 'guest-D' }, contactPhone: '9876543210',
-      idempotencyKey: 'gd', passengers: [{ seatNumber: '1D', name: 'Guest D', studentId: 'WU4' }],
+      idempotencyKey: 'gd', passengers: [{ seatNumber: '1D', name: 'Guest D', studentId: 'WU0004' }],
     });
     assert.equal((await authz.bookingFor(guest('guest-D'), b.id))._access, 'GUEST');
     await assert.rejects(authz.bookingFor(guest('guest-OTHER'), b.id), /Sign in required/);
@@ -400,7 +400,7 @@ describe('M-1 · guest-hold seat ownership', () => {
     await seats.holdSeat(TRIP, '6B', guest('guest-E'));
     const b = await pay.createBooking({
       tripId: TRIP, holder: { guestToken: 'guest-E' }, contactPhone: '9876543210',
-      idempotencyKey: 'ge', passengers: [{ seatNumber: '6B', name: 'Guest E', studentId: 'WU5' }],
+      idempotencyKey: 'ge', passengers: [{ seatNumber: '6B', name: 'Guest E', studentId: 'WU0005' }],
     });
     const { rows: [n] } = await q('SELECT adopt_guest_bookings($1,$2) AS n', ['guest-E', ALICE]);
     assert.equal(n.n, 1);
@@ -415,7 +415,7 @@ describe('M-1 · guest-hold seat ownership', () => {
     await seats.holdSeat(TRIP, '8C', guest('guest-F'));
     const gb = await pay.createBooking({
       tripId: TRIP, holder: { guestToken: 'guest-F' }, contactPhone: '9876543210',
-      idempotencyKey: 'gf', passengers: [{ seatNumber: '8C', name: 'Guest F', studentId: 'WU6' }],
+      idempotencyKey: 'gf', passengers: [{ seatNumber: '8C', name: 'Guest F', studentId: 'WU0006' }],
     });
     const { rows: [alices] } = await q(
       `SELECT id FROM trip_seats WHERE trip_id=$1 AND seat_number='7D'`, [TRIP]);
@@ -453,7 +453,7 @@ describe('L-1 · boarding actions may assert a trip', () => {
     await q('SELECT hold_seat($1,$2,$3::uuid,NULL)', [TRIP_B, '2A', BOB]);
     const b = await pay.createBooking({
       tripId: TRIP_B, holder: { userId: BOB }, contactPhone: '9003155218',
-      idempotencyKey: 'l1', passengers: [{ seatNumber: '2A', name: 'Bob B', studentId: 'WU2' }],
+      idempotencyKey: 'l1', passengers: [{ seatNumber: '2A', name: 'Bob B', studentId: 'WU0002' }],
     });
     const { rows: [p] } = await q('SELECT id FROM booking_passengers WHERE booking_id=$1', [b.id]);
     await assert.rejects(
@@ -509,7 +509,7 @@ describe('N-1 · role cannot be supplied by a caller', () => {
     await assert.rejects(pay.createManualBooking({
       tripId: TRIP, type: 'COMPLIMENTARY', contactPhone: '9876543210',
       reason: 'claiming to be super', actorId: OPS, actorRole: 'SUPER_ADMIN',
-      passengers: [{ seatNumber: '11B', name: 'Free Rider', studentId: 'WU9' }],
+      passengers: [{ seatNumber: '11B', name: 'Free Rider', studentId: 'WU0009' }],
     } as any), /cannot perform that action/);
   });
 
@@ -554,8 +554,12 @@ describe('HD-6 · response headers', () => {
   });
 
   test('a guest-hold rate limit raises RATE_LIMITED, which the header hook keys on', async () => {
+    /* Distinct free seats each iteration: a hold that fails on "seat taken"
+     * rolls back the per-IP counter with it, so re-holding the same 11 seats
+     * would never let the count climb to the limit. */
     for (let i = 0; i < 30; i++) {
-      try { await seats.holdSeat(TRIP, `${(i % 11) + 1}A`, { guestToken: `hd6-${i}`, ip: '192.0.2.55' }); }
+      const seat = `${Math.floor(i / 4) + 1}${'ABCD'[i % 4]}`;
+      try { await seats.holdSeat(TRIP, seat, { guestToken: `hd6-${i}`, ip: '192.0.2.55' }); }
       catch (e: any) {
         if (e.code === 'RATE_LIMITED') { assert.ok(true); return; }
       }

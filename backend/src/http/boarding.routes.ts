@@ -18,8 +18,11 @@ import { requireAuth, requirePermission } from './auth.routes.ts';
 
 const router = Router();
 const UUID = z.string().uuid();
+/* The canonical Actor (domain/authz.ts) is { userId, role, ip?, guestToken? }.
+ * The boarding domain reads only userId and role; it never referenced `name`,
+ * which was not on the type. */
 const actorOf = (req: any): boarding.Actor => ({
-  userId: req.session.userId, role: req.session.role, name: req.session.name });
+  userId: req.session.userId, role: req.session.role });
 
 /* A door scanner fires fast and repeatedly; a brute-force enumerator also
  * fires fast and repeatedly. This bounds the second without impeding the

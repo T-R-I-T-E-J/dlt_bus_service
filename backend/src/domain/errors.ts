@@ -9,8 +9,14 @@ export type ErrorCode =
  *  AppError is a bug, and the HTTP layer turns it into a generic 500 without
  *  disclosing its message. */
 export class AppError extends Error {
-  constructor(public readonly code: ErrorCode, message: string) {
+  /* A plain field, not a `public readonly` constructor parameter property:
+   * parameter properties are non-erasable syntax, which `erasableSyntaxOnly`
+   * and Node's `--experimental-strip-types` both reject. The public shape is
+   * unchanged — a readonly `code` set once at construction. */
+  readonly code: ErrorCode;
+  constructor(code: ErrorCode, message: string) {
     super(message);
     this.name = 'AppError';
+    this.code = code;
   }
 }

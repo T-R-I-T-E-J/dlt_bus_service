@@ -15,7 +15,10 @@ import type { PoolClient } from 'pg';
 import { query } from '../db/index.ts';
 import { AppError } from './errors.ts';
 
-export interface AuditActor { actorId?: string; ip?: string }
+/* `userId` is accepted as an alias for `actorId`: admin.ts passes the canonical
+ * Actor ({ userId, role, ip }) straight through, while payments.ts and
+ * boarding.ts pass { actorId }. Both name the acting user's id. */
+export interface AuditActor { actorId?: string; userId?: string; ip?: string }
 
 /** Writes one entry. Takes the client so it commits with the mutation it
  *  describes: an action and its audit record are one transaction, and a
@@ -37,7 +40,7 @@ export async function audit(
             $2, $3, $4, $5, $6, $7, $8
        FROM (SELECT 1) _
        LEFT JOIN users u ON u.id = $1`,
-    [actor.actorId ?? null, action, entityType, entityId,
+    [actor.actorId ?? actor.userId ?? null, action, entityType, entityId,
      truncate(before), truncate(after), reason ?? null, actor.ip ?? null]);
 }
 

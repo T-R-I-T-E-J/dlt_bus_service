@@ -27,7 +27,12 @@ const REASON = z.string().min(4).max(500);
 const actorOf = (req: Request): admin.Actor =>
   ({ userId: req.session!.userId, role: req.session!.role, ip: req.ip });
 
-router.use(requireAuth);
+/* Scoped to /admin: this router is mounted at '/api', so an unscoped
+ * router.use() also guarded every route registered AFTER it on that mount —
+ * /api/health answered 401 for that reason. All 21 routes below are /admin/*,
+ * so every one of them still passes through requireAuth (and its own
+ * requirePermission); nothing is relaxed. */
+router.use('/admin', requireAuth);
 
 /* ---------------------------------------------------------------- today */
 

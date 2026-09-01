@@ -8,7 +8,7 @@
     "migrate": "node scripts/migrate.mjs",
     "seed:dev": "node scripts/seed-dev.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --experimental-strip-types 'test/**/*.test.ts'",
+    "test": "node --test --test-concurrency=1 --experimental-strip-types 'test/**/*.test.ts'",
     "test:db": "npm run migrate && npm run test",
     "verify": "npm run typecheck && npm run test:db",
     "dev": "node --experimental-strip-types --watch src/app.ts",

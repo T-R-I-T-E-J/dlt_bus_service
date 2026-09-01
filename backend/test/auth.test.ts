@@ -17,16 +17,20 @@
 import { test, describe, before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import * as auth from '../src/domain/auth.ts';
-import { query, tx } from '../src/db/index.ts';
+import { query, tx, pool } from '../src/db/index.ts';
 import { AppError } from '../src/domain/errors.ts';
 import { outbox } from '../src/integrations/email/index.ts';   // test transport
+import { resetTables } from './_reset.ts';
 
 const STUDENT = { name: 'Aarav Menon', email: 'aarav@woxsen.edu.in',
   password: 'correct-horse-battery', phone: '9876543210', studentId: 'WU204118' };
 
 async function truncateAll() {
-  await query(`TRUNCATE users, sessions, user_credentials, student_profiles,
-    password_resets, email_verifications, login_attempts, audit_logs RESTART IDENTITY CASCADE`);
+  /* routes/vehicles/trips/trip_seats too: a prior test file leaves a vehicle
+   * behind (no afterEach), and seedGuestHeldSeat inserts a fixed registration. */
+  await resetTables(pool, `users, sessions, user_credentials, student_profiles,
+    password_resets, email_verifications, login_attempts, audit_logs,
+    routes, vehicles, trips, trip_seats`);
 }
 const codeFromLastEmail = () => outbox.at(-1)!.vars.code as string;
 const rejectsWith = async (p: Promise<unknown>, code: string, match?: RegExp) => {

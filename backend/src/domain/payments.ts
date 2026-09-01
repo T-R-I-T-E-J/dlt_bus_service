@@ -139,8 +139,11 @@ export async function createCheckout(
 
   const { payment, booking } = await tx(async (c) => {
     const { rows: [b] } = await c.query(
+      /* FOR UPDATE OF b: the row we actually lock is the booking. Postgres
+       * refuses a bare FOR UPDATE here because u is the nullable side of the
+       * LEFT JOIN (a guest booking has no user row). The join is read-only. */
       `SELECT b.*, u.name, u.phone, u.email FROM bookings b
-         LEFT JOIN users u ON u.id = b.user_id WHERE b.id = $1 FOR UPDATE`, [bookingId]);
+         LEFT JOIN users u ON u.id = b.user_id WHERE b.id = $1 FOR UPDATE OF b`, [bookingId]);
     if (!b) throw new AppError('NOT_FOUND', 'Booking not found');
     if (b.status === 'CONFIRMED') throw new AppError('CONFLICT', 'That booking is already paid');
     if (['ABANDONED', 'CANCELLED_BY_STUDENT', 'CANCELLED_BY_DLT'].includes(b.status))

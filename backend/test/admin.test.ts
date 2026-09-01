@@ -29,6 +29,7 @@ import pg from 'pg';
 import * as admin from '../src/domain/admin.ts';
 import { readAudit } from '../src/domain/audit.ts';
 import * as auth from '../src/domain/auth.ts';
+import { resetTables } from './_reset.ts';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
 const q = (sql: string, a: unknown[] = []) => pool.query(sql, a);
@@ -42,10 +43,10 @@ const staff = () => ({ userId: STAFF, role: 'BOARDING_STAFF' });
 const student = () => ({ userId: STUDENT, role: 'STUDENT' });
 
 async function seed() {
-  await q(`TRUNCATE users, trips, routes, vehicles, trip_seats, bookings, booking_passengers,
-           payments, refunds, boarding_passes, boarding_events, trip_staff, waitlist_entries,
-           notification_requests, student_profiles, user_credentials, sessions, audit_logs,
-           provider_events RESTART IDENTITY CASCADE`);
+  await resetTables(pool, `users, trips, routes, vehicles, trip_seats, bookings, booking_passengers,
+    payments, refunds, boarding_passes, boarding_events, trip_staff, waitlist_entries,
+    notification_requests, student_profiles, user_credentials, sessions, audit_logs,
+    provider_events`);
   const mk = async (e: string, n: string, r: string) =>
     (await q(`INSERT INTO users (email,name,role,phone) VALUES ($1,$2,$3,'9876543210') RETURNING id`,
       [e, n, r])).rows[0].id;
@@ -187,7 +188,7 @@ describe('negative authorization on every privileged operation', () => {
     await assert.rejects(
       admin.createManualBooking({ tripId: TRIP, type: 'COMPLIMENTARY', contactPhone: '9876543210',
         reason: 'trying it on', actorId: OPS,
-        passengers: [{ seatNumber: '4A', name: 'Free Rider', studentId: 'WU1' }] }),
+        passengers: [{ seatNumber: '4A', name: 'Free Rider', studentId: 'WU0001' }] }),
       /cannot perform that action|FORBIDDEN/);
   });
 
@@ -326,7 +327,8 @@ describe('§4 / FR-015 vehicle management (F-14)', () => {
 
   test('registration is unique, ignoring case and spaces', async () => {
     await assert.rejects(
-      admin.saveVehicle({ name: 'DLT-04', registration: 'ts07aa1111' }, ops()), /CONFLICT|duplicate/);
+      admin.saveVehicle({ name: 'DLT-04', registration: 'ts07aa1111', rowCount: 11 }, ops()),
+      /CONFLICT|duplicate/);
   });
 });
 
@@ -760,14 +762,23 @@ describe('the audit log (Admin Spec §9–§10)', () => {
      * matters at deployment. */
     await q(`CREATE ROLE dlt_app_test NOLOGIN`).catch(() => {});
     await q(`GRANT SELECT, INSERT ON audit_logs TO dlt_app_test`);
+    /* One transaction PER statement: in PostgreSQL the first failure aborts the
+     * whole transaction, so a second assertion inside it would read 25P02
+     * ("transaction is aborted") instead of the permission error it is testing.
+     * The finally rolls back unconditionally so a poisoned connection can never
+     * go back to the pool and break the next test. */
     const c = await pool.connect();
     try {
-      await c.query('BEGIN');
-      await c.query('SET LOCAL ROLE dlt_app_test');
-      await assert.rejects(c.query('DELETE FROM audit_logs'), /permission denied/);
-      await assert.rejects(c.query(`UPDATE audit_logs SET reason='rewritten'`), /permission denied/);
-      await c.query('ROLLBACK');
-    } finally { c.release(); }
+      for (const sql of ['DELETE FROM audit_logs', `UPDATE audit_logs SET reason='rewritten'`]) {
+        await c.query('BEGIN');
+        await c.query('SET LOCAL ROLE dlt_app_test');
+        await assert.rejects(c.query(sql), /permission denied/, sql);
+        await c.query('ROLLBACK');
+      }
+    } finally {
+      try { await c.query('ROLLBACK'); } catch { /* nothing open */ }
+      c.release();
+    }
   });
 
   test('reads filter by entity, actor and action, with keyset paging', async () => {

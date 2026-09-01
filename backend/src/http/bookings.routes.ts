@@ -95,7 +95,9 @@ export default function bookingRoutes(provider: PaymentProvider) {
       /* Note what is NOT accepted from the client: an amount. The fare is read
        * from the booking, which was frozen at creation. */
       const out = await pay.createCheckout(bookingId, actorOf(req) as any, provider);
-      if ('repriced' in out) return res.status(409).json({ repriced: true, ...out });
+      /* The repriced branch of createCheckout already carries `repriced: true`
+       * alongside oldTotal/newTotal; spreading it is the whole 409 body. */
+      if ('repriced' in out) return res.status(409).json({ ...out });
       /* The browser is given the checkout handle and the PUBLIC key id. The key
        * SECRET and the webhook secret never leave the server. */
       res.json({ ...out, keyId: process.env.RAZORPAY_KEY_ID, provider: provider.name });

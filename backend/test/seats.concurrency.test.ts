@@ -37,6 +37,7 @@
 import { test, describe, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
+import { resetTables } from './_reset.ts';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
 const q = (sql: string, args: unknown[] = []) => pool.query(sql, args);
@@ -55,9 +56,9 @@ async function stillPending(p: Promise<unknown>, ms = 300): Promise<boolean> {
 }
 
 async function seed() {
-  await q(`TRUNCATE users, trips, routes, vehicles, trip_seats, bookings,
-           booking_passengers, waitlist_entries, payments, refunds, audit_logs,
-           sessions, user_credentials, student_profiles RESTART IDENTITY CASCADE`);
+  await resetTables(pool, `users, trips, routes, vehicles, trip_seats, bookings,
+    booking_passengers, waitlist_entries, payments, refunds, audit_logs,
+    sessions, user_credentials, student_profiles`);
   const mk = async (email: string, name: string) =>
     (await q(`INSERT INTO users (email,name,role) VALUES ($1,$2,'STUDENT') RETURNING id`, [email, name])).rows[0].id;
   ALICE = await mk('alice@woxsen.edu.in', 'Alice');
@@ -119,8 +120,11 @@ describe('two devices, one seat', () => {
   });
 
   test('the loser is the one who arrives second, whichever that is', async () => {
-    for (const [first, second] of [[ALICE, BOB], [BOB, ALICE]] as const) {
+    /* seed() runs first and reassigns ALICE/BOB, so first/second must be read
+     * AFTER it — not destructured from a pair built beforehand. */
+    for (const swap of [false, true]) {
       await seed();
+      const [first, second] = swap ? [BOB, ALICE] : [ALICE, BOB];
       const a = await pool.connect(), b = await pool.connect();
       try {
         await a.query('BEGIN');
@@ -257,6 +261,27 @@ describe('guest holds (F-08, F-09)', () => {
   test('a hold needs exactly one holder', async () => {
     await assert.rejects(q('SELECT hold_seat($1,$2,NULL,NULL)', [TRIP, '10B']));
     await assert.rejects(q('SELECT hold_seat($1,$2,$3::uuid,$4)', [TRIP, '10B', ALICE, 'g']));
+  });
+
+  test('THE DEFECT · a lapsed GUEST hold sweeps, clearing the token with it', async () => {
+    /* The sweeper predates hold_guest_token and cleared only hold_by, so an
+     * AVAILABLE row kept its token and trip_seats_allocation_coherent rejected
+     * the update. Every expired guest hold leaked, and because the public trip
+     * list sweeps inline, GET /trips answered 500 for everyone. The sweeper test
+     * above uses a signed-in holder, which is why this went unseen.
+     * Fixed in migration 011. */
+    await q('SELECT hold_seat($1,$2,NULL,$3)', [TRIP, '10C', 'lapsing-guest']);
+    await q(`UPDATE trip_seats SET hold_expires_at = now() - interval '1 minute'
+              WHERE trip_id=$1 AND seat_number='10C'`, [TRIP]);
+
+    const { rows: [r] } = await q('SELECT * FROM sweep_expired_holds()');
+    assert.ok(r.seats_released >= 1, 'the guest seat must actually be released');
+
+    const s = await seatRow('10C');
+    assert.equal(s.status, 'AVAILABLE');
+    assert.equal(s.hold_guest_token, null, 'an AVAILABLE seat may not carry a holder');
+    assert.equal(s.hold_by, null);
+    assert.equal(s.hold_expires_at, null);
   });
 });
 

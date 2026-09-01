@@ -62,7 +62,7 @@ export async function tx<T>(fn: (c: Client) => Promise<T>): Promise<T> {
 /** Startup check. Refuses to run against a database that has not been migrated,
  *  or against a PostgreSQL too old for the partial indexes the seat constraints
  *  depend on. Better to fail at boot than to fail on the first seat. */
-export async function assertReady(): Promise<{ version: number; migrations: number }> {
+export async function assertReady(): Promise<{ version: number; migrations: number; auditAppendOnly: boolean }> {
   const { rows: [v] } = await query('SHOW server_version_num');
   const version = Number(v.server_version_num);
   if (version < 150000)
@@ -74,8 +74,8 @@ export async function assertReady(): Promise<{ version: number; migrations: numb
   if (!m.n) throw new Error('Database has no schema_migrations table — run the migrations first');
 
   const { rows: [applied] } = await query('SELECT count(*)::int AS n FROM schema_migrations');
-  if (applied.n < 9)
-    throw new Error(`Only ${applied.n} of 9 migrations applied — run the migrations first`);
+  if (applied.n < 11)
+    throw new Error(`Only ${applied.n} of 11 migrations applied — run the migrations first`);
 
   /* H-3 layer 3 · FAIL CLOSED on audit-log privilege.
    *

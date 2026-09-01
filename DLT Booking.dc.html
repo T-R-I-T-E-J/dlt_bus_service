@@ -647,6 +647,13 @@ class Component extends DCLogic {  state = {
     notifyContact: '', notified: null,
     waitlist: null, authMode: 'signin', authName: '', authEmail: '', authPhone: '', authPassword: '',
     lastOutcome: null,
+    /* Server-state container, empty until _load() fills it. renderVals() reads
+       st.data.* unconditionally once st.ready is true, and componentDidMount
+       flips ready in the same setState that only *schedules* _load() as a
+       callback - so there is one render with ready === true and no data yet.
+       An empty shape here (not undefined) is the loading state. */
+    data: { openTrips: [], trip: null, seatRows: [], held: [],
+      booking: null, waits: [], waitTrip: null },
   };
 
   async componentDidMount() {
@@ -1077,23 +1084,29 @@ class Component extends DCLogic {  state = {
       rows.forEach(r => {
         r.seats.forEach((s, i) => {
           if (i === 2) cells.push({ isSeat: false, isLabel: true, id: String(r.row).padStart(2, '0') });
+          /* The server's status vocabulary is AVAILABLE | HELD | BOOKED | BLOCKED;
+             it marks the caller's own holds with `mine`. Without this promotion
+             nothing ever reaches SELECTED, so a student's own seat rendered as
+             "held by another student" AND was disabled, which also made it
+             impossible to tap the seat again to release it. */
+          const status = (s.status === 'HELD' && s.mine) ? 'SELECTED' : s.status;
           const paint = {
             AVAILABLE: ['#FFFFFF', '#0E1014', 'rgba(14,16,20,.32)', 'pointer'],
             SELECTED: ['#0E4B34', '#F7F5F0', '#0E4B34', 'pointer'],
             BOOKED: ['#DFDCD3', '#6F746C', 'rgba(14,16,20,.14)', 'not-allowed'],
             HELD: ['#F6EBD5', '#8A5A0E', 'rgba(184,115,10,.4)', 'not-allowed'],
             BLOCKED: ['#E7E4DB', '#6F746C', 'rgba(14,16,20,.14)', 'not-allowed'],
-          }[s.status] || ['#FFFFFF', '#0E1014', 'rgba(14,16,20,.3)', 'pointer'];
+          }[status] || ['#FFFFFF', '#0E1014', 'rgba(14,16,20,.3)', 'pointer'];
           const words = { AVAILABLE: 'available', SELECTED: 'selected', BOOKED: 'booked',
             HELD: 'held by another student',
-            BLOCKED: 'blocked by operations' + (s.blockReason ? ' — ' + s.blockReason : '') }[s.status];
+            BLOCKED: 'blocked by operations' + (s.blockReason ? ' — ' + s.blockReason : '') }[status];
           cells.push({
             isSeat: true, isLabel: false, id: s.seatNumber,
             bg: paint[0], fg: paint[1], bd: paint[2], cursor: paint[3],
-            shadow: s.status === 'SELECTED' ? '0 3px 0 -1px #093322' : 'none',
-            hover: s.status === 'AVAILABLE' ? { background: '#EEF3EE', transform: 'translateY(-1px)' } : {},
-            disabled: ['BOOKED', 'HELD', 'BLOCKED'].indexOf(s.status) >= 0,
-            pressed: s.status === 'SELECTED',
+            shadow: status === 'SELECTED' ? '0 3px 0 -1px #093322' : 'none',
+            hover: status === 'AVAILABLE' ? { background: '#EEF3EE', transform: 'translateY(-1px)' } : {},
+            disabled: ['BOOKED', 'HELD', 'BLOCKED'].indexOf(status) >= 0,
+            pressed: status === 'SELECTED',
             aria: 'Seat ' + s.seatNumber + ', ' + s.seatType.toLowerCase() + ', ' + words,
             onClick: () => this.toggleSeat(s.seatNumber),
           });
@@ -1233,6 +1246,16 @@ class Component extends DCLogic {  state = {
       atPending: step === 'pending', atFailed: step === 'failed', atExpired: step === 'expired',
       atDone: step === 'done', atDiscrepancy: step === 'discrepancy', atProcessing: step === 'processing',
       showStepper: order.indexOf(step) >= 0,
+
+      /* The summary's one button. These were computed above but never returned,
+         so {{ primaryLabel }} / {{ primary }} resolved to nothing and the CTA
+         rendered as an unlabelled, unclickable box on every step — the flow
+         could not be advanced past the seat map. Colours are the same pair the
+         loading state and the reprice button already use. */
+      primaryLabel, primaryDisabled, primaryHint, primary: onPrimary,
+      primaryBg: primaryDisabled ? '#E4E1D8' : '#0E1014',
+      primaryFg: primaryDisabled ? '#7A7F77' : '#F7F5F0',
+      primaryCursor: primaryDisabled ? 'not-allowed' : 'pointer',
 
       error: st.error, clearError: () => this.setState({ error: null }),
       notice: st.notice, clearNotice: () => this.setState({ notice: null }),

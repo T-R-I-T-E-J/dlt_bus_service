@@ -212,12 +212,18 @@ export async function holdSeat(tripId: string, seatNumber: string, holder: Holde
   return tx(async (c) => {
     /* §12 basket cap, checked inside the same transaction as the hold so two
      * parallel requests cannot both see three seats and both add a fourth. */
+    /* Lock this holder's HELD rows in the subquery (FOR UPDATE cannot sit on an
+     * aggregate), then count them. A concurrent hold from the same holder blocks
+     * on those locked rows, so two parallel requests cannot both see three and
+     * both add a fourth — the §12 cap holds under a race. */
     const { rows: [n] } = await c.query(
-      `SELECT count(*)::int AS held FROM trip_seats
-        WHERE trip_id = $1 AND status = 'HELD' AND hold_expires_at > now()
-          AND (($2::uuid IS NOT NULL AND hold_by = $2::uuid)
-            OR ($3::text IS NOT NULL AND hold_guest_token = $3::text))
-        FOR UPDATE`,
+      `SELECT count(*)::int AS held FROM (
+         SELECT 1 FROM trip_seats
+          WHERE trip_id = $1 AND status = 'HELD' AND hold_expires_at > now()
+            AND (($2::uuid IS NOT NULL AND hold_by = $2::uuid)
+              OR ($3::text IS NOT NULL AND hold_guest_token = $3::text))
+          FOR UPDATE
+       ) locked`,
       [tripId, ...holderArgs(holder)]);
 
     const already = await c.query(

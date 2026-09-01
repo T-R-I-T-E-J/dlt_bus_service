@@ -25,6 +25,7 @@ import { test, describe, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import * as boarding from '../src/domain/boarding.ts';
+import { resetTables } from './_reset.ts';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
 const q = (sql: string, a: unknown[] = []) => pool.query(sql, a);
@@ -65,9 +66,9 @@ async function confirmedBooking(trip: string, seats: string[], code: string) {
 }
 
 async function seed() {
-  await q(`TRUNCATE users, trips, routes, vehicles, trip_seats, bookings, booking_passengers,
-           payments, refunds, boarding_passes, boarding_events, trip_staff, audit_logs,
-           provider_events RESTART IDENTITY CASCADE`);
+  await resetTables(pool, `users, trips, routes, vehicles, trip_seats, bookings, booking_passengers,
+    payments, refunds, boarding_passes, boarding_events, trip_staff, audit_logs,
+    provider_events`);
   const mk = async (e: string, n: string, r: string) =>
     (await q(`INSERT INTO users (email,name,role,phone) VALUES ($1,$2,$3,'9876543210') RETURNING id`,
       [e, n, r])).rows[0].id;
