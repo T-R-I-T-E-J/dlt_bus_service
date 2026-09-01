@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400;100,500;100,600;100,700;125,600;125,700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #F7F5F0; color: #0E1014;
+    font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased; text-wrap: pretty; }
+  a { color: #0E4B34; text-decoration: none; }
+  a:hover { color: #0E1014; }
+  input, button, textarea, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid #0E4B34; outline-offset: 2px; }
+  @keyframes dltRise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  @keyframes dltTick { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
+  }
+  @media (max-width: 880px) {
+    [data-m="cols"] { grid-template-columns: minmax(0,1fr) !important; }
+    [data-m="hide"] { display: none !important; }
+    [data-m="pass"] { position: static !important; order: -1; }
+  }
+  @media print {
+    [data-m="noprint"] { display: none !important; }
+    body { background: #FFFFFF; }
+  }
+</style>
+<script src="./dlt-qr.js"></script>
+<script src="./dlt-store.js"></script>
+</helmet>
+
+<header data-m="noprint" style="position:sticky;top:0;z-index:40;height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(18px,4vw,44px);background:rgba(247,245,240,.92);backdrop-filter:blur(14px);border-bottom:1px solid rgba(14,16,20,.10)">
+  <a href="./DLT Homepage.dc.html" style="display:flex;align-items:baseline;gap:9px;color:#0E1014">
+    <span style="font-stretch:125%;font-weight:700;font-size:19px;letter-spacing:.02em">DLT</span>
+    <span data-m="hide" style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Dashboard</span>
+  </a>
+  <nav style="display:flex;align-items:center;gap:clamp(12px,2.4vw,22px);font-size:13.5px;font-weight:500">
+    <a href="./DLT Homepage.dc.html#help" style="color:#3D423C">Help</a>
+    <a href="./DLT Booking.dc.html" style="background:#0E1014;color:#F7F5F0;padding:12px 17px;border-radius:2px;font-weight:600;font-size:13px;min-height:44px;display:flex;align-items:center;box-sizing:border-box">Book a seat</a>
+    <a href="./DLT Account.dc.html" aria-label="Your account" style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#0E4B34;color:#F7F5F0;font-size:12px;font-weight:600">{{ initials }}</a>
+  </nav>
+</header>
+
+<main style="padding:clamp(22px,3.6vh,38px) clamp(18px,4vw,44px) 70px">
+
+  <sc-if value="{{ signedOut }}" hint-placeholder-val="{{ false }}">
+    <section style="max-width:520px;margin:6vh auto 0;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(24px,4vw,38px);text-align:center">
+      <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:26px;letter-spacing:-.015em">Sign in to see your trips</h1>
+      <p style="margin:11px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">Your bookings, boarding passes and receipts live behind your account.</p>
+      <a href="./DLT Account.dc.html?next=trips" style="display:inline-flex;align-items:center;margin:20px 0 0;background:#0E1014;color:#F7F5F0;padding:14px 22px;border-radius:2px;font-size:14px;font-weight:600;min-height:48px;box-sizing:border-box">Sign in</a>
+    </section>
+  </sc-if>
+
+<sc-if value="{{ signedIn }}" hint-placeholder-val="{{ true }}">
+<div>
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px">
+    <div>
+      <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">{{ university }} · {{ studentId }}</div>
+      <h1 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1.04;letter-spacing:-.02em">{{ greeting }}</h1>
+    </div>
+    <p style="margin:0;max-width:36ch;font-size:13px;line-height:1.55;color:#4A4F49">{{ headline }}</p>
+  </div>
+
+  <sc-if value="{{ notice }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="margin:20px 0 0;border:1px solid rgba(14,75,52,.3);border-left:3px solid #0E4B34;background:#EEF3EE;padding:14px 16px;font-size:13.5px;line-height:1.6;color:#25322B;animation:dltRise .25s ease">{{ notice }}</div>
+  </sc-if>
+  <sc-if value="{{ error }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="margin:20px 0 0;border:1px solid rgba(163,58,34,.32);border-left:3px solid #A33A22;background:#FFF9F7;padding:14px 16px;font-size:13.5px;line-height:1.6;color:#8A2F1C">{{ error }}</div>
+  </sc-if>
+
+  <sc-for list="{{ banners }}" as="b" hint-placeholder-count="1">
+    <div role="status" style="margin:22px 0 0;border:1px solid {{ b.bd }};border-top:2px solid {{ b.accent }};background:{{ b.bg }};padding:18px 20px">
+      <div style="display:flex;align-items:center;gap:9px;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:{{ b.accent }}">
+        <sc-if value="{{ b.pulse }}" hint-placeholder-val="{{ false }}">
+          <span aria-hidden="true" style="display:block;width:7px;height:7px;border-radius:50%;background:{{ b.accent }};animation:dltTick 1.2s ease-in-out infinite"></span>
+        </sc-if>
+        {{ b.kicker }}
+      </div>
+      <p style="margin:9px 0 0;max-width:62ch;font-size:13.5px;line-height:1.6;color:#3D423C">{{ b.body }}</p>
+      <sc-if value="{{ b.hasAction }}" hint-placeholder-val="{{ false }}">
+        <div style="margin:15px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+          <a href="{{ b.actionHref }}" style="display:flex;align-items:center;background:#0E1014;color:#F7F5F0;padding:12px 18px;border-radius:2px;font-size:13px;font-weight:600;min-height:44px;box-sizing:border-box">{{ b.actionLabel }}</a>
+        </div>
+      </sc-if>
+    </div>
+  </sc-for>
+
+<div data-m="cols" style="margin:26px 0 0;display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:clamp(22px,3vw,40px);align-items:start">
+<div>
+
+  <!-- NEXT TRIP -->
+  <sc-if value="{{ hasUpcoming }}" hint-placeholder-val="{{ true }}">
+  <section aria-labelledby="next-h" style="background:#0E1014;color:#F7F5F0;border-top:2px solid #0E4B34;padding:clamp(22px,3.4vw,32px)">
+    <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:12px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:#5FAE86">Next trip · {{ countdown }}</div>
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#A9AFA6">{{ upcomingCode }}</div>
+    </div>
+    <h2 id="next-h" style="margin:14px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.8vw,34px);line-height:1.03;letter-spacing:-.02em">Woxsen → Miyapur</h2>
+    <dl style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:0 18px;font-variant-numeric:tabular-nums">
+      <sc-for list="{{ upcomingFacts }}" as="f" hint-placeholder-count="4">
+        <div style="border-top:1px solid rgba(247,245,240,.22);padding-top:10px">
+          <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#A9AFA6;margin-bottom:5px">{{ f.k }}</dt>
+          <dd style="margin:0;font-size:16px;font-weight:600">{{ f.v }}</dd>
+        </div>
+      </sc-for>
+    </dl>
+    <div style="margin:24px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+      <button type="button" onClick="{{ openPass }}" style="background:#F7F5F0;color:#0E1014;border:0;padding:14px 20px;border-radius:2px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px">{{ passCta }}</button>
+      <button type="button" onClick="{{ openCancel }}" style="background:none;color:#F7F5F0;border:1px solid rgba(247,245,240,.4);padding:13px 19px;border-radius:2px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px">Cancel booking</button>
+      <button type="button" onClick="{{ openReceipt }}" style="background:none;color:#F7F5F0;border:0;padding:13px 8px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px;border-bottom:1px solid rgba(247,245,240,.4)">Receipt</button>
+    </div>
+    <p style="margin:16px 0 0;font-size:12.5px;color:#C3C8BE">{{ cancelNote }}</p>
+  </section>
+  </sc-if>
+
+  <sc-if value="{{ noUpcoming }}" hint-placeholder-val="{{ false }}">
+  <section style="border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(24px,4vw,40px)">
+    <h2 style="margin:0;font-stretch:125%;font-weight:700;font-size:24px;letter-spacing:-.015em">Nothing booked yet</h2>
+    <p style="margin:10px 0 0;max-width:44ch;font-size:13.5px;line-height:1.6;color:#3D423C">{{ emptyBlurb }}</p>
+    <a href="./DLT Booking.dc.html" style="display:inline-flex;align-items:center;margin:20px 0 0;background:#0E1014;color:#F7F5F0;padding:14px 20px;border-radius:2px;font-size:13.5px;font-weight:600;min-height:48px;box-sizing:border-box">Book a seat</a>
+  </section>
+  </sc-if>
+
+  <!-- CANCEL -->
+  <sc-if value="{{ cancelOpen }}" hint-placeholder-val="{{ false }}">
+  <section role="dialog" aria-label="Cancel booking" style="margin:14px 0 0;border:1px solid rgba(14,16,20,.16);background:#FFFFFF;padding:22px 24px;animation:dltRise .28s ease">
+    <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:{{ quoteFg }}">Cancel · refund preview</div>
+    <h3 style="margin:12px 0 0;font-size:19px;font-weight:600;letter-spacing:-.01em">{{ quoteTitle }}</h3>
+    <p style="margin:9px 0 0;max-width:56ch;font-size:13px;line-height:1.6;color:#3D423C">{{ quoteReason }}</p>
+    <sc-if value="{{ multiPax }}" hint-placeholder-val="{{ false }}">
+      <div role="group" aria-label="Choose passengers to cancel" style="margin:16px 0 0;display:flex;flex-direction:column;gap:8px">
+        <sc-for list="{{ cancelPax }}" as="p" hint-placeholder-count="2">
+          <label style="display:flex;align-items:center;gap:11px;border:1px solid {{ p.bd }};background:{{ p.bg }};padding:12px 14px;cursor:pointer;min-height:44px">
+            <input type="checkbox" checked="{{ p.on }}" onChange="{{ p.onToggle }}" style="width:17px;height:17px;accent-color:#0E4B34" />
+            <span style="font-size:13.5px;font-weight:600">{{ p.name }}</span>
+            <span style="font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">seat {{ p.seat }}</span>
+            <span style="flex:1"></span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums">₹{{ p.price }}</span>
+          </label>
+        </sc-for>
+      </div>
+    </sc-if>
+    <div style="margin:18px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+      <button type="button" onClick="{{ confirmCancel }}" disabled="{{ cancelDisabled }}" style="background:{{ cancelBg }};color:{{ cancelFg }};border:0;padding:13px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ cancelCta }}</button>
+      <button type="button" onClick="{{ closeCancel }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:12px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Keep my booking</button>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- RECEIPT -->
+  <sc-if value="{{ receiptOpen }}" hint-placeholder-val="{{ false }}">
+  <section aria-label="Payment receipt" style="margin:14px 0 0;border:1px solid rgba(14,16,20,.16);background:#FFFFFF;animation:dltRise .28s ease">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:15px 20px;border-bottom:1px solid rgba(14,16,20,.12)">
+      <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Receipt · {{ receiptCode }}</span>
+      <button type="button" onClick="{{ closeReceipt }}" style="background:none;border:0;padding:8px;font-size:15px;color:#4A4F49;cursor:pointer;min-height:44px;min-width:44px" aria-label="Close receipt">×</button>
+    </div>
+    <div style="padding:20px">
+      <dl style="margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px 20px;font-variant-numeric:tabular-nums">
+        <sc-for list="{{ receiptRows }}" as="r" hint-placeholder-count="7">
+          <div>
+            <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">{{ r.k }}</dt>
+            <dd style="margin:0;font-size:14px;font-weight:600;color:{{ r.fg }}">{{ r.v }}</dd>
+          </div>
+        </sc-for>
+      </dl>
+      <p style="margin:20px 0 0;font-size:12px;line-height:1.6;color:#5F6560">{{ receiptNote }}</p>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- MY TRIPS -->
+  <section aria-labelledby="trips-h" style="margin:34px 0 0">
+    <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:12px">
+      <h2 id="trips-h" style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(20px,2.2vw,26px);letter-spacing:-.015em">My trips</h2>
+      <div role="group" aria-label="Filter trips" style="display:flex;flex-wrap:wrap;gap:8px">
+        <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+          <button type="button" aria-pressed="{{ f.on }}" onClick="{{ f.onPick }}" style="background:{{ f.bg }};color:{{ f.fg }};border:1px solid {{ f.bd }};padding:10px 14px;border-radius:2px;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;min-height:44px">{{ f.label }} {{ f.count }}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div role="list" style="margin:18px 0 0;border-top:1px solid rgba(14,16,20,.16)">
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="3">
+        <article role="listitem" style="display:grid;grid-template-columns:minmax(88px,.6fr) minmax(0,1.5fr) minmax(104px,.8fr) auto;align-items:center;gap:clamp(10px,2vw,24px);padding:18px 0;border-bottom:1px solid rgba(14,16,20,.16)">
+          <div>
+            <div style="font-stretch:125%;font-weight:700;font-size:20px;line-height:1;letter-spacing:-.018em;font-variant-numeric:tabular-nums">{{ r.time }}</div>
+            <div style="margin-top:6px;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ r.date }}</div>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600">Woxsen → Miyapur</div>
+            <div style="margin-top:4px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">{{ r.meta }}</div>
+          </div>
+          <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:{{ r.statusFg }}">{{ r.status }}</div>
+          <button type="button" onClick="{{ r.onAction }}" style="border:1px solid {{ r.actionBd }};background:{{ r.actionBg }};color:{{ r.actionFg }};padding:11px 16px;border-radius:2px;font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer;min-height:44px">{{ r.action }}</button>
+        </article>
+      </sc-for>
+    </div>
+
+    <sc-if value="{{ emptyRows }}" hint-placeholder-val="{{ false }}">
+      <div style="border-bottom:1px solid rgba(14,16,20,.16);padding:34px 0;text-align:center">
+        <p style="margin:0;font-size:13.5px;color:#4A4F49">{{ emptyCopy }}</p>
+        <a href="./DLT Booking.dc.html" style="display:inline-block;margin:14px 0 0;font-size:13px;font-weight:600;border-bottom:1px solid rgba(14,75,52,.4)">Book a seat</a>
+      </div>
+    </sc-if>
+
+    <!-- RATING -->
+    <sc-if value="{{ rateOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:18px 0 0;border:1px solid rgba(14,16,20,.16);background:#FFFFFF;padding:20px 22px;animation:dltRise .28s ease">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Rate your trip · {{ rateTripLabel }}</div>
+        <div role="radiogroup" aria-label="Rating out of five" style="margin:14px 0 0;display:flex;align-items:center;gap:6px">
+          <sc-for list="{{ stars }}" as="s" hint-placeholder-count="5">
+            <button type="button" role="radio" aria-checked="{{ s.on }}" onClick="{{ s.onPick }}" aria-label="{{ s.aria }}" style="background:none;border:0;padding:6px;font-size:26px;line-height:1;color:{{ s.fg }};cursor:pointer;min-height:44px;min-width:44px">★</button>
+          </sc-for>
+          <span style="margin-left:8px;font-size:13px;color:#4A4F49">{{ rateLabel }}</span>
+        </div>
+        <label style="display:block;margin-top:14px">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Anything operations should know? (optional)</span>
+          <textarea rows="2" value="{{ rateText }}" onChange="{{ onRateText }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-family:inherit;font-size:13.5px"></textarea>
+        </label>
+        <div style="margin:14px 0 0;display:flex;gap:10px">
+          <button type="button" onClick="{{ submitRating }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:12px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Submit rating</button>
+          <button type="button" onClick="{{ closeRate }}" style="background:none;border:0;padding:12px 6px;font-size:13px;font-weight:600;color:#4A4F49;cursor:pointer;min-height:44px">Not now</button>
+        </div>
+      </div>
+    </sc-if>
+  </section>
+
+  <!-- QUICK ACTIONS -->
+  <section aria-label="Quick actions" style="margin:34px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+    <a href="./DLT Booking.dc.html" style="border:1px solid rgba(14,16,20,.14);background:#FFFFFF;padding:18px 18px 20px;color:#0E1014">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#0E4B34">Book</div>
+      <div style="margin-top:9px;font-size:14.5px;font-weight:600">Book a seat</div>
+      <div style="margin-top:5px;font-size:12.5px;color:#4A4F49">{{ openTripsLabel }}</div>
+    </a>
+    <button type="button" onClick="{{ openPass }}" style="text-align:left;border:1px solid rgba(14,16,20,.14);background:#FFFFFF;padding:18px 18px 20px;cursor:pointer">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#0E4B34">Board</div>
+      <div style="margin-top:9px;font-size:14.5px;font-weight:600">Boarding pass</div>
+      <div style="margin-top:5px;font-size:12.5px;color:#4A4F49">{{ passCount }}</div>
+    </button>
+    <a href="./DLT Account.dc.html" style="border:1px solid rgba(14,16,20,.14);background:#FFFFFF;padding:18px 18px 20px;color:#0E1014">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#0E4B34">Account</div>
+      <div style="margin-top:9px;font-size:14.5px;font-weight:600">Your details</div>
+      <div style="margin-top:5px;font-size:12.5px;color:#4A4F49">Profile · emergency contact</div>
+    </a>
+    <a href="./DLT Homepage.dc.html#help" style="border:1px solid rgba(14,16,20,.14);background:#FFFFFF;padding:18px 18px 20px;color:#0E1014">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#0E4B34">Help</div>
+      <div style="margin-top:9px;font-size:14.5px;font-weight:600">Get help</div>
+      <div style="margin-top:5px;font-size:12.5px;color:#4A4F49">WhatsApp · FAQ</div>
+    </a>
+  </section>
+
+</div>
+
+<!-- BOARDING PASS -->
+<aside data-m="pass" aria-label="Boarding pass" style="position:sticky;top:84px">
+  <sc-if value="{{ passOpen }}" hint-placeholder-val="{{ true }}">
+  <div style="border:1px solid rgba(14,16,20,.16);background:#FFFFFF;animation:dltRise .3s ease">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid rgba(14,16,20,.12)">
+      <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Boarding pass</span>
+      <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:{{ passStateFg }}">{{ passState }}</span>
+    </div>
+
+    <sc-if value="{{ multiPass }}" hint-placeholder-val="{{ false }}">
+      <div data-m="noprint" role="group" aria-label="Passenger" style="display:flex;border-bottom:1px solid rgba(14,16,20,.12)">
+        <sc-for list="{{ passengers }}" as="p" hint-placeholder-count="2">
+          <button type="button" aria-pressed="{{ p.on }}" onClick="{{ p.onPick }}" style="flex:1;background:{{ p.bg }};border:0;border-bottom:2px solid {{ p.bd }};padding:13px 10px;font-size:12.5px;font-weight:600;color:{{ p.fg }};cursor:pointer;min-height:44px">{{ p.first }} · {{ p.seat }}</button>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <div style="padding:20px 18px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+        <div>
+          <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560">Passenger</div>
+          <div style="margin-top:6px;font-size:17px;font-weight:600;letter-spacing:-.01em">{{ paxName }}</div>
+          <div style="margin-top:4px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">{{ paxSid }}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560">Seat</div>
+          <div style="margin-top:6px;font-stretch:125%;font-weight:700;font-size:26px;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ paxSeat }}</div>
+          <div style="margin-top:4px;font-size:12px;color:#4A4F49">{{ paxSeatType }}</div>
+        </div>
+      </div>
+
+      <div style="margin:18px 0 0;padding:16px 0;border-top:1px dashed rgba(14,16,20,.2);border-bottom:1px dashed rgba(14,16,20,.2);display:flex;flex-direction:column;align-items:center;gap:10px">
+        <canvas ref="{{ qrRef }}" width="176" height="176" role="img" aria-label="Boarding QR for {{ paxName }}, seat {{ paxSeat }}" style="width:176px;height:176px;image-rendering:pixelated;opacity:{{ qrOpacity }}"></canvas>
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560;text-align:center">{{ qrCaption }}</div>
+      </div>
+
+      <dl style="margin:18px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;font-variant-numeric:tabular-nums">
+        <sc-for list="{{ passFacts }}" as="f" hint-placeholder-count="8">
+          <div>
+            <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">{{ f.k }}</dt>
+            <dd style="margin:0;font-size:13.5px;font-weight:600;color:{{ f.fg }}">{{ f.v }}</dd>
+          </div>
+        </sc-for>
+      </dl>
+
+      <div data-m="noprint" style="margin:20px 0 0;display:flex;gap:9px">
+        <button type="button" onClick="{{ printPass }}" style="flex:1;background:#0E1014;color:#F7F5F0;border:0;padding:13px 14px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Print / PDF</button>
+        <button type="button" onClick="{{ savePng }}" style="flex:1;border:1px solid rgba(14,16,20,.2);background:none;padding:12px 14px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Save pass image</button>
+      </div>
+      <p data-m="noprint" style="margin:12px 0 0;font-size:11.5px;line-height:1.5;color:#5F6560">{{ passNote }}</p>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ passClosed }}" hint-placeholder-val="{{ false }}">
+  <div style="border:1px dashed rgba(14,16,20,.24);padding:26px 20px;text-align:center">
+    <p style="margin:0;font-size:13px;line-height:1.6;color:#4A4F49">{{ passClosedCopy }}</p>
+    <sc-if value="{{ canOpenPass }}" hint-placeholder-val="{{ false }}">
+      <button type="button" onClick="{{ openPass }}" style="margin:14px 0 0;background:none;border:0;padding:12px 4px;font-size:13px;font-weight:600;color:#0E4B34;cursor:pointer;min-height:44px;border-bottom:1px solid rgba(14,75,52,.4)">Show passes</button>
+    </sc-if>
+  </div>
+  </sc-if>
+</aside>
+</div>
+</div>
+</sc-if>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 1280, &quot;height&quot;: 900 }
+}">
+/* Student account screen. Every figure is read from DLT; the cancel button
+   really cancels, the receipt is generated from payment records, and the QR is a
+   real encoded symbol from the pass token. */
+class Component extends DCLogic {
+  state = {
+    ready: false, tick: 0, filter: 'Upcoming', paxIndex: 0, passOpen: true,
+    activeBookingId: null, cancelOpen: false, cancelSel: {}, receiptOpen: false,
+    rateBookingId: null, rating: 0, rateText: '', notice: null, error: null,
+  };
+
+  async componentDidMount() {
+    await DLT.ready;
+    this._unsub = DLT.subscribe(() => this.setState({ tick: this.state.tick + 1 }));
+    this._timer = setInterval(() => this.setState({ tick: this.state.tick + 1 }), 5000);
+    const code = new URLSearchParams(location.search).get('booking');
+    let active = null;
+    if (code) {
+      try { const b = DLT.bookings.get(code); active = b ? b.id : null; } catch (e) {}
+    }
+    this.setState({ ready: true, activeBookingId: active });
+    this._paint();
+  }
+  componentDidUpdate() { this._paint(); }
+  componentWillUnmount() { if (this._unsub) this._unsub(); clearInterval(this._timer); }
+
+  _passes() {
+    const b = this._activeBooking();
+    if (!b) return [];
+    try { return DLT.boarding.passesFor(b.id); } catch (e) { return []; }
+  }
+  _activeBooking() {
+    const me = DLT.auth.current();
+    if (!me) return null;
+    const all = DLT.bookings.mine();
+    if (this.state.activeBookingId) {
+      const found = all.find(b => b.id === this.state.activeBookingId);
+      if (found) return found;
+    }
+    return all.find(b => b.bucket === 'Upcoming') || all[0] || null;
+  }
+
+  _paint() {
+    if (!this._cv || !window.DLTQR) return;
+    const passes = this._passes();
+    const p = passes[Math.min(this.state.paxIndex, Math.max(0, passes.length - 1))];
+    if (!p || !p.qrToken) {
+      const g = this._cv.getContext('2d');
+      g.fillStyle = '#F1F0EA'; g.fillRect(0, 0, this._cv.width, this._cv.height);
+      return;
+    }
+    const void_ = p.passStatus !== 'VALID';
+    DLTQR.draw(this._cv, p.qrToken, { dark: void_ ? '#9DA298' : '#0E1014' });
+  }
+
+  savePng = () => {
+    const passes = this._passes();
+    const p = passes[Math.min(this.state.paxIndex, passes.length - 1)];
+    if (!p) return;
+    /* a real pass image: the whole pass drawn to canvas, not just the QR */
+    const W = 760, H = 1120, cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#0E1014'; g.fillRect(0, 0, W, 96);
+    g.fillStyle = '#0E4B34'; g.fillRect(0, 96, W, 5);
+    g.fillStyle = '#F7F5F0';
+    g.font = '700 34px Archivo, sans-serif';
+    g.fillText('DLT', 44, 60);
+    g.font = '500 15px "Martian Mono", monospace';
+    g.fillStyle = '#A9AFA6';
+    g.fillText('BOARDING PASS', 118, 59);
+    g.textAlign = 'right';
+    g.fillStyle = p.passStatus === 'VALID' ? '#5FAE86' : '#E98A6B';
+    g.fillText(p.passStatus, W - 44, 59);
+    g.textAlign = 'left';
+
+    const line = (y) => { g.strokeStyle = '#DCDAD1'; g.beginPath(); g.moveTo(44, y); g.lineTo(W - 44, y); g.stroke(); };
+    const label = (t, x, y) => { g.fillStyle = '#5F6560'; g.font = '500 13px "Martian Mono", monospace'; g.fillText(t, x, y); };
+    const value = (t, x, y, size) => { g.fillStyle = '#0E1014'; g.font = '600 ' + (size || 24) + 'px Archivo, sans-serif'; g.fillText(String(t), x, y); };
+
+    label('PASSENGER', 44, 150); value(p.name, 44, 184, 30);
+    label('STUDENT ID', 44, 224); value(p.studentId, 44, 252, 22);
+    g.textAlign = 'right';
+    label('SEAT', W - 44, 150);
+    g.fillStyle = '#0E1014'; g.font = '700 52px Archivo, sans-serif'; g.fillText(p.seatNumber, W - 44, 196);
+    g.font = '500 18px Archivo, sans-serif'; g.fillStyle = '#4A4F49'; g.fillText(p.seatType, W - 44, 224);
+    g.textAlign = 'left';
+    line(288);
+
+    const qrCanvas = document.createElement('canvas');
+    qrCanvas.width = 360; qrCanvas.height = 360;
+    DLTQR.draw(qrCanvas, p.qrToken, { dark: p.passStatus === 'VALID' ? '#0E1014' : '#9DA298' });
+    g.drawImage(qrCanvas, (W - 360) / 2, 316);
+    g.textAlign = 'center';
+    label('SCAN AT THE DOOR · ONE SCAN PER PASSENGER', W / 2, 706);
+    g.textAlign = 'left';
+    line(740);
+
+    const facts = [
+      ['ROUTE', p.route], ['DEPARTS', DLT.fmt.when(p.departureAt)],
+      ['REPORT BY', DLT.fmt.time(p.reportingAt)], ['PICKUP', p.pickupPoint],
+      ['COACH', p.vehicle || '—'], ['BOOKING', p.bookingCode],
+      ['BOARDING CODE', p.boardingCode], ['PAYMENT', p.paymentStatus],
+    ];
+    facts.forEach(([k, v], i) => {
+      const x = 44 + (i % 2) * (W / 2 - 22);
+      const y = 790 + Math.floor(i / 2) * 78;
+      label(k, x, y); value(v, x, y + 30, 19);
+    });
+    g.fillStyle = '#5F6560'; g.font = '500 12px "Martian Mono", monospace';
+    g.fillText('TOKEN ' + p.qrToken.toUpperCase(), 44, H - 34);
+
+    const a = document.createElement('a');
+    a.href = cv.toDataURL('image/png');
+    a.download = 'dlt-pass-' + p.bookingCode + '-' + p.seatNumber + '.png';
+    a.click();
+    this.setState({ notice: 'Saved ' + a.download + ' — the full pass, QR included.' });
+  };
+
+  confirmCancel = () => {
+    const b = this._activeBooking();
+    if (!b) return;
+    const ids = Object.keys(this.state.cancelSel).filter(k => this.state.cancelSel[k]);
+    try {
+      const res = DLT.bookings.cancel(b.id, ids.length ? ids : null, 'Student cancellation');
+      this.setState({
+        cancelOpen: false, cancelSel: {}, error: null,
+        notice: res.refundAmount > 0
+          ? 'Cancelled. ₹' + res.refundAmount + ' is refunding to the original payment method — it shows as Refund pending until the acquirer settles it, normally 3 to 5 working days.'
+          : 'Cancelled. Inside 12 hours the fare is not refundable, so no refund was raised. The seat has been released.',
+      });
+    } catch (e) { this.setState({ error: e.message || String(e) }); }
+  };
+
+  renderVals() {
+    const st = this.state;
+    if (!st.ready) {
+      return { signedIn: false, signedOut: false, initials: '··', passClosed: true,
+        passOpen: false, passClosedCopy: 'Loading your trips…', canOpenPass: false,
+        openPass: () => {}, filters: [], rows: [], banners: [], upcomingFacts: [],
+        passengers: [], passFacts: [], stars: [], receiptRows: [], cancelPax: [] };
+    }
+    const me = DLT.auth.current();
+    if (!me) {
+      return { signedIn: false, signedOut: true, initials: '··', passOpen: false, passClosed: false,
+        filters: [], rows: [], banners: [], upcomingFacts: [], passengers: [], passFacts: [],
+        stars: [], receiptRows: [], cancelPax: [], openPass: () => {}, canOpenPass: false };
+    }
+    if (me.role !== 'STUDENT') {
+      return { signedIn: false, signedOut: true, initials: me.name.slice(0, 2).toUpperCase(),
+        passOpen: false, passClosed: false, filters: [], rows: [], banners: [], upcomingFacts: [],
+        passengers: [], passFacts: [], stars: [], receiptRows: [], cancelPax: [],
+        openPass: () => {}, canOpenPass: false };
+    }
+
+    const all = DLT.bookings.mine();
+    const counts = { Upcoming: 0, Completed: 0, Cancelled: 0, Refunded: 0 };
+    all.forEach(b => { counts[b.bucket] = (counts[b.bucket] || 0) + 1; });
+    const active = this._activeBooking();
+    const upcoming = all.find(b => b.bucket === 'Upcoming' &&
+      ['CONFIRMED', 'PAYMENT_PENDING', 'PAYMENT_HELD', 'BOOKING_PROCESSING'].indexOf(b.status) >= 0);
+    const openTrips = DLT.trips.listPublic(3);
+
+    /* banners driven by real booking state */
+    const banners = [];
+    const pending = all.find(b => b.status === 'PAYMENT_PENDING' || b.status === 'BOOKING_PROCESSING');
+    const helds = all.find(b => b.status === 'PAYMENT_HELD');
+    const dltCancelled = all.find(b => b.status === 'CANCELLED_BY_DLT' &&
+      b.trip && b.trip.departureAt > Date.now() - 7 * 86400000);
+    const waits = DLT.waitlist.mine();
+    const waitOffer = waits.find(w => ['CLAIM_OFFERED', 'CLAIMED'].indexOf(w.status) >= 0 &&
+      w.claimExpiresAt > Date.now());
+    if (waitOffer) {
+      const wt = DLT.trips.get(waitOffer.tripId);
+      banners.push({
+        kicker: 'Seat released to you · ' + DLT.fmt.countdown(Math.max(0, waitOffer.claimExpiresAt - Date.now())) + ' left',
+        body: 'Seat ' + (waitOffer.reservedSeat || '') + ' on the ' + (wt ? DLT.fmt.when(wt.departureAt) : 'waitlisted departure') +
+          ' is reserved for you. Nobody else can take it while the window is open — claim it and finish the booking to keep it.',
+        accent: '#8A5A0E', bg: '#FFFDF6', bd: 'rgba(184,115,10,.34)', pulse: true,
+        hasAction: true, actionLabel: 'Claim the seat', actionHref: './DLT Booking.dc.html',
+      });
+    } else if (waits.length) {
+      const wt = DLT.trips.get(waits[0].tripId);
+      banners.push({
+        kicker: 'On the waitlist · position ' + waits[0].position,
+        body: 'You are waiting for a seat on the ' + (wt ? DLT.fmt.when(wt.departureAt) : 'full departure') +
+          '. If one is released it is reserved for you and you get 30 minutes to claim it.',
+        accent: '#0E4B34', bg: '#EEF3EE', bd: 'rgba(14,75,52,.3)', pulse: false, hasAction: false,
+      });
+    }
+    if (pending) banners.push({
+      kicker: pending.status === 'BOOKING_PROCESSING' ? 'Payment received · booking processing' : 'Payment pending · ' + pending.code,
+      body: pending.status === 'BOOKING_PROCESSING'
+        ? 'Your payment is verified and recorded. Issuing the seats did not complete, so we are retrying — do not pay again.'
+        : 'Don\u2019t pay again. The payment is with the acquirer and we are waiting on their confirmation. The booking and passes appear here automatically the moment it clears.',
+      kickerRaw: 'pending', accent: '#8A5A0E', bg: '#FFFDF6', bd: 'rgba(184,115,10,.34)',
+      pulse: true, hasAction: false,
+    });
+    if (helds) banners.push({
+      kicker: 'Payment held for review · ' + helds.code,
+      body: 'The amount we received did not match the amount due, so this booking is not confirmed and the payment is being held, not lost. Do not pay again — our team is resolving it.',
+      accent: '#8A5A0E', bg: '#FFFDF6', bd: 'rgba(184,115,10,.34)', pulse: true, hasAction: false,
+    });
+    if (dltCancelled) {
+      const ref = dltCancelled.refunds[0];
+      banners.push({
+        kicker: 'Trip cancelled by DLT',
+        body: 'The ' + DLT.fmt.when(dltCancelled.trip.departureAt) + ' departure was cancelled'
+          + (dltCancelled.trip.cancelledReason ? ' — ' + dltCancelled.trip.cancelledReason : '') + '. '
+          + (ref ? 'Your refund of ₹' + ref.amount + ' is ' + (ref.status === 'REFUNDED' ? 'settled to the original payment method.' : 'on its way back to the original payment method and normally lands in 3 to 5 working days.') : '')
+          + ' Your passes for this trip no longer scan.',
+        accent: '#8A2F1C', bg: '#FFF9F7', bd: 'rgba(163,58,34,.3)', pulse: false, hasAction: true,
+        actionLabel: 'Rebook another departure', actionHref: './DLT Booking.dc.html',
+      });
+    }
+
+    /* rows for the chosen filter */
+    const list = all.filter(b => b.bucket === st.filter);
+    const rows = list.map(b => {
+      const canRate = DLT.reviews.canRate(b.id);
+      const refunded = b.refunds.some(r => r.status === 'REFUNDED');
+      const refundPending = b.refunds.some(r => r.status === 'REFUND_PENDING');
+      const status = b.status === 'CONFIRMED' && b.bucket === 'Upcoming' ? 'Confirmed'
+        : b.status === 'PAYMENT_PENDING' ? 'Payment pending'
+        : b.status === 'PAYMENT_HELD' ? 'Payment held'
+        : b.status === 'BOOKING_PROCESSING' ? 'Processing'
+        : b.status === 'CANCELLED_BY_DLT' ? (refunded ? 'Refunded ₹' + b.refunds[0].amount : 'Refund pending')
+        : b.status === 'CANCELLED_BY_STUDENT' ? (refunded ? 'Refunded ₹' + b.refunds[0].amount : refundPending ? 'Refund pending' : 'Cancelled')
+        : b.bucket === 'Completed' ? 'Completed' : b.status;
+      const boarded = b.passengers.filter(p => p.boardingStatus === 'BOARDED');
+      const meta = [
+        'Seats ' + b.passengers.map(p => p.seatNumber).join(', '),
+        b.code,
+        boarded.length ? 'boarded ' + DLT.fmt.time(boarded[0].boardedAt)
+          : b.bucket === 'Completed' ? 'not boarded' : null,
+      ].filter(Boolean).join(' · ');
+      const action = canRate.allowed ? 'Rate trip'
+        : b.bucket === 'Upcoming' && b.status === 'CONFIRMED' ? 'Boarding pass'
+        : b.bucket === 'Upcoming' ? 'Track payment' : 'View receipt';
+      const primary = action === 'Boarding pass';
+      return {
+        time: DLT.fmt.time(b.trip.departureAt), date: DLT.fmt.date(b.trip.departureAt),
+        meta, status,
+        statusFg: /pending|held|processing/i.test(status) ? '#8A5A0E'
+          : /cancel|refund/i.test(status) ? '#5F6560' : '#0E4B34',
+        action,
+        actionBg: primary ? '#0E1014' : 'transparent',
+        actionFg: primary ? '#F7F5F0' : '#0E1014',
+        actionBd: primary ? '#0E1014' : 'rgba(14,16,20,.2)',
+        onAction: () => {
+          if (action === 'Rate trip') this.setState({ rateBookingId: b.id, rating: 0, rateText: '' });
+          else if (action === 'View receipt') this.setState({ activeBookingId: b.id, receiptOpen: true, paxIndex: 0 });
+          else this.setState({ activeBookingId: b.id, passOpen: true, paxIndex: 0, receiptOpen: false });
+        },
+      };
+    });
+
+    /* passes */
+    const passes = this._passes();
+    const idx = Math.min(st.paxIndex, Math.max(0, passes.length - 1));
+    const p = passes[idx] || null;
+    const passable = !!active && passes.length > 0;
+
+    /* receipt */
+    let receipt = null;
+    if (st.receiptOpen && active) {
+      try { receipt = DLT.payments.receipt(active.id); } catch (e) { receipt = null; }
+    }
+
+    /* cancellation quote */
+    let quote = null;
+    if (st.cancelOpen && active) {
+      const sel = Object.keys(st.cancelSel).filter(k => st.cancelSel[k]);
+      try { quote = DLT.bookings.cancellationQuote(active.id, sel.length ? sel : null); } catch (e) { quote = null; }
+    }
+
+    const rateBooking = st.rateBookingId ? all.find(b => b.id === st.rateBookingId) : null;
+
+    return {
+      signedIn: true, signedOut: false,
+      initials: me.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+      university: me.university || 'Woxsen University', studentId: me.studentId || '—',
+      greeting: (function () {
+        const h = new Date().getHours();
+        return (h < 12 ? 'Morning, ' : h < 17 ? 'Afternoon, ' : 'Evening, ') + me.name.split(' ')[0];
+      })(),
+      headline: upcoming
+        ? (upcoming.status === 'CONFIRMED'
+          ? upcoming.passengers.length + (upcoming.passengers.length === 1 ? ' seat' : ' seats') + ' on the ' +
+            DLT.fmt.relativeDay(upcoming.trip.departureAt) + ' ' + DLT.fmt.time(upcoming.trip.departureAt) + ' departure. Passes are ready.'
+          : 'We are confirming a payment. Nothing else for you to do.')
+        : openTrips.length ? 'No trips booked. ' + openTrips.length + ' departures are open on your route.'
+        : 'No trips booked, and no departures are open right now.',
+      notice: st.notice, error: st.error,
+      banners,
+
+      hasUpcoming: !!upcoming, noUpcoming: !upcoming,
+      emptyBlurb: openTrips.length
+        ? openTrips.length + ' departures are open on Woxsen → Miyapur at ₹' + (openTrips[0].price) + ' a seat. Your details are saved, so booking takes about a minute.'
+        : 'No departures are open yet. Ask to be notified and we will message you when bookings open.',
+      upcomingCode: upcoming ? upcoming.code : '',
+      countdown: upcoming ? DLT.fmt.relativeDay(upcoming.trip.departureAt) : '',
+      upcomingFacts: upcoming ? [
+        { k: 'Departs', v: DLT.fmt.when(upcoming.trip.departureAt) },
+        { k: 'Report by', v: DLT.fmt.time(upcoming.trip.reportingAt) },
+        { k: 'Seats', v: upcoming.passengers.map(x => x.seatNumber).join(', ') },
+        { k: 'Pickup', v: upcoming.trip.pickupPoint },
+      ] : [],
+      passCta: passes.length > 1 ? 'View boarding passes' : 'View boarding pass',
+      cancelNote: upcoming ? (function () {
+        const cut = upcoming.trip.departureAt - 12 * 3600000;
+        return Date.now() < cut
+          ? 'Free cancellation until ' + DLT.fmt.dateTime(cut) + '. After that the fare is non-refundable.'
+          : 'Inside 12 hours of departure, so the fare is no longer refundable.';
+      })() : '',
+
+      openPass: () => this.setState({ passOpen: true, receiptOpen: false }),
+      openCancel: () => this.setState({ cancelOpen: true, cancelSel: {}, notice: null, error: null }),
+      closeCancel: () => this.setState({ cancelOpen: false, cancelSel: {} }),
+      cancelOpen: st.cancelOpen && !!active,
+      multiPax: !!active && active.passengers.length > 1,
+      cancelPax: active ? active.passengers
+        .filter(x => x.boardingStatus !== 'CANCELLED')
+        .map(x => ({
+          name: x.name, seat: x.seatNumber, price: active.trip.price,
+          on: !!st.cancelSel[x.id],
+          bd: st.cancelSel[x.id] ? 'rgba(14,75,52,.4)' : 'rgba(14,16,20,.16)',
+          bg: st.cancelSel[x.id] ? '#EEF3EE' : '#FCFBF8',
+          onToggle: () => this.setState({
+            cancelSel: Object.assign({}, st.cancelSel, { [x.id]: !st.cancelSel[x.id] }),
+          }),
+        })) : [],
+      quoteTitle: quote ? (quote.amount > 0
+        ? 'You\u2019d get ₹' + quote.amount + ' back'
+        : 'No refund is due') : '',
+      quoteReason: quote
+        ? quote.reason + (quote.whole ? ' Cancelling everyone ends the booking and releases every seat.'
+          : ' Only the passengers you tick are cancelled; the rest of the booking continues.')
+        : '',
+      quoteFg: quote && quote.amount > 0 ? '#0E4B34' : '#8A5A0E',
+      cancelCta: quote
+        ? (quote.whole ? 'Cancel the booking' : 'Cancel ' + quote.seats + (quote.seats === 1 ? ' passenger' : ' passengers'))
+          + (quote.amount > 0 ? ' · ₹' + quote.amount + ' refund' : ' · no refund')
+        : 'Cancel',
+      cancelDisabled: !quote,
+      cancelBg: '#0E1014', cancelFg: '#F7F5F0',
+      confirmCancel: this.confirmCancel,
+
+      receiptOpen: st.receiptOpen && !!receipt,
+      closeReceipt: () => this.setState({ receiptOpen: false }),
+      openReceipt: () => this.setState({ receiptOpen: true, cancelOpen: false }),
+      receiptCode: receipt ? receipt.bookingCode : '',
+      receiptRows: receipt ? [
+        { k: 'Booking', v: receipt.bookingCode, fg: '#0E1014' },
+        { k: 'Issued', v: DLT.fmt.dateTime(receipt.issuedAt), fg: '#0E1014' },
+        { k: 'Seats', v: receipt.seats.join(', '), fg: '#0E1014' },
+        { k: 'Fare', v: '₹' + receipt.unitPrice + ' × ' + receipt.seats.length, fg: '#0E1014' },
+        { k: 'Amount', v: '₹' + receipt.amount, fg: '#0E1014' },
+        { k: 'Payment', v: receipt.paymentStatus, fg: receipt.paymentStatus === 'SUCCESS' ? '#0E4B34' : '#8A5A0E' },
+        { k: 'Paid at', v: receipt.paidAt ? DLT.fmt.dateTime(receipt.paidAt) : '—', fg: '#0E1014' },
+        { k: 'Reference', v: receipt.providerReference || '—', fg: '#0E1014' },
+      ].concat(receipt.refunds.map((r, i) => ({
+        k: 'Refund ' + (i + 1), v: '₹' + r.amount + ' · ' + r.status, fg: r.status === 'REFUNDED' ? '#0E4B34' : '#8A5A0E',
+      }))) : [],
+      receiptNote: receipt ? receipt.note : '',
+
+      filters: ['Upcoming', 'Completed', 'Cancelled', 'Refunded'].map(f => ({
+        label: f, on: st.filter === f, count: counts[f] ? '· ' + counts[f] : '',
+        bg: st.filter === f ? '#0E1014' : 'transparent',
+        fg: st.filter === f ? '#F7F5F0' : '#3D423C',
+        bd: st.filter === f ? '#0E1014' : 'rgba(14,16,20,.2)',
+        onPick: () => this.setState({ filter: f }),
+      })),
+      rows, emptyRows: rows.length === 0,
+      emptyCopy: st.filter === 'Upcoming'
+        ? 'No upcoming trips. Bookings open a few days ahead.'
+        : 'Nothing here yet — ' + st.filter.toLowerCase() + ' trips appear as they happen.',
+
+      rateOpen: !!rateBooking,
+      rateTripLabel: rateBooking ? DLT.fmt.when(rateBooking.trip.departureAt) : '',
+      stars: [1, 2, 3, 4, 5].map(n => ({
+        aria: n + (n > 1 ? ' stars' : ' star'), on: n === st.rating,
+        fg: n <= st.rating ? '#0E4B34' : '#C9C6BC',
+        onPick: () => this.setState({ rating: n }),
+      })),
+      rateLabel: ['Tap to rate', 'Poor', 'Below par', 'Fine', 'Good', 'Excellent'][st.rating],
+      rateText: st.rateText,
+      onRateText: e => this.setState({ rateText: e.target.value }),
+      submitRating: () => {
+        try {
+          DLT.reviews.submit(st.rateBookingId, st.rating, st.rateText);
+          this.setState({ rateBookingId: null, notice: 'Thanks — ' + st.rating + ' stars logged. Operations sees it with the trip report.', error: null });
+        } catch (e) { this.setState({ error: e.message || String(e) }); }
+      },
+      closeRate: () => this.setState({ rateBookingId: null }),
+
+      openTripsLabel: openTrips.length
+        ? '₹' + openTrips[0].price + ' · ' + openTrips.length + ' dates open' : 'No dates open',
+      passCount: passes.length
+        ? passes.length + (passes.length === 1 ? ' pass' : ' passes') + ' · ' + DLT.fmt.date(passes[0].departureAt)
+        : 'No passes yet',
+
+      passOpen: st.passOpen && passable, passClosed: !(st.passOpen && passable),
+      canOpenPass: passable,
+      passClosedCopy: passable
+        ? 'Your passes open here. Each passenger scans their own QR at the door.'
+        : 'No boarding pass yet — a pass is issued for each passenger once a payment is verified.',
+      multiPass: passes.length > 1,
+      passengers: passes.map((q, i) => ({
+        first: q.name.split(' ')[0], seat: q.seatNumber, on: i === idx,
+        bg: i === idx ? '#FFFFFF' : '#FAF8F4',
+        fg: i === idx ? '#0E1014' : '#5F6560',
+        bd: i === idx ? '#0E4B34' : 'transparent',
+        onPick: () => this.setState({ paxIndex: i }),
+      })),
+      paxName: p ? p.name : '—', paxSid: p ? p.studentId : '—',
+      paxSeat: p ? p.seatNumber : '—', paxSeatType: p ? p.seatType : '',
+      passState: p ? (p.passStatus === 'VALID'
+        ? (p.boardingStatus === 'BOARDED' ? 'Boarded' : 'Valid ' + DLT.fmt.date(p.departureAt))
+        : p.passStatus === 'VOID' ? 'Void' : 'Issued on payment') : '—',
+      passStateFg: p && p.passStatus === 'VALID' ? '#0E4B34' : '#8A2F1C',
+      qrOpacity: p && p.passStatus === 'VALID' ? 1 : 0.45,
+      qrCaption: p
+        ? (p.passStatus !== 'VALID' ? 'This QR no longer scans'
+          : p.boardingStatus === 'BOARDED' ? 'Already boarded — a second scan is refused'
+          : 'Token ' + p.qrToken + ' · one scan')
+        : '',
+      passFacts: p ? [
+        { k: 'Route', v: p.route, fg: '#0E1014' },
+        { k: 'Departs', v: DLT.fmt.when(p.departureAt), fg: '#0E1014' },
+        { k: 'Report by', v: DLT.fmt.time(p.reportingAt) + ' · ' + p.pickupPoint, fg: '#0E1014' },
+        { k: 'Coach', v: p.vehicle || '—', fg: '#0E1014' },
+        { k: 'Booking', v: p.bookingCode, fg: '#0E1014' },
+        { k: 'Boarding code', v: p.boardingCode, fg: '#0E1014' },
+        { k: 'Payment', v: p.paymentStatus === 'SUCCESS' ? 'Paid' : p.paymentStatus,
+          fg: p.paymentStatus === 'SUCCESS' ? '#0E1014' : '#8A5A0E' },
+        { k: 'Fare', v: '₹' + p.fareShare + ' of ₹' + p.total, fg: '#0E1014' },
+      ] : [],
+      passNote: p && p.passStatus !== 'VALID'
+        ? 'Cancelled passes stay visible for your records but fail at the scanner.'
+        : 'One scan per passenger. A second scan reads ALREADY BOARDED at the door.',
+      qrRef: el => { this._cv = el; if (el) this._paint(); },
+      printPass: () => print(),
+      savePng: this.savePng,
+    };
+  }
+}
+</script>
+</body>
+</html>

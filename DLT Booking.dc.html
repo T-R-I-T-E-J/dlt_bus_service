@@ -1,0 +1,1396 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400;100,500;100,600;100,700;125,600;125,700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #F7F5F0; color: #0E1014;
+    font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased; text-wrap: pretty; }
+  a { color: #0E4B34; text-decoration: none; }
+  a:hover { color: #0E1014; }
+  input, button, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid #0E4B34; outline-offset: 2px; }
+  @keyframes dltSpin { to { transform: rotate(360deg); } }
+  @keyframes dltRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @keyframes dltTick { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+  @keyframes dltSkel { 0%,100% { opacity: .5; } 50% { opacity: .85; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important; }
+  }
+  @media (max-width: 1080px) and (min-width: 881px) {
+    [data-m="cols"] { grid-template-columns: minmax(0,1fr) 300px !important; }
+  }
+  @media (max-width: 880px) {
+    [data-m="cols"] { grid-template-columns: minmax(0,1fr) !important; }
+    [data-m="hide"] { display: none !important; }
+    /* §UX 4 — the summary is documented as persistent, so on a phone it becomes a
+       fixed bar instead of a column that falls below the whole seat map */
+    [data-m="aside"] { position: fixed !important; left: 0; right: 0; bottom: 0; top: auto !important;
+      z-index: 30; border: 0 !important; border-top: 1px solid rgba(14,16,20,.16) !important;
+      box-shadow: 0 -10px 30px -22px rgba(14,16,20,.7); }
+    [data-m="asidefull"] { display: none !important; }
+    [data-m="asidebar"] { display: flex !important; align-items: center; gap: 14px; padding: 10px 16px !important; }
+    [data-m="asidebar"] > button { width: auto !important; flex: 1; }
+    [data-m="barfacts"] { display: flex !important; }
+    [data-m="main"] { padding-bottom: 132px !important; }
+  }
+</style>
+<script type="module" src="./dlt-client.js"></script>
+<!-- Razorpay Checkout. Loaded from Razorpay's own origin because they require
+     it (a self-hosted copy is unsupported and would break on their updates), so
+     no SRI hash is available or appropriate here. This script only OPENS the
+     payment window against a server-created order id; it decides nothing about
+     whether a payment succeeded. -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</helmet>
+
+<header style="position:sticky;top:0;z-index:40;height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(18px,4vw,44px);background:rgba(247,245,240,.92);backdrop-filter:blur(14px);border-bottom:1px solid rgba(14,16,20,.10)">
+  <a href="./DLT Homepage.dc.html" style="display:flex;align-items:baseline;gap:9px;color:#0E1014">
+    <span style="font-stretch:125%;font-weight:700;font-size:19px;letter-spacing:.02em">DLT</span>
+    <span data-m="hide" style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Book a seat</span>
+  </a>
+  <nav style="display:flex;align-items:center;gap:clamp(14px,2.4vw,28px);font-size:13.5px;font-weight:500">
+    <a href="./DLT Homepage.dc.html#help" style="color:#3D423C">Help</a>
+    <a href="./DLT Dashboard.dc.html" style="color:#3D423C">My trips</a>
+    <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+      <span style="display:flex;align-items:center;gap:9px">
+        <span data-m="hide" style="font-size:13px;color:#3D423C">{{ userName }}</span>
+        <button type="button" onClick="{{ signOut }}" style="background:none;border:1px solid rgba(14,16,20,.2);padding:7px 12px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer">Sign out</button>
+      </span>
+    </sc-if>
+    <sc-if value="{{ signedOut }}" hint-placeholder-val="{{ true }}">
+      <a href="./DLT Account.dc.html" style="color:#3D423C">Sign in</a>
+    </sc-if>
+  </nav>
+</header>
+
+<sc-if value="{{ showStepper }}" hint-placeholder-val="{{ true }}">
+<nav aria-label="Booking progress" style="padding:18px clamp(18px,4vw,44px) 0">
+  <ol style="margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:0 clamp(10px,2vw,22px);align-items:center">
+    <sc-for list="{{ stepper }}" as="s" hint-placeholder-count="4">
+      <li style="display:flex;align-items:center;gap:9px">
+        <span style="display:flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:50%;font-family:'Martian Mono',monospace;font-size:8.5px;background:{{ s.dotBg }};color:{{ s.dotFg }};border:1px solid {{ s.dotBd }}">{{ s.n }}</span>
+        <span style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:{{ s.fg }}">{{ s.label }}</span>
+        <span aria-hidden="true" style="display:block;width:clamp(12px,3vw,42px);height:1px;background:rgba(14,16,20,.18)"></span>
+      </li>
+    </sc-for>
+  </ol>
+</nav>
+</sc-if>
+
+<main data-m="main" style="padding:clamp(20px,3.4vh,34px) clamp(18px,4vw,44px) 70px">
+<div data-m="cols" style="display:grid;grid-template-columns:minmax(0,1fr) 344px;gap:clamp(22px,3vw,44px);align-items:start">
+<div>
+
+  <sc-if value="{{ error }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="margin:0 0 20px;border:1px solid rgba(163,58,34,.32);border-left:3px solid #A33A22;background:#FFF9F7;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;animation:dltRise .25s ease">
+      <span aria-hidden="true" style="font-size:13px;color:#A33A22;line-height:1.5">✕</span>
+      <div style="flex:1">
+        <div style="font-size:13.5px;font-weight:600;line-height:1.5;color:#8A2F1C">{{ error }}</div>
+      </div>
+      <button type="button" onClick="{{ clearError }}" aria-label="Dismiss" style="background:none;border:0;padding:0 2px;font-size:15px;color:#8A2F1C;cursor:pointer">×</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ notice }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="margin:0 0 20px;border:1px solid rgba(14,75,52,.3);border-left:3px solid #0E4B34;background:#EEF3EE;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;animation:dltRise .25s ease">
+      <div style="flex:1;font-size:13.5px;font-weight:500;line-height:1.55;color:#25322B">{{ notice }}</div>
+      <button type="button" onClick="{{ clearNotice }}" aria-label="Dismiss" style="background:none;border:0;padding:0 2px;font-size:15px;color:#25322B;cursor:pointer">×</button>
+    </div>
+  </sc-if>
+
+  <!-- LOADING -->
+  <sc-if value="{{ atLoading }}" hint-placeholder-val="{{ true }}">
+  <section aria-busy="true" aria-live="polite">
+    <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Woxsen → Miyapur</div>
+    <h1 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1.04;letter-spacing:-.02em">Loading departures</h1>
+    <div style="margin:26px 0 0;border-top:1px solid rgba(14,16,20,.16)">
+      <sc-for list="{{ skeletons }}" as="s" hint-placeholder-count="3">
+        <div style="display:grid;grid-template-columns:minmax(90px,.7fr) minmax(0,1.6fr) minmax(120px,1fr) 120px;gap:clamp(12px,2vw,26px);align-items:center;padding:22px 0;border-bottom:1px solid rgba(14,16,20,.16);animation:dltSkel 1.4s ease-in-out infinite">
+          <span style="display:block;height:30px;background:#E7E4DB"></span>
+          <span style="display:block;height:16px;background:#E7E4DB"></span>
+          <span style="display:block;height:16px;background:#EFEDE4"></span>
+          <span style="display:block;height:38px;background:#E7E4DB"></span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- STEP · CHOOSE TRIP -->
+  <sc-if value="{{ atTrips }}" hint-placeholder-val="{{ false }}">
+  <section aria-labelledby="trips-h">
+    <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Woxsen → Miyapur</div>
+    <h1 id="trips-h" style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1.04;letter-spacing:-.02em">Choose your departure</h1>
+    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹259 per seat, up to five passengers on one booking. Seats are held for 10 minutes once you pick them.</p>
+
+    <sc-if value="{{ noTrips }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:28px 0 0;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(22px,4vw,38px)">
+        <h2 style="margin:0;font-stretch:125%;font-weight:700;font-size:22px;letter-spacing:-.01em">No trips available right now.</h2>
+        <p style="margin:10px 0 0;max-width:48ch;font-size:13.5px;line-height:1.6;color:#3D423C">Departures open a few days ahead. Leave your email and we'll write to you the moment bookings open for this route — or message us on WhatsApp and the team will reply.</p>
+        <sc-if value="{{ notifyOpen }}" hint-placeholder-val="{{ true }}">
+          <div style="margin:20px 0 0;max-width:520px">
+            <label style="display:block">
+              <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Email address</span>
+              <input type="email" value="{{ notifyContact }}" onChange="{{ onNotifyContact }}" placeholder="you@woxsen.edu.in" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+            </label>
+          </div>
+          <div style="margin:16px 0 0;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+            <button type="button" onClick="{{ notify }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Get notified</button>
+            <!-- WhatsApp is NOT a backend notification channel: it opens the DLT
+                 WhatsApp Business conversation, and the team replies by hand. No
+                 phone number is asked for and no request is recorded, so the copy
+                 must not imply an automatic alert. -->
+            <a href="{{ whatsappUrl }}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:8px;border:1px solid rgba(14,16,20,.2);padding:11px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Message us on WhatsApp<span aria-hidden="true" style="font-size:11px;color:#5F6560">↗</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Opens WhatsApp in a new tab</span></a>
+            <a href="./DLT Homepage.dc.html#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:11px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
+          </div>
+          <p style="margin:12px 0 0;max-width:52ch;font-size:12px;line-height:1.55;color:#5F6560">Email requests are logged for operations. WhatsApp opens a conversation — we reply there, and nothing is recorded automatically.</p>
+        </sc-if>
+        <sc-if value="{{ notified }}" hint-placeholder-val="{{ false }}">
+          <p role="status" style="margin:16px 0 0;font-size:13px;font-weight:600;color:#0E4B34;line-height:1.55">{{ notifiedMsg }}</p>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <div role="list" style="margin:26px 0 0;border-top:1px solid rgba(14,16,20,.16)">
+      <sc-for list="{{ trips }}" as="tr" hint-placeholder-count="3">
+        <article role="listitem" style="display:grid;grid-template-columns:minmax(90px,.7fr) minmax(0,1.6fr) minmax(120px,1fr) auto;align-items:center;gap:clamp(12px,2vw,26px);padding:20px 0;border-bottom:1px solid rgba(14,16,20,.16);opacity:{{ tr.dim }}">
+          <div>
+            <div style="font-stretch:125%;font-weight:700;font-size:clamp(22px,2.2vw,30px);line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ tr.depart }}</div>
+            <div style="margin-top:6px;font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ tr.date }}</div>
+          </div>
+          <div>
+            <div style="font-size:15px;font-weight:600">Woxsen main gate → Miyapur metro</div>
+            <div style="margin-top:5px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">Report {{ tr.report }} · arrives ≈{{ tr.arrive }} · {{ tr.vehicle }}</div>
+          </div>
+          <div style="font-size:12.5px;font-weight:600;color:{{ tr.availFg }};font-variant-numeric:tabular-nums">{{ tr.avail }}</div>
+          <button type="button" onClick="{{ tr.onPick }}" disabled="{{ tr.busy }}" style="background:{{ tr.ctaBg }};color:{{ tr.ctaFg }};border:1px solid {{ tr.ctaBd }};padding:12px 20px;border-radius:2px;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;min-height:44px">{{ tr.cta }}</button>
+        </article>
+      </sc-for>
+    </div>
+
+    <sc-if value="{{ waitlistEntry }}" hint-placeholder-val="{{ false }}">
+      <div role="status" style="margin:20px 0 0;border:1px solid {{ waitlistBd }};border-top:2px solid {{ waitlistAccent }};background:{{ waitlistBg }};padding:18px 20px;animation:dltRise .3s ease">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px">
+          <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:{{ waitlistAccent }}">{{ waitlistKicker }}</span>
+          <sc-if value="{{ waitlistOffered }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:{{ waitlistAccent }}">{{ claimClock }} left</span>
+          </sc-if>
+        </div>
+        <p style="margin:9px 0 0;max-width:60ch;font-size:13.5px;line-height:1.6;color:#25322B">{{ waitlistCopy }}</p>
+        <sc-if value="{{ waitlistOffered }}" hint-placeholder-val="{{ false }}">
+          <div style="margin:15px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+            <button type="button" onClick="{{ claimSeat }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Claim seat {{ claimSeatNumber }}</button>
+            <button type="button" onClick="{{ declineSeat }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Give up my place</button>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+  </section>
+  </sc-if>
+
+  <!-- STEP · SEATS -->
+  <sc-if value="{{ atSeats }}" hint-placeholder-val="{{ false }}">
+  <section aria-labelledby="seats-h">
+    <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:12px">
+      <div>
+        <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Step 02 · {{ tripLabel }}</div>
+        <h1 id="seats-h" style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.7vw,34px);line-height:1.04;letter-spacing:-.02em">Choose up to five seats</h1>
+      </div>
+      <button type="button" onClick="{{ backToTrips }}" style="background:none;border:0;padding:6px 0;font-size:13px;font-weight:600;color:#0E4B34;cursor:pointer;border-bottom:1px solid rgba(14,75,52,.4)">Change trip</button>
+    </div>
+
+    <div style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,auto));gap:10px 22px;align-items:center">
+      <sc-for list="{{ legend }}" as="l" hint-placeholder-count="5">
+        <span style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:#3D423C">
+          <span aria-hidden="true" style="display:block;width:15px;height:15px;border-radius:2px;background:{{ l.bg }};border:1px solid {{ l.bd }}"></span>
+          {{ l.label }}
+        </span>
+      </sc-for>
+    </div>
+
+    <div style="margin:22px 0 0;border:1px solid rgba(14,16,20,.14);background:#FFFFFF;padding:clamp(16px,2.6vw,28px)">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid rgba(14,16,20,.12)">
+        <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">{{ vehicleLabel }} · 2 + 2 · {{ seatCount }} seats · {{ availableCount }} free</span>
+        <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Front of coach ↑</span>
+      </div>
+      <div role="group" aria-label="Seat map" style="margin:18px auto 0;display:grid;grid-template-columns:repeat(2,44px) 30px repeat(2,44px);gap:9px;justify-content:center">
+        <sc-for list="{{ cells }}" as="c" hint-placeholder-count="55">
+          <sc-if value="{{ c.isSeat }}" hint-placeholder-val="{{ true }}">
+            <button type="button" onClick="{{ c.onClick }}" disabled="{{ c.disabled }}" aria-pressed="{{ c.pressed }}" aria-label="{{ c.aria }}" title="{{ c.aria }}" style="height:44px;width:44px;border-radius:3px 3px 6px 6px;border:1px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums;cursor:{{ c.cursor }};box-shadow:{{ c.shadow }};transition:background .12s ease, transform .12s ease" style-hover="{{ c.hover }}">{{ c.id }}</button>
+          </sc-if>
+          <sc-if value="{{ c.isLabel }}" hint-placeholder-val="{{ false }}">
+            <span style="display:flex;align-items:center;justify-content:center;font-family:'Martian Mono',monospace;font-size:9px;color:#7A7F77">{{ c.id }}</span>
+          </sc-if>
+        </sc-for>
+      </div>
+    </div>
+
+    <p style="margin:14px 0 0;font-size:12.5px;color:#4A4F49">Window seats are A and D. A held or blocked seat cannot be selected — the hold belongs to whoever took it first.</p>
+  </section>
+  </sc-if>
+
+  <!-- STEP · PASSENGERS -->
+  <sc-if value="{{ atPassengers }}" hint-placeholder-val="{{ false }}">
+  <section aria-labelledby="pax-h">
+    <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Step 03 · {{ tripLabel }}</div>
+    <h1 id="pax-h" style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.7vw,34px);line-height:1.04;letter-spacing:-.02em">Who's travelling?</h1>
+    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">Every passenger needs their own name, student ID and phone number — the boarding pass is issued per person.</p>
+
+    <div style="margin:24px 0 0;display:flex;flex-direction:column;gap:10px">
+      <sc-for list="{{ pax }}" as="p" hint-placeholder-count="2">
+        <article style="border:1px solid {{ p.bd }};background:#FFFFFF">
+          <button type="button" onClick="{{ p.onToggle }}" aria-expanded="{{ p.open }}" style="width:100%;display:flex;align-items:center;gap:12px;background:none;border:0;padding:15px 18px;text-align:left;cursor:pointer;min-height:44px">
+            <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Passenger {{ p.n }}</span>
+            <span style="font-size:14px;font-weight:600">{{ p.title }}</span>
+            <span style="flex:1"></span>
+            <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:{{ p.stateFg }}">{{ p.stateLabel }}</span>
+            <span aria-hidden="true" style="font-size:12px;color:#5F6560">{{ p.chev }}</span>
+          </button>
+          <sc-if value="{{ p.open }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:2px 18px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px 16px">
+              <label style="display:block">
+                <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Full name</span>
+                <input type="text" value="{{ p.name }}" onChange="{{ p.onName }}" onBlur="{{ p.onBlur }}" autocomplete="name" placeholder="As on your student ID" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid {{ p.nameBd }};border-radius:2px;background:#FCFBF8;font-size:14px" />
+                <sc-if value="{{ p.nameErr }}" hint-placeholder-val="{{ false }}">
+                  <span style="display:block;margin-top:6px;font-size:12px;color:#8A2F1C">Enter the passenger's full name.</span>
+                </sc-if>
+              </label>
+              <label style="display:block">
+                <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Student ID</span>
+                <input type="text" value="{{ p.sid }}" onChange="{{ p.onSid }}" onBlur="{{ p.onBlur }}" placeholder="Your university ID" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid {{ p.sidBd }};border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
+                <sc-if value="{{ p.sidErr }}" hint-placeholder-val="{{ false }}">
+                  <span style="display:block;margin-top:6px;font-size:12px;color:#8A2F1C">Enter the student ID as printed on the card.</span>
+                </sc-if>
+              </label>
+              <label style="display:block">
+                <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Phone</span>
+                <input type="tel" value="{{ p.phone }}" onChange="{{ p.onPhone }}" onBlur="{{ p.onBlur }}" autocomplete="tel" placeholder="10-digit mobile" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid {{ p.phoneBd }};border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
+                <sc-if value="{{ p.phoneErr }}" hint-placeholder-val="{{ false }}">
+                  <span style="display:block;margin-top:6px;font-size:12px;color:#8A2F1C">Enter a valid Indian mobile number.</span>
+                </sc-if>
+              </label>
+              <div style="display:flex;flex-direction:column;justify-content:flex-end">
+                <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Seat</span>
+                <span style="font-size:14px;font-weight:600;padding:11px 0">{{ p.seatLabel }}</span>
+              </div>
+            </div>
+          </sc-if>
+        </article>
+      </sc-for>
+    </div>
+
+    <div style="margin:22px 0 0;border-top:1px solid rgba(14,16,20,.16);padding-top:18px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Booking contact</div>
+      <p style="margin:8px 0 0;max-width:50ch;font-size:13px;line-height:1.6;color:#3D423C">Updates for this booking go to this number. Changing it here applies to this booking only — your account is unchanged.</p>
+      <label style="display:block;margin-top:12px;max-width:260px">
+        <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Contact number</span>
+        <input type="tel" value="{{ contact }}" onChange="{{ onContact }}" autocomplete="tel" placeholder="10-digit mobile" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid {{ contactBd }};border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
+      </label>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- STEP · REVIEW -->
+  <sc-if value="{{ atReview }}" hint-placeholder-val="{{ false }}">
+  <section aria-labelledby="rev-h">
+    <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Step 04 · {{ tripLabel }}</div>
+    <h1 id="rev-h" style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.7vw,34px);line-height:1.04;letter-spacing:-.02em">Check it over, then pay</h1>
+
+    <div style="margin:24px 0 0;border:1px solid rgba(14,16,20,.14);background:#FFFFFF">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 18px;border-bottom:1px solid rgba(14,16,20,.12)">
+        <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Passengers</span>
+        <button type="button" onClick="{{ editPax }}" style="background:none;border:0;padding:6px 0;font-size:12.5px;font-weight:600;color:#0E4B34;cursor:pointer;border-bottom:1px solid rgba(14,75,52,.4)">Edit details</button>
+      </div>
+      <sc-for list="{{ pax }}" as="p" hint-placeholder-count="2">
+        <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(14,16,20,.09)">
+          <div>
+            <div style="font-size:14px;font-weight:600">{{ p.name }}</div>
+            <div style="margin-top:4px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">{{ p.sid }}</div>
+          </div>
+          <div style="font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">{{ p.phone }}</div>
+          <div style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums">{{ p.seatLabel }}</div>
+        </div>
+      </sc-for>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:15px 18px">
+        <span style="font-size:13px;color:#3D423C">Contact for this booking · {{ contact }}</span>
+        <button type="button" onClick="{{ editSeats }}" style="background:none;border:0;padding:6px 0;font-size:12.5px;font-weight:600;color:#0E4B34;cursor:pointer;border-bottom:1px solid rgba(14,75,52,.4)">Change seats</button>
+      </div>
+    </div>
+
+    <sc-if value="{{ repriced }}" hint-placeholder-val="{{ false }}">
+      <div role="alert" style="margin:20px 0 0;border:1px solid rgba(184,115,10,.34);border-top:2px solid #B8730A;background:#FFFDF6;padding:20px 22px">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A5A0E">Fare updated for this departure</div>
+        <h2 style="margin:12px 0 0;font-size:17px;font-weight:600;letter-spacing:-.01em">The total is now ₹{{ repriceAmount }}, not ₹{{ repriceWas }}</h2>
+        <p style="margin:9px 0 0;max-width:52ch;font-size:13px;line-height:1.6;color:#3D423C">The fare for this departure changed while your booking was open, so we revalidated it before taking any money. Nothing has been charged. Your seats are still held.</p>
+        <div style="margin:16px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+          <button type="button" onClick="{{ acceptReprice }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Accept ₹{{ repriceAmount }} and continue</button>
+          <button type="button" onClick="{{ editSeats }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Change seats instead</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ needsAuth }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:20px 0 0;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:20px 22px">
+        <h2 style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.01em">{{ authTitle }}</h2>
+        <p style="margin:8px 0 0;max-width:48ch;font-size:13px;line-height:1.6;color:#3D423C">Your seats stay held while you sign in. We need an account to attach the booking, the passes and any refund to.</p>
+        <div style="margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;max-width:560px">
+          <sc-if value="{{ authIsSignUp }}" hint-placeholder-val="{{ false }}">
+            <label style="display:block">
+              <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Full name</span>
+              <input type="text" value="{{ authName }}" onChange="{{ onAuthName }}" autocomplete="name" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+            </label>
+            <label style="display:block">
+              <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Phone</span>
+              <input type="tel" value="{{ authPhone }}" onChange="{{ onAuthPhone }}" autocomplete="tel" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+            </label>
+          </sc-if>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Email</span>
+            <input type="email" value="{{ authEmail }}" onChange="{{ onAuthEmail }}" autocomplete="email" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+          </label>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Password</span>
+            <input type="password" value="{{ authPassword }}" onChange="{{ onAuthPassword }}" autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+          </label>
+        </div>
+        <div style="margin:16px 0 0;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+          <button type="button" onClick="{{ doAuth }}" disabled="{{ busy }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ authCta }}</button>
+          <button type="button" onClick="{{ toggleAuthMode }}" style="background:none;border:0;padding:11px 4px;font-size:13px;font-weight:600;color:#0E4B34;cursor:pointer;min-height:44px;border-bottom:1px solid rgba(14,75,52,.4)">{{ authSwitch }}</button>
+        </div>
+        <p style="margin:14px 0 0;font-size:12px;line-height:1.55;color:#5F6560">{{ demoHint }}</p>
+      </div>
+    </sc-if>
+
+    <div style="margin:20px 0 0;border-top:1px solid rgba(14,16,20,.16);padding-top:16px;font-size:12.5px;line-height:1.65;color:#4A4F49">
+      <p style="margin:0">Free cancellation until 12 hours before departure; nothing refundable inside 12 hours. Report at {{ pickupPoint }} by {{ reportTime }}. Arrival time is approximate.</p>
+      <p style="margin:8px 0 0">Payment is taken in INR. Your booking is confirmed only once the payment is verified on our side — never from what the payment page shows you.</p>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- STEP · RAZORPAY CHECKOUT -->
+  <sc-if value="{{ atCheckout }}" hint-placeholder-val="{{ false }}">
+  <section aria-labelledby="pay-h" style="border:1px solid rgba(14,16,20,.16);background:#FFFFFF;animation:dltRise .25s ease">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;background:#0E1014;color:#F7F5F0">
+      <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8E948B">Payment · order {{ orderId }}</span>
+      <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#8E948B">Razorpay</span>
+    </div>
+    <div style="padding:clamp(22px,4vw,36px)">
+      <h1 id="pay-h" style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(23px,2.6vw,30px);letter-spacing:-.015em">Pay ₹{{ total }}</h1>
+      <p style="margin:10px 0 0;max-width:54ch;font-size:13.5px;line-height:1.65;color:#3D423C">The Razorpay payment window is opening. Your seats stay held while you pay. DLT confirms the booking only after Razorpay tells our server the payment settled — so if the window closes or the card is declined, nothing is charged and your seats are still yours.</p>
+      <dl style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0 20px;font-variant-numeric:tabular-nums">
+        <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:10px">
+          <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Amount due</dt>
+          <dd style="margin:0;font-size:15px;font-weight:600">₹{{ total }}</dd>
+        </div>
+        <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:10px">
+          <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Booking</dt>
+          <dd style="margin:0;font-size:15px;font-weight:600">{{ bookingCode }}</dd>
+        </div>
+        <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:10px">
+          <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Hold remaining</dt>
+          <dd style="margin:0;font-size:15px;font-weight:600">{{ holdClock }}</dd>
+        </div>
+      </dl>
+      <p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#5F6560">If the payment window did not open, check that pop-ups are allowed and try again from the review step.</p>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- STEP · VERIFYING -->
+  <sc-if value="{{ atVerifying }}" hint-placeholder-val="{{ false }}">
+  <section aria-live="polite" style="border:1px solid rgba(14,16,20,.14);background:#FFFFFF;padding:clamp(26px,5vw,48px);text-align:center">
+    <span aria-hidden="true" style="display:inline-block;width:26px;height:26px;border:2px solid rgba(14,75,52,.22);border-top-color:#0E4B34;border-radius:50%;animation:dltSpin .8s linear infinite"></span>
+    <h1 style="margin:18px 0 0;font-stretch:125%;font-weight:700;font-size:24px;letter-spacing:-.015em">Verifying the payment</h1>
+    <p style="margin:10px auto 0;max-width:42ch;font-size:13.5px;line-height:1.6;color:#3D423C">We're waiting for the payment result to reach our own records. You can close this tab — the booking completes from the verified result either way.</p>
+  </section>
+  </sc-if>
+
+  <!-- STEP · PAYMENT PENDING -->
+  <sc-if value="{{ atPending }}" hint-placeholder-val="{{ false }}">
+  <section aria-live="polite" style="border:1px solid rgba(184,115,10,.34);border-top:2px solid #B8730A;background:#FFFDF6;padding:clamp(24px,4vw,40px)">
+    <div style="display:flex;align-items:center;gap:10px;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A5A0E">
+      <span aria-hidden="true" style="display:block;width:7px;height:7px;border-radius:50%;background:#B8730A;animation:dltTick 1.2s ease-in-out infinite"></span>
+      Payment pending
+    </div>
+    <h1 style="margin:14px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(23px,2.6vw,30px);letter-spacing:-.015em">Your payment is being verified</h1>
+    <p style="margin:11px 0 0;max-width:50ch;font-size:13.5px;line-height:1.65;color:#3D423C"><strong style="font-weight:600">Please don't pay again.</strong> The payment is with the acquirer and we're waiting on their confirmation. As soon as it lands, the booking is confirmed and the passes appear in My Trips.</p>
+    <dl style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 20px;font-variant-numeric:tabular-nums">
+      <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:10px">
+        <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Amount</dt>
+        <dd style="margin:0;font-size:15px;font-weight:600">₹{{ total }}</dd>
+      </div>
+      <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:10px">
+        <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Booking</dt>
+        <dd style="margin:0;font-size:15px;font-weight:600">{{ bookingCode }}</dd>
+      </div>
+      <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:10px">
+        <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Seats</dt>
+        <dd style="margin:0;font-size:15px;font-weight:600">{{ seatList }}</dd>
+      </div>
+    </dl>
+    <div style="margin:22px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+      <button type="button" onClick="{{ checkNow }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Check again</button>
+      <a href="./DLT Dashboard.dc.html" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Go to My Trips</a>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- STEP · DISCREPANCY -->
+  <sc-if value="{{ atDiscrepancy }}" hint-placeholder-val="{{ false }}">
+  <section aria-live="assertive" style="border:1px solid rgba(184,115,10,.34);border-top:2px solid #B8730A;background:#FFFDF6;padding:clamp(24px,4vw,40px)">
+    <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A5A0E">Payment held for review</div>
+    <h1 style="margin:14px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(23px,2.6vw,30px);letter-spacing:-.015em">The amount received didn't match</h1>
+    <p style="margin:11px 0 0;max-width:52ch;font-size:13.5px;line-height:1.65;color:#3D423C">We received ₹{{ paidAmount }} against ₹{{ total }} due, so the booking has <strong style="font-weight:600">not</strong> been confirmed and your payment is being held, not lost. <strong style="font-weight:600">Please don't pay again.</strong> Our team resolves this and will either complete the booking or return the money.</p>
+    <dl style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 20px;font-variant-numeric:tabular-nums">
+      <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:10px">
+        <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Booking</dt>
+        <dd style="margin:0;font-size:15px;font-weight:600">{{ bookingCode }}</dd>
+      </div>
+      <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:10px">
+        <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Reference</dt>
+        <dd style="margin:0;font-size:15px;font-weight:600">{{ payRef }}</dd>
+      </div>
+    </dl>
+    <div style="margin:22px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+      <a href="./DLT Dashboard.dc.html" style="display:flex;align-items:center;background:#0E1014;color:#F7F5F0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;min-height:44px;box-sizing:border-box">Track it in My Trips</a>
+      <a href="./DLT Homepage.dc.html#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- STEP · BOOKING PROCESSING -->
+  <sc-if value="{{ atProcessing }}" hint-placeholder-val="{{ false }}">
+  <section aria-live="polite" style="border:1px solid rgba(14,75,52,.3);border-top:2px solid #0E4B34;background:#EEF3EE;padding:clamp(24px,4vw,40px)">
+    <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#0E4B34">Payment received · booking processing</div>
+    <h1 style="margin:14px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(23px,2.6vw,30px);letter-spacing:-.015em">Your money is safe — we're finishing the booking</h1>
+    <p style="margin:11px 0 0;max-width:52ch;font-size:13.5px;line-height:1.65;color:#25322B">The payment is verified and recorded against booking {{ bookingCode }}. Issuing the seats and passes did not complete, so we're retrying. <strong style="font-weight:600">Don't pay again.</strong> Your passes appear as soon as it succeeds; if it doesn't, our team picks it up.</p>
+    <button type="button" onClick="{{ checkNow }}" style="margin:22px 0 0;background:#0E1014;color:#F7F5F0;border:0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Retry now</button>
+  </section>
+  </sc-if>
+
+  <!-- STEP · PAYMENT FAILED -->
+  <sc-if value="{{ atFailed }}" hint-placeholder-val="{{ false }}">
+  <section aria-live="assertive" style="border:1px solid rgba(163,58,34,.32);border-top:2px solid #A33A22;background:#FFF9F7;padding:clamp(24px,4vw,40px)">
+    <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A2F1C">{{ failedKicker }}</div>
+    <h1 style="margin:14px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(23px,2.6vw,30px);letter-spacing:-.015em">{{ failedTitle }}</h1>
+    <p style="margin:11px 0 0;max-width:50ch;font-size:13.5px;line-height:1.65;color:#3D423C">Nothing was charged. Your seats {{ seatList }} are still held — {{ holdClock }} left on the hold, so you can try again straight away.</p>
+    <div style="margin:22px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+      <button type="button" onClick="{{ retryPay }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Try payment again</button>
+      <button type="button" onClick="{{ editSeats }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Change seats</button>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- STEP · HOLD EXPIRED -->
+  <sc-if value="{{ atExpired }}" hint-placeholder-val="{{ false }}">
+  <section aria-live="assertive" style="border:1px solid rgba(14,16,20,.16);border-top:2px solid #B8730A;background:#FFFFFF;padding:clamp(24px,4vw,40px)">
+    <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A5A0E">Hold expired</div>
+    <h1 style="margin:14px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(23px,2.6vw,30px);letter-spacing:-.015em">Your seats went back on sale</h1>
+    <p style="margin:11px 0 0;max-width:48ch;font-size:13.5px;line-height:1.65;color:#3D423C">A hold lasts 10 minutes so seats don't sit locked while someone else is waiting. Nothing was charged, and the passenger details you entered are kept — pick your seats again and they'll be reapplied in order.</p>
+    <button type="button" onClick="{{ editSeats }}" style="margin:22px 0 0;background:#0E1014;color:#F7F5F0;border:0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Choose seats again</button>
+  </section>
+  </sc-if>
+
+  <!-- STEP · CONFIRMED -->
+  <sc-if value="{{ atDone }}" hint-placeholder-val="{{ false }}">
+  <section aria-live="polite" style="animation:dltRise .4s ease">
+    <div style="display:flex;align-items:center;gap:11px">
+      <span aria-hidden="true" style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#0E4B34;color:#F7F5F0;font-size:14px">✓</span>
+      <span style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#0E4B34">Payment verified · booking confirmed</span>
+    </div>
+    <h1 style="margin:16px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1.04;letter-spacing:-.02em">You're on the {{ tripLabel }}</h1>
+    <dl style="margin:24px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0 20px;font-variant-numeric:tabular-nums">
+      <div style="border-top:1px solid rgba(14,16,20,.16);padding-top:11px">
+        <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">Booking ID</dt>
+        <dd style="margin:0;font-size:15px;font-weight:600">{{ bookingCode }}</dd>
+      </div>
+      <div style="border-top:1px solid rgba(14,16,20,.16);padding-top:11px">
+        <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">Boarding code</dt>
+        <dd style="margin:0;font-size:15px;font-weight:600">{{ boardingCode }}</dd>
+      </div>
+      <div style="border-top:1px solid rgba(14,16,20,.16);padding-top:11px">
+        <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">Paid</dt>
+        <dd style="margin:0;font-size:15px;font-weight:600">₹{{ total }}</dd>
+      </div>
+      <div style="border-top:1px solid rgba(14,16,20,.16);padding-top:11px">
+        <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">Reference</dt>
+        <dd style="margin:0;font-size:15px;font-weight:600">{{ payRef }}</dd>
+      </div>
+    </dl>
+
+    <div style="margin:26px 0 0;border:1px solid rgba(14,16,20,.14);background:#FFFFFF">
+      <div style="padding:14px 18px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Boarding passes · one per passenger</div>
+      <sc-for list="{{ issued }}" as="p" hint-placeholder-count="2">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(14,16,20,.09)">
+          <div>
+            <div style="font-size:14px;font-weight:600">{{ p.name }}</div>
+            <div style="margin-top:4px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">{{ p.sid }} · seat {{ p.seatLabel }}</div>
+          </div>
+          <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#0E4B34">{{ p.status }}</span>
+          <a href="{{ p.href }}" style="border:1px solid rgba(14,16,20,.2);padding:10px 15px;border-radius:2px;font-size:12.5px;font-weight:600;color:#0E1014;min-height:44px;display:flex;align-items:center;box-sizing:border-box">View pass</a>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="margin:22px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+      <a href="./DLT Dashboard.dc.html" style="display:flex;align-items:center;background:#0E1014;color:#F7F5F0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;min-height:44px;box-sizing:border-box">Open my dashboard</a>
+      <button type="button" onClick="{{ restart }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Book another trip</button>
+    </div>
+    <p style="margin:18px 0 0;font-size:12.5px;color:#4A4F49">Receipt, cancellation and refunds are in My Trips. Report at {{ pickupPoint }} by {{ reportTime }}.</p>
+  </section>
+  </sc-if>
+
+</div>
+
+<!-- PERSISTENT SUMMARY -->
+<aside data-m="aside" aria-label="Booking summary" style="position:sticky;top:84px;border:1px solid rgba(14,16,20,.14);background:#FFFFFF">
+  <div data-m="asidefull" style="padding:16px 18px;border-bottom:1px solid rgba(14,16,20,.12)">
+    <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Your booking</div>
+    <div style="margin-top:9px;font-size:15px;font-weight:600">Woxsen → Miyapur</div>
+    <div style="margin-top:5px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">{{ tripSummary }}</div>
+  </div>
+
+  <sc-if value="{{ holdActive }}" hint-placeholder-val="{{ false }}">
+    <div data-m="asidefull" role="status" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;border-bottom:1px solid rgba(14,16,20,.12);background:{{ holdBg }}">
+      <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:{{ holdFg }}">Seats held</span>
+      <span style="font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:{{ holdFg }}">{{ holdClock }}</span>
+    </div>
+  </sc-if>
+
+  <div data-m="asidefull" style="padding:16px 18px;border-bottom:1px solid rgba(14,16,20,.12)">
+    <sc-if value="{{ hasSeats }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <sc-for list="{{ seatRows }}" as="s" hint-placeholder-count="2">
+          <div style="display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:10px">
+            <span style="font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">Seat {{ s.id }}</span>
+            <span style="font-size:12.5px;color:#4A4F49">{{ s.type }}</span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums">₹{{ s.price }}</span>
+            <sc-if value="{{ s.removable }}" hint-placeholder-val="{{ true }}">
+              <button type="button" onClick="{{ s.onRemove }}" aria-label="Remove seat {{ s.id }}" style="background:none;border:0;width:44px;height:44px;margin:-11px -12px -11px 0;font-size:16px;color:#4A4F49;cursor:pointer">×</button>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ noSeats }}" hint-placeholder-val="{{ true }}">
+      <p style="margin:0;font-size:13px;line-height:1.6;color:#5F6560">No seats chosen yet. Pick a departure, then tap the seats you want — window seats are A and D.</p>
+    </sc-if>
+  </div>
+
+  <div data-m="asidefull" style="padding:16px 18px;border-bottom:1px solid rgba(14,16,20,.12);display:flex;flex-direction:column;gap:9px;font-variant-numeric:tabular-nums">
+    <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;color:#3D423C">
+      <span>{{ seatCountLabel }} × ₹{{ unitPrice }}</span><span>₹{{ total }}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:10px;font-size:16px;font-weight:700;padding-top:9px;border-top:1px solid rgba(14,16,20,.12)">
+      <span>Total payable</span><span>₹{{ total }}</span>
+    </div>
+  </div>
+
+  <div data-m="asidebar" style="padding:16px 18px">
+    <div data-m="hide" style="display:none"></div>
+    <div style="display:none;flex-direction:column;gap:2px;min-width:0" data-m="barfacts">
+      <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;white-space:nowrap">{{ barLine }}</span>
+      <span style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums">₹{{ total }}</span>
+    </div>
+    <button type="button" onClick="{{ primary }}" disabled="{{ primaryDisabled }}" style="width:100%;background:{{ primaryBg }};color:{{ primaryFg }};border:0;padding:14px 18px;border-radius:2px;font-size:14px;font-weight:600;cursor:{{ primaryCursor }};min-height:48px">{{ primaryLabel }}</button>
+    <sc-if value="{{ primaryHint }}" hint-placeholder-val="{{ true }}">
+      <p data-m="asidefull" style="margin:11px 0 0;font-size:12px;line-height:1.55;color:#5F6560">{{ primaryHint }}</p>
+    </sc-if>
+  </div>
+</aside>
+</div>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 1280, &quot;height&quot;: 900 }
+}">
+/* The booking flow is a client of the DLT API (dlt-client.js). It holds no
+   authority: seats, prices, holds, booking status and payment status are read
+   back from the SERVER after every action, and the server refuses anything the
+   specification forbids. Nothing here decides that a payment succeeded.
+
+   Migrated in Phase 7.2. What went away, and why it matters:
+     - sessionStorage flow state: the server owns the hold, and sign-in adopts
+       the guest cookie's seats AND booking (adopt_guest_bookings), so nothing
+       needs stashing in the page to survive authentication.
+     - the 1s hold sweeper: the server sweeps, and trip_seat_view reports a
+       lapsed hold as available immediately. The remaining 1s tick only redraws
+       the countdown, which is presentation.
+     - DLT.provider + settle buttons: replaced by Razorpay Checkout on a
+       server-created order. There is no fake-success control anywhere.
+     - demo credentials: removed from the pay screen entirely.
+     - client-side myHeld(): the seat-map response carries the basket.
+     - DLT.FARE: no fare constant exists in this file. While a trip is loading
+       the price renders as an em-dash; a figure the server did not send is
+       never shown to a student.
+
+   Every read inside renderVals() is now loaded into state.data by _load(),
+   because every read is a request. renderVals keeps its shape. */
+class Component extends DCLogic {  state = {
+    ready: false, step: 'loading', tripId: null,
+    pax: {}, open: 0, touched: false, contact: null,
+    error: null, notice: null, busy: false, tick: 0, reprice: null,
+    bookingId: null, paymentId: null, orderId: null,
+    notifyContact: '', notified: null,
+    waitlist: null, authMode: 'signin', authName: '', authEmail: '', authPhone: '', authPassword: '',
+    lastOutcome: null,
+  };
+
+  async componentDidMount() {
+    /* One session resolve for the whole page. auth.current() stays synchronous
+       afterwards, so renderVals is unchanged in shape - the reason this flow was
+       built against a single DLT object. */
+    DLT.setUnauthenticatedHandler(() => this.setState({ authRequired: true }));
+    try {
+      await DLT.boot();
+    } catch (e) {
+      /* An outage is NOT being signed out. Showing the sign-in panel to someone
+         on a bad connection is worse than telling them the network is down. */
+      if (e.isOffline) this.setState({ offline: true });
+    }
+
+    const me = DLT.auth.current();
+    const next = { ready: true, step: this.state.step === 'loading' ? 'trips' : this.state.step,
+      contact: me ? me.phone : '' };
+
+    /* §10 the departure chosen on the homepage is the departure we open on. The
+       server is asked; an unknown id simply falls back to the list. */
+    const params = new URLSearchParams(location.search);
+    const wantTrip = params.get('trip');
+    if (wantTrip) {
+      try {
+        const trip = await DLT.trips.get(wantTrip);
+        next.tripId = trip.id;
+        next.step = trip.bookable ? 'seats' : 'trips';
+        if (!trip.bookable && params.get('waitlist') && me) {
+          try { next.waitlist = await DLT.waitlist.join(trip.id); } catch (e) {}
+        }
+      } catch (e) { /* unknown or unavailable: show the list */ }
+    }
+    if (params.get('notify')) next.step = 'trips';
+    if (location.search) history.replaceState(null, '', location.pathname);
+
+    this.setState(next, () => { this._load(); this._watchSeats(next.step === 'seats'); });
+
+    /* Presentation tick ONLY: redraws the hold countdown from the server's
+       holdExpiresAt, and polls while a payment is settling. It sweeps nothing
+       and decides nothing - the old 1s client sweeper is gone. */
+    this._timer = setInterval(() => {
+      this.setState({ tick: this.state.tick + 1 });
+      if (this.state.step === 'verifying' || this.state.step === 'pending') this._poll();
+      this._expireCheck();
+    }, 1000);
+  }
+
+  componentWillUnmount() {
+    clearInterval(this._timer);
+    DLT.stopPolling();
+  }
+
+  /* Every server read for the current step, in one place. Called after any
+     action, so the screen shows committed server state rather than a guess. */
+  async _load(opts) {
+    const quiet = opts && opts.quiet;
+    const st = this.state;
+    if (!quiet) this.setState({ loading: true });
+    const data = Object.assign({}, st.data);
+    try {
+      data.openTrips = await DLT.trips.listPublic(3);
+      if (st.tripId) {
+        data.trip = await DLT.trips.get(st.tripId);
+        const map = await DLT.trips.seatMap(st.tripId);
+        data.seatRows = map.rows || [];
+        data.held = map.held || [];
+      } else {
+        data.trip = data.openTrips[0] || null;
+        data.seatRows = []; data.held = [];
+      }
+      data.booking = null;
+      if (st.bookingId) {
+        try { data.booking = await DLT.bookings.get(st.bookingId); } catch (e) {}
+      }
+      if (DLT.auth.current()) {
+        try {
+          data.waits = await DLT.waitlist.mine();
+          const offer = data.waits.filter(function (w) { return w.status === 'CLAIM_OFFERED'; })[0]
+            || data.waits[0] || null;
+          data.waitTrip = offer ? await DLT.trips.get(offer.tripId) : null;
+        } catch (e) { data.waits = []; data.waitTrip = null; }
+      } else { data.waits = []; data.waitTrip = null; }
+      this.setState({ data: data, loading: false, offline: false });
+    } catch (e) {
+      this.setState({ loading: false });
+      this.fail(e);
+    }
+  }
+
+  /* Live seat map while the student is choosing: another device may take a seat
+     at any moment, and a stale map is how a 409 surprises someone. Pauses when
+     the tab is hidden (handled in the client layer). */
+  _watchSeats(on) {
+    const self = this;
+    if (!on) return DLT.stopPolling();
+    DLT.startPolling(async function () {
+      if (!self.state.tripId) return;
+      const map = await DLT.trips.seatMap(self.state.tripId);
+      self.setState(function (s) {
+        return { data: Object.assign({}, s.data, { seatRows: map.rows || [], held: map.held || [] }) };
+      });
+    }, 5000);
+  }
+  /* Maps the API error taxonomy onto what a student is told. A refusal is
+     information; an outage is not, and the two must never read the same. */
+  fail = (e) => {
+    if (!e) return this.setState({ busy: false });
+    if (e.isOffline)
+      return this.setState({ busy: false, offline: true,
+        error: 'We could not reach DLT. Nothing has been charged - check your connection and try again.' });
+    if (e.isAuth)
+      return this.setState({ busy: false, authRequired: true,
+        error: 'Please sign in to continue. Your seats are still held.' });
+    if (e.isRateLimited) {
+      const mins = e.retryAfter ? Math.ceil(e.retryAfter / 60) : null;
+      return this.setState({ busy: false,
+        error: e.message + (mins ? ' (about ' + mins + ' minute' + (mins === 1 ? '' : 's') + ')' : '') });
+    }
+    this.setState({ error: e.message ? e.message : String(e), busy: false });
+  };
+  _expireCheck() {
+    const st = this.state;
+    if (!st.tripId) return;
+    if (['seats', 'passengers', 'review', 'checkout', 'failed'].indexOf(st.step) < 0) return;
+    /* The basket comes from the seat-map response (state.data.held), which the
+       server computes. This no longer recomputes anything. */
+    const held = st.data.held || [];
+    if (held.length) { this._lastHeld = held.map(s => s.seatNumber); return; }
+    if (st.step === 'seats' && !st.bookingId) return;
+    /* §13.2 the hold really did lapse — keep the details in the order they were
+       entered so they can be reapplied to the next seats the student picks */
+    this._orphanPax = (this._lastHeld || Object.keys(st.pax))
+      .map(sn => st.pax[sn]).filter(p => p && (p.name || p.studentId || p.phone));
+    this.setState({ step: 'expired', bookingId: null, paymentId: null });
+  }
+
+  /* Asks the SERVER whether the payment settled. Nothing here decides success:
+     reconcile() returns a status triple, and only a verified provider webhook
+     can have confirmed the booking. */
+  async _poll() {
+    const st = this.state;
+    if (!st.paymentId || this._polling) return;
+    this._polling = true;
+    try {
+      const status = await DLT.payments.reconcile(st.paymentId);
+      const bookingStatus = status.bookingStatus;
+      if (status.paymentStatus === 'SUCCESS' && bookingStatus === 'CONFIRMED') {
+        await this._load({ quiet: true });
+        this.setState({ step: 'done' });
+      } else if (status.paymentStatus === 'SUCCESS' && bookingStatus === 'PROCESSING') {
+        this.setState({ step: 'processing' });
+      } else if (status.paymentStatus === 'DUPLICATE') {
+        this.setState({ step: 'discrepancy' });
+      } else if (status.paymentStatus === 'FAILED') {
+        this.setState({ step: 'failed', lastOutcome: 'declined' });
+      } else if (status.paymentStatus === 'CANCELLED') {
+        this.setState({ step: 'failed', lastOutcome: 'abandoned' });
+      } else if (this.state.step === 'verifying' && Date.now() - (this._payStarted || 0) > 6000) {
+        /* Still settling. "Confirming", never "failed" - the money may well have
+           left the student's account. */
+        this.setState({ step: 'pending' });
+      }
+    } catch (e) {
+      /* A failed poll is not a failed payment. Stay put and try again. */
+      if (e.isOffline) this.setState({ offline: true });
+    } finally { this._polling = false; }
+  }
+  pickTrip = async (trip) => {
+    try {
+      if (!trip.bookable) {
+        const me = DLT.auth.current();
+        if (!me) { location.href = './DLT Account.dc.html?next=book'; return; }
+        const w = await DLT.waitlist.join(trip.id);
+        this.setState({ waitlist: w, error: null });
+        this._load({ quiet: true });
+        return;
+      }
+      const me = DLT.auth.current();
+      if (me && me.role !== 'STUDENT') {
+        throw new Error('You are signed in as ' + DLT.roleLabel(me.role) + '. Sign out and use a student account to book.');
+      }
+      this.setState({ tripId: trip.id, step: 'seats', pax: {}, error: null, bookingId: null, paymentId: null },
+        () => { this._load(); this._watchSeats(true); });
+    } catch (e) { this.fail(e); }
+  };
+
+  toggleSeat = async (seatNumber) => {
+    /* §7.2 the flow may begin without an account: the SERVER holds the seat
+       against this browser's guest cookie and adopts it on sign-in. Nothing is
+       assumed held until the server says so. */
+    const mine = (this.state.data.held || []).some(function (s) { return s.seatNumber === seatNumber; });
+    if (mine) return this.removeSeat(seatNumber);
+    this.setState({ busy: true, error: null });
+    try {
+      await DLT.seats.hold(this.state.tripId, seatNumber);
+      if (this._orphanPax && this._orphanPax.length) {
+        const d = this._orphanPax.shift();
+        this.setState(function (s) {
+          const pax = Object.assign({}, s.pax); pax[seatNumber] = Object.assign({}, d);
+          return { pax: pax, error: null };
+        });
+      }
+      this.setState({ busy: false, error: null });
+      await this._load({ quiet: true });
+    } catch (e) {
+      if (e.isConflict) {
+        /* Another device won the race. A 409 means the map on screen is stale,
+           so refresh it and say plainly what happened. */
+        await this._load({ quiet: true });
+        return this.setState({ busy: false,
+          error: 'Seat ' + seatNumber + ' was just taken by someone else. The seat map has been refreshed.' });
+      }
+      this.fail(e);
+    }
+  };
+
+  /* §13.2 a seat the student takes off the booking is not an expired hold, and
+     must never be reported as one. The server returns RELEASED_BY_STUDENT. */
+  removeSeat = async (seatNumber) => {
+    this.setState({ busy: true, error: null });
+    try {
+      await DLT.seats.release(this.state.tripId, seatNumber);
+      await this._load({ quiet: true });
+      const left = (this.state.data.held || []).length;
+      this.setState(function (s) {
+        const pax = Object.assign({}, s.pax);
+        delete pax[seatNumber];
+        return left
+          ? { pax: pax, error: null, busy: false }
+          : { pax: pax, error: null, busy: false, step: 'seats', bookingId: null, paymentId: null,
+              notice: 'Seat ' + seatNumber + ' removed. Nothing has been charged - pick the seats you want.' };
+      });
+    } catch (e) { this.fail(e); }
+  };
+
+  setField = (seat, key, v) => this.setState(s => ({
+    pax: Object.assign({}, s.pax, { [seat]: Object.assign({}, s.pax[seat] || {}, { [key]: v }) }),
+  }));
+
+  /* The basket, as the server reported it in the seat-map response. */
+  heldSeats() { return this.state.data.held || []; }
+
+  paxFor(seat) {
+    const p = this.state.pax[seat] || {};
+    return { name: p.name || '', studentId: p.studentId || '', phone: p.phone || '', seatNumber: seat };
+  }
+  validSeat(seat) { return DLT.bookings.validatePassenger(this.paxFor(seat)); }
+  allValid() {
+    const held = this.heldSeats();
+    return held.length > 0 && held.every(s => {
+      const v = this.validSeat(s.seatNumber);
+      return v.name && v.studentId && v.phone;
+    });
+  }
+
+  doAuth = async () => {
+    const st = this.state;
+    this.setState({ busy: true, error: null });
+    try {
+      if (st.authMode === 'signup') {
+        await DLT.auth.signUp({ name: st.authName, email: st.authEmail,
+          password: st.authPassword, phone: st.authPhone });
+        await DLT.auth.signIn(st.authEmail, st.authPassword);
+      } else {
+        await DLT.auth.signIn(st.authEmail, st.authPassword);
+      }
+      const me = DLT.auth.current();
+      this.setState({ busy: false, authPassword: '', contact: this.state.contact || (me ? me.phone : '') });
+    } catch (e) { this.fail(e); }
+  };
+
+  startPayment = async () => {
+    const st = this.state;
+    this.setState({ busy: true, error: null });
+    try {
+      let bookingId = st.bookingId;
+      if (!bookingId) {
+        const held = this.heldSeats();
+        /* The Idempotency-Key is managed by the client layer, keyed on this
+           attempt, so a retry after a timeout cannot create a second booking. */
+        const booking = await DLT.bookings.create({
+          tripId: st.tripId,
+          passengers: held.map(s => this.paxFor(s.seatNumber)),
+          contactPhone: st.contact,
+          scope: st.tripId + ':' + (this._attempt || 0),
+        });
+        bookingId = booking.id;
+        this.setState({ bookingId: bookingId });
+      }
+
+      /* The SERVER computes the payable amount from the frozen fare. Nothing
+         here calculates money. A repricing arrives as a 409 carrying the old
+         and new totals, which is data the student accepts - never silent. */
+      let intent;
+      try {
+        intent = await DLT.payments.createIntent(bookingId);
+      } catch (e) {
+        if (e.isConflict && e.body && e.body.repriced) {
+          this.setState({ busy: false, bookingId: bookingId, step: 'review',
+            reprice: { amount: e.body.newTotal, previousAmount: e.body.oldTotal } });
+          return;
+        }
+        throw e;
+      }
+
+      this.setState({ bookingId: bookingId, paymentId: intent.paymentId,
+        orderId: intent.providerOrderId, step: 'checkout', reprice: null });
+
+      /* Razorpay Checkout, opened against the SERVER-CREATED order. The browser
+         decides nothing: not the amount, not success, not confirmation. */
+      this._payStarted = Date.now();
+      const self = this;
+      try {
+        await DLT.checkout.open({
+          bookingId: bookingId,
+          onStatus: function () { self.setState({ step: 'verifying' }); },
+        });
+        this.setState({ busy: false, step: 'verifying' });
+        /* Checkout returning is NOT proof of payment - only a verified webhook
+           confirms. Ask the server until it is sure. */
+        const confirmed = await DLT.checkout.awaitConfirmation(bookingId, {
+          onStatus: function () { self.setState({ step: 'verifying' }); },
+        });
+        await this._load({ quiet: true });
+        if (confirmed.status === 'CONFIRMED') this.setState({ step: 'done' });
+        else if (confirmed.pendingTimeout) this.setState({ step: 'pending' });
+        else this._poll();
+      } catch (e) {
+        this.setState({ busy: false });
+        if (e.code === 'CHECKOUT_DISMISSED')
+          return this.setState({ step: 'review', notice: e.message });
+        if (e.code === 'PAYMENT_FAILED')
+          return this.setState({ step: 'failed', lastOutcome: 'declined', error: e.message });
+        if (e.code === 'CHECKOUT_UNAVAILABLE')
+          return this.setState({ step: 'review', error: e.message });
+        this.fail(e);
+      }
+    } catch (e) {
+      this.fail(e);
+    }
+  };
+  acceptReprice = async () => {
+    try {
+      await DLT.bookings.acceptPrice(this.state.bookingId);
+      this.setState({ reprice: null, error: null });
+      this.startPayment();
+    } catch (e) { this.fail(e); }
+  };
+
+  claimSeat = async (entryId) => {
+    try {
+      const seat = await DLT.waitlist.claim(entryId);
+      const entry = (this.state.data.waits || []).filter(w => w.id === entryId)[0];
+      this.setState({ tripId: entry ? entry.tripId : this.state.tripId, step: 'seats',
+        waitlist: null, error: null, bookingId: null, paymentId: null,
+        notice: 'Seat ' + seat.seatNumber + ' is held for you. Add passenger details to confirm.' },
+        () => { this._load(); this._watchSeats(true); });
+    } catch (e) { this.fail(e); }
+  };
+
+  retryPay = () => {
+    /* A new attempt gets a new Idempotency-Key scope, so this is a genuine
+       retry rather than a replay of the previous request. */
+    this._attempt = (this._attempt || 0) + 1;
+    DLT.bookings.clearAttempt(this.state.tripId + ':' + (this._attempt - 1));
+    this.setState({ paymentId: null });
+    this.startPayment();
+  };
+
+  renderVals() {
+    const st = this.state;
+    if (!st.ready) {
+      return { atLoading: true, skeletons: [{}, {}, {}], showStepper: false,
+        primaryLabel: 'Loading', primaryDisabled: true, primaryBg: '#E4E1D8', primaryFg: '#7A7F77',
+        primaryCursor: 'wait', primary: () => {}, noSeats: true, total: 0, unitPrice: null,
+        seatCountLabel: '0 seats', tripSummary: 'Reading live departures', primaryHint: '',
+        notice: null, clearNotice: () => {}, barLine: '', repriced: false,
+        signedOut: true, signedIn: false };
+    }
+
+    /* auth.current() is synchronous: the session was resolved once in boot().
+       Everything else was loaded into state.data by _load() - renderVals makes
+       no requests, so it cannot be async and cannot render a stale guess. */
+    const me = DLT.auth.current();
+    const step = st.step;
+    const openTrips = st.data.openTrips || [];
+    const trip = st.data.trip;
+    const held = this.heldSeats();
+    const booking = st.data.booking;
+    /* B-3: no fare constant. Until the server sends a price there is no price,
+       and the summary renders an em-dash rather than a figure we invented. */
+    const unitPrice = trip ? trip.price : null;
+    const n = booking && ['done', 'pending', 'discrepancy', 'processing'].indexOf(step) >= 0
+      ? booking.passengers.length : held.length;
+    const total = booking && ['done', 'pending', 'discrepancy', 'processing'].indexOf(step) >= 0
+      ? booking.totalAmount : (unitPrice === null ? null : n * unitPrice);
+
+    /* The clock runs off the SERVER's holdExpiresAt. The client starts no timer
+       of its own and never decides a hold has lapsed. */
+    const holdLeft = held.length && held[0].holdExpiresAt
+      ? Math.max(0, new Date(held[0].holdExpiresAt).getTime() - Date.now()) : 0;
+    const lowHold = holdLeft > 0 && holdLeft < 120000;
+
+    /* --- trips --- */
+    const trips = openTrips.map(t => ({
+      id: t.id,
+      depart: DLT.fmt.time(t.departureAt), date: DLT.fmt.date(t.departureAt),
+      report: DLT.fmt.time(t.reportingAt), arrive: DLT.fmt.time(t.arrivalEstimateAt),
+      vehicle: t.vehicle ? t.vehicle.name + ' · ' + t.capacity + ' seats' : '',
+      dim: t.soldOut ? 0.72 : 1,
+      avail: t.soldOut ? 'Sold out'
+        : t.status === 'BOOKING_CLOSED' ? 'Booking closed'
+        : t.available <= 8 ? t.available + ' seats left' : 'Seats available',
+      availFg: t.soldOut ? '#5F6560' : t.available <= 8 ? '#8A5A0E' : '#3D423C',
+      cta: t.soldOut ? 'Join waitlist' : t.status === 'BOOKING_CLOSED' ? 'Closed' : 'Select seats',
+      ctaBg: t.bookable ? '#0E1014' : 'transparent',
+      ctaFg: t.bookable ? '#F7F5F0' : '#0E1014',
+      ctaBd: '#0E1014',
+      busy: t.status === 'BOOKING_CLOSED',
+      onPick: () => this.pickTrip(t),
+    }));
+
+    /* --- seat map --- */
+    const cells = [];
+    if (trip && (step === 'seats')) {
+      const rows = st.data.seatRows || [];
+      rows.forEach(r => {
+        r.seats.forEach((s, i) => {
+          if (i === 2) cells.push({ isSeat: false, isLabel: true, id: String(r.row).padStart(2, '0') });
+          const paint = {
+            AVAILABLE: ['#FFFFFF', '#0E1014', 'rgba(14,16,20,.32)', 'pointer'],
+            SELECTED: ['#0E4B34', '#F7F5F0', '#0E4B34', 'pointer'],
+            BOOKED: ['#DFDCD3', '#6F746C', 'rgba(14,16,20,.14)', 'not-allowed'],
+            HELD: ['#F6EBD5', '#8A5A0E', 'rgba(184,115,10,.4)', 'not-allowed'],
+            BLOCKED: ['#E7E4DB', '#6F746C', 'rgba(14,16,20,.14)', 'not-allowed'],
+          }[s.status] || ['#FFFFFF', '#0E1014', 'rgba(14,16,20,.3)', 'pointer'];
+          const words = { AVAILABLE: 'available', SELECTED: 'selected', BOOKED: 'booked',
+            HELD: 'held by another student',
+            BLOCKED: 'blocked by operations' + (s.blockReason ? ' — ' + s.blockReason : '') }[s.status];
+          cells.push({
+            isSeat: true, isLabel: false, id: s.seatNumber,
+            bg: paint[0], fg: paint[1], bd: paint[2], cursor: paint[3],
+            shadow: s.status === 'SELECTED' ? '0 3px 0 -1px #093322' : 'none',
+            hover: s.status === 'AVAILABLE' ? { background: '#EEF3EE', transform: 'translateY(-1px)' } : {},
+            disabled: ['BOOKED', 'HELD', 'BLOCKED'].indexOf(s.status) >= 0,
+            pressed: s.status === 'SELECTED',
+            aria: 'Seat ' + s.seatNumber + ', ' + s.seatType.toLowerCase() + ', ' + words,
+            onClick: () => this.toggleSeat(s.seatNumber),
+          });
+        });
+      });
+    }
+
+    /* --- passengers --- */
+    const paxList = (step === 'review' && booking ? booking.passengers.map(p => ({
+      n: '', seatNumber: p.seatNumber, name: p.name, sid: p.studentId, phone: p.phone,
+      seatLabel: p.seatNumber + ' · ' + p.seatType,
+    })) : held).map((s, i) => {
+      if (step === 'review' && booking) return s;
+      const seat = s.seatNumber;
+      const p = this.paxFor(seat);
+      const v = this.validSeat(seat);
+      const done = v.name && v.studentId && v.phone;
+      const show = st.touched || (st.blurred && st.blurred[seat]);
+      return {
+        n: String(i + 1).padStart(2, '0'),
+        seatNumber: seat, seatLabel: seat + ' · ' + DLT.seatType(seat),
+        name: p.name, sid: p.studentId, phone: p.phone,
+        title: p.name.trim() || 'Add details',
+        open: st.open === i, chev: st.open === i ? '▲' : '▼',
+        bd: done ? 'rgba(14,75,52,.34)' : 'rgba(14,16,20,.14)',
+        stateLabel: done ? 'Complete' : 'Incomplete',
+        stateFg: done ? '#0E4B34' : '#8A5A0E',
+        nameErr: show && !v.name, sidErr: show && !v.studentId, phoneErr: show && !v.phone,
+        nameBd: show && !v.name ? '#A33A22' : 'rgba(14,16,20,.2)',
+        sidBd: show && !v.studentId ? '#A33A22' : 'rgba(14,16,20,.2)',
+        phoneBd: show && !v.phone ? '#A33A22' : 'rgba(14,16,20,.2)',
+        onToggle: () => this.setState({ open: st.open === i ? -1 : i }),
+        onName: e => this.setField(seat, 'name', e.target.value),
+        onSid: e => this.setField(seat, 'studentId', e.target.value),
+        onPhone: e => this.setField(seat, 'phone', e.target.value),
+        onBlur: () => this.setState({ blurred: Object.assign({}, st.blurred, { [seat]: true }) }),
+      };
+    });
+
+    /* --- the summary's one button --- */
+    const needsAuth = !me;
+    let primaryLabel = 'Choose a departure', primaryDisabled = true, primaryHint = '';
+    let onPrimary = () => {};
+    if (step === 'trips') {
+      primaryHint = 'Pick a departure above to start. Nothing is charged until you pay.';
+    } else if (step === 'seats') {
+      primaryLabel = n ? 'Continue to passengers' : 'Select at least one seat';
+      primaryDisabled = !n;
+      primaryHint = n ? 'Your seats are held for 10 minutes.' : 'Tap a seat on the map to hold it.';
+      onPrimary = () => this.setState({ step: 'passengers', open: 0, error: null });
+    } else if (step === 'passengers') {
+      primaryLabel = 'Review booking';
+      primaryDisabled = false;
+      primaryHint = this.allValid() ? '' : 'Every passenger needs a name, student ID and phone.';
+      onPrimary = () => {
+        if (!this.allValid()) {
+          const bad = held.findIndex(s => {
+            const v = this.validSeat(s.seatNumber);
+            return !(v.name && v.studentId && v.phone);
+          });
+          this.setState({ touched: true, open: bad < 0 ? 0 : bad });
+          return;
+        }
+        if (!/^[6-9]\d{9}$/.test(String(st.contact || '').replace(/\s/g, ''))) {
+          this.setState({ touched: true, error: 'Enter a valid booking contact number.' });
+          return;
+        }
+        this.setState({ touched: true, step: 'review', error: null });
+      };
+    } else if (step === 'review') {
+      if (st.reprice) {
+        primaryLabel = 'Accept ₹' + st.reprice.amount;
+        primaryDisabled = false;
+        primaryHint = 'The fare for this departure changed. Nothing is charged until you accept.';
+        onPrimary = this.acceptReprice;
+      } else {
+      primaryLabel = needsAuth ? 'Sign in to pay' : 'Pay ₹' + total;
+      primaryDisabled = needsAuth || st.busy;
+      primaryHint = needsAuth
+        ? 'Your seats stay held while you sign in.'
+        : 'The booking is issued only after we verify the payment on our side.';
+      onPrimary = this.startPayment;
+      }
+    } else if (step === 'checkout') {
+      primaryLabel = 'Complete it on the payment page';
+      primaryHint = 'Choose an outcome on the left.';
+    } else if (step === 'verifying') {
+      primaryLabel = 'Verifying'; primaryHint = 'Waiting for the verified result.';
+    } else if (step === 'pending') {
+      primaryLabel = 'Awaiting confirmation'; primaryHint = 'Do not pay again — we are reconciling.';
+    } else if (step === 'discrepancy' || step === 'processing') {
+      primaryLabel = 'With our team'; primaryHint = 'Do not pay again.';
+    } else if (step === 'failed') {
+      primaryLabel = 'Retry payment'; primaryDisabled = false; onPrimary = this.retryPay;
+      primaryHint = 'Nothing was charged.';
+    } else if (step === 'expired') {
+      primaryLabel = 'Choose seats again'; primaryDisabled = false;
+      primaryHint = 'The 10-minute hold ran out.';
+      onPrimary = () => this.setState({ step: 'seats', bookingId: null, paymentId: null, error: null });
+    } else if (step === 'done') {
+      primaryLabel = 'View boarding passes'; primaryDisabled = false;
+      primaryHint = 'Passes are also in My Trips.';
+      onPrimary = () => { location.href = './DLT Dashboard.dc.html'; };
+    }
+
+    const order = ['trips', 'seats', 'passengers', 'review'];
+    const here = order.indexOf(step) < 0 ? 4 : order.indexOf(step);
+    const stepper = ['Trip', 'Seats', 'Passengers', 'Review'].map((label, i) => ({
+      label, n: String(i + 1).padStart(2, '0'),
+      fg: i === here ? '#0E1014' : i < here ? '#0E4B34' : '#7A7F77',
+      dotBg: i < here ? '#0E4B34' : i === here ? '#0E1014' : 'transparent',
+      dotFg: i <= here ? '#F7F5F0' : '#7A7F77',
+      dotBd: i <= here ? 'transparent' : 'rgba(14,16,20,.28)',
+    }));
+
+    const pay = booking && booking.payment ? booking.payment : null;
+
+    /* §18 a live waitlist offer follows the student, not the click that made it */
+    /* §18 a live waitlist offer follows the student, not the click that made it.
+       Field names are the server's: offerExpiresAt, seatNumber. */
+    const myWaits = st.data.waits || [];
+    const offerLeft = (w) => (w && w.offerExpiresAt
+      ? new Date(w.offerExpiresAt).getTime() - Date.now() : 0);
+    const waitOffer = myWaits.find(w => ['CLAIM_OFFERED', 'CLAIMED'].indexOf(w.status) >= 0 &&
+      offerLeft(w) > 0) || null;
+    const waitEntry = waitOffer || (st.waitlist ? (myWaits.find(w => w.id === st.waitlist.id) || st.waitlist) : myWaits[0]) || null;
+    const waitTrip = st.data.waitTrip;
+
+    return {
+      atLoading: false, skeletons: [],
+      signedIn: !!me, signedOut: !me, userName: me ? me.name.split(' ')[0] : '',
+      signOut: () => { DLT.auth.signOut(); this.setState({ step: 'trips', tripId: null, bookingId: null, paymentId: null, pax: {} }); },
+
+      trips, noTrips: trips.length === 0,
+      atTrips: step === 'trips', atSeats: step === 'seats', atPassengers: step === 'passengers',
+      atReview: step === 'review', atCheckout: step === 'checkout', atVerifying: step === 'verifying',
+      atPending: step === 'pending', atFailed: step === 'failed', atExpired: step === 'expired',
+      atDone: step === 'done', atDiscrepancy: step === 'discrepancy', atProcessing: step === 'processing',
+      showStepper: order.indexOf(step) >= 0,
+
+      error: st.error, clearError: () => this.setState({ error: null }),
+      notice: st.notice, clearNotice: () => this.setState({ notice: null }),
+      barLine: n ? (n === 1 ? '1 seat' : n + ' seats') + (holdLeft > 0 ? ' · ' + DLT.fmt.countdown(holdLeft) + ' held' : '') : 'No seats yet',
+      busy: st.busy,
+
+      tripLabel: trip ? DLT.fmt.when(trip.departureAt) : '—',
+      tripSummary: trip ? DLT.fmt.when(trip.departureAt) + ' · report ' + DLT.fmt.time(trip.reportingAt) : 'No departure chosen',
+      reportTime: trip ? DLT.fmt.time(trip.reportingAt) : '—',
+      pickupPoint: trip ? trip.pickupPoint : 'Woxsen main gate loop',
+      vehicleLabel: trip && trip.vehicle ? trip.vehicle.name : '—',
+      seatCount: trip ? trip.capacity : 44,
+      availableCount: trip ? trip.available : 0,
+
+      cells,
+      legend: [
+        { label: 'Available', bg: '#FFFFFF', bd: 'rgba(14,16,20,.32)' },
+        { label: 'Selected', bg: '#0E4B34', bd: '#0E4B34' },
+        { label: 'Booked', bg: '#DFDCD3', bd: 'rgba(14,16,20,.14)' },
+        { label: 'Held by another student', bg: '#F6EBD5', bd: 'rgba(184,115,10,.4)' },
+        { label: 'Blocked by operations', bg: '#E7E4DB', bd: 'rgba(14,16,20,.14)' },
+      ],
+
+      pax: paxList,
+      contact: st.contact || '',
+      contactBd: st.touched && !/^[6-9]\d{9}$/.test(String(st.contact || '').replace(/\s/g, ''))
+        ? '#A33A22' : 'rgba(14,16,20,.2)',
+      onContact: e => this.setState({ contact: e.target.value }),
+
+      needsAuth: step === 'review' && needsAuth,
+      authIsSignUp: st.authMode === 'signup',
+      authTitle: st.authMode === 'signup' ? 'Create your DLT account' : 'Sign in to pay',
+      authCta: st.busy ? 'Working…' : st.authMode === 'signup' ? 'Create account and continue' : 'Sign in and continue',
+      authSwitch: st.authMode === 'signup' ? 'I already have an account' : 'Create an account instead',
+      toggleAuthMode: () => this.setState({ authMode: st.authMode === 'signup' ? 'signin' : 'signup', error: null }),
+      authName: st.authName, authEmail: st.authEmail, authPhone: st.authPhone, authPassword: st.authPassword,
+      onAuthName: e => this.setState({ authName: e.target.value }),
+      onAuthEmail: e => this.setState({ authEmail: e.target.value }),
+      onAuthPhone: e => this.setState({ authPhone: e.target.value }),
+      onAuthPassword: e => this.setState({ authPassword: e.target.value }),
+      doAuth: this.doAuth,
+      /* Demo credentials removed: they must never appear on a production pay
+         screen, and there are no seeded accounts behind a real server. */
+      demoHint: null,
+
+      repriced: !!st.reprice,
+      repriceAmount: st.reprice ? st.reprice.amount : 0,
+      repriceWas: st.reprice ? st.reprice.previousAmount : 0,
+      acceptReprice: this.acceptReprice,
+
+      orderId: st.orderId || '—',
+      bookingCode: booking ? booking.code : '—',
+      boardingCode: booking ? booking.boardingCode : '—',
+      payRef: pay && pay.providerReference ? pay.providerReference : '—',
+      paidAmount: pay ? pay.amount : 0,
+      /* The four sandbox settle controls are gone, template and logic. There is
+         no way from this file to declare a payment paid, short-paid, failed or
+         abandoned: that was prototype authority, and it is exactly what must
+         not exist on a real payment screen. Razorpay Checkout is the only path
+         to a payment, and only a verified provider webhook confirms one. */
+      checkNow: () => this._poll(),
+      retryPay: this.retryPay,
+      failedKicker: st.lastOutcome === 'abandoned' ? 'Payment not completed' : 'Payment failed',
+      failedTitle: st.lastOutcome === 'abandoned'
+        ? 'You left the payment page' : 'The payment didn\u2019t go through',
+
+      issued: booking ? booking.passengers.map(p => ({
+        name: p.name, sid: p.studentId, seatLabel: p.seatNumber + ' · ' + p.seatType,
+        status: p.passStatus === 'VALID' ? 'Issued' : p.passStatus,
+        href: './DLT Dashboard.dc.html?booking=' + booking.code,
+      })) : [],
+
+      seatRows: held.map(s => ({
+        id: s.seatNumber, type: s.seatType, price: unitPrice,
+        removable: ['seats', 'passengers', 'review'].indexOf(step) >= 0,
+        onRemove: () => this.removeSeat(s.seatNumber),
+      })),
+      hasSeats: n > 0, noSeats: n === 0,
+      seatCountLabel: n === 1 ? '1 seat' : n + ' seats',
+      seatList: (booking ? booking.passengers.map(p => p.seatNumber) : held.map(s => s.seatNumber)).join(', ') || '—',
+      unitPrice, total,
+      holdActive: holdLeft > 0, holdClock: DLT.fmt.countdown(holdLeft),
+      holdBg: lowHold ? '#FFFDF6' : '#F4F7F3', holdFg: lowHold ? '#8A5A0E' : '#0E4B34',
+
+      waitlistEntry: !!waitEntry,
+      waitlistOffered: !!waitOffer,
+      waitlistKicker: waitOffer
+        ? 'A seat has been released to you'
+        : 'Waitlist · position ' + (waitEntry ? waitEntry.position : 0),
+      waitlistAccent: waitOffer ? '#8A5A0E' : '#0E4B34',
+      waitlistBg: waitOffer ? '#FFFDF6' : '#EEF3EE',
+      waitlistBd: waitOffer ? 'rgba(184,115,10,.34)' : 'rgba(14,75,52,.3)',
+      waitlistPosition: waitEntry ? waitEntry.position : 0,
+      claimClock: waitOffer ? DLT.fmt.countdown(Math.max(0, offerLeft(waitOffer))) : '',
+      claimSeatNumber: waitOffer && waitOffer.seatNumber ? waitOffer.seatNumber : '',
+      claimSeat: () => waitOffer && this.claimSeat(waitOffer.id),
+      declineSeat: () => {
+        DLT.waitlist.decline(waitOffer.id)
+          .then(() => { this.setState({ waitlist: null, error: null }); this._load({ quiet: true }); })
+          .catch(this.fail);
+      },
+      waitlistCopy: waitOffer
+        ? (waitOffer.status === 'CLAIMED'
+          ? 'Seat ' + waitOffer.seatNumber + ' is held for you. Finish the booking before the window closes or it passes to the next student.'
+          : 'Seat ' + waitOffer.seatNumber + ' on the ' + (waitTrip ? DLT.fmt.when(waitTrip.departureAt) : 'departure') +
+            ' is reserved for you for 30 minutes. Nobody else can take it while the window is open.')
+        : waitEntry
+          ? 'You are on the list. If a seat is released it is reserved for you and you get 30 minutes to claim and pay for it before it passes on.'
+          : '',
+
+      notifyOpen: !st.notified, notified: !!st.notified,
+      notifiedMsg: st.notified
+        ? (st.notified.alreadyRequested
+            ? 'You are already on the list for this route — we will email you when bookings open.'
+            : 'Noted — we will email you when bookings open. Operations can see the request.')
+        : '',
+      notifyContact: st.notifyContact,
+      /* WhatsApp Business chat. A plain external link — no channel selector, no
+         phone field, no stored request. */
+      whatsappUrl: 'https://wa.me/message/SIRNC3QVOEFLO1',
+      onNotifyContact: e => this.setState({ notifyContact: e.target.value }),
+      /* B-2: wired to POST /trips/:id/notify (or /notify with no trip), so the
+         request carries the departure it was about — the prototype accepted a
+         tripId no caller ever passed (F-28).
+
+         EMAIL is the only backend notification mechanism. WhatsApp is a link
+         to the DLT WhatsApp Business chat, handled by a person, with nothing
+         stored — so it is not submitted through here at all. */
+      notify: () => {
+        const email = (this.state.notifyContact || (me ? me.email : '')).trim();
+        if (!email) return this.setState({ error: 'Enter an email address, or message us on WhatsApp.' });
+        DLT.notifications.requestNotify({ tripId: st.tripId || null, email: email })
+          .then(rec => this.setState({ notified: { alreadyRequested: rec.alreadyRequested }, error: null }))
+          .catch(this.fail);
+      },
+      backToTrips: () => {
+        this._watchSeats(false);
+        const trip = st.tripId;
+        this.setState({ step: 'trips', tripId: null, error: null }, () => {
+          if (trip) DLT.seats.releaseMine(trip).catch(() => {});
+          this._load({ quiet: true });
+        });
+      },
+      editSeats: () => this.setState({ step: 'seats', bookingId: null, paymentId: null, error: null }),
+      editPax: () => this.setState({ step: 'passengers', error: null }),
+      /* Nothing to clear in the page any more: the hold lives on the server and
+         the guest cookie is HttpOnly. Starting over just resets local view state
+         and reloads from the server. */
+      restart: () => {
+        this._watchSeats(false);
+        this._attempt = (this._attempt || 0) + 1;
+        this.setState({ step: 'trips', tripId: null, pax: {}, touched: false,
+          bookingId: null, paymentId: null, orderId: null, error: null, notice: null,
+          reprice: null, waitlist: null }, () => this._load());
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>

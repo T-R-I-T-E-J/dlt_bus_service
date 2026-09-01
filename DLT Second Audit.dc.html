@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400;100,500;100,600;100,700;125,600;125,700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #F7F5F0; color: #0E1014;
+    font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased; text-wrap: pretty; }
+  a { color: #0E4B34; text-decoration: none; }
+  a:hover { color: #0E1014; }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid #0E4B34; outline-offset: 2px; }
+  @media (max-width: 1000px) {
+    [data-m="cols"] { grid-template-columns: minmax(0,1fr) !important; }
+    [data-m="rail"] { position: static !important; }
+    [data-m="find"] { grid-template-columns: minmax(0,1fr) !important; }
+  }
+</style>
+</helmet>
+
+<header style="position:sticky;top:0;z-index:40;background:#0E1014;color:#F7F5F0;padding:20px clamp(18px,3.5vw,40px) 0">
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px">
+    <div>
+      <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.15em;text-transform:uppercase;color:#8E948B">DLT · second complete audit · user + developer + documentation · 31 Aug 2026</div>
+      <h1 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(22px,2.6vw,32px);line-height:1.04;letter-spacing:-.02em">The build is much further along, and it can still sell the same seat twice</h1>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;padding-bottom:2px">
+      <span style="display:block;width:11px;height:11px;border-radius:50%;background:#D14A2C"></span>
+      <span style="font-stretch:125%;font-weight:700;font-size:19px;letter-spacing:-.01em">NOT READY</span>
+    </div>
+  </div>
+  <div style="margin:18px 0 0;display:flex;flex-wrap:wrap;gap:14px clamp(16px,2.4vw,34px);border-top:1px solid rgba(247,245,240,.18);padding:12px 0 14px;font-variant-numeric:tabular-nums">
+    <sc-for list="{{ scores }}" as="s" hint-placeholder-count="7">
+      <div>
+        <div style="font-family:'Martian Mono',monospace;font-size:7.5px;letter-spacing:.11em;text-transform:uppercase;color:#8E948B">{{ s.k }}</div>
+        <div style="margin-top:5px;font-stretch:125%;font-weight:700;font-size:19px;line-height:1;color:{{ s.fg }}">{{ s.v }}</div>
+      </div>
+    </sc-for>
+  </div>
+</header>
+
+<div data-m="cols" style="display:grid;grid-template-columns:224px minmax(0,1fr);gap:clamp(20px,3vw,40px);padding:clamp(20px,3vh,32px) clamp(18px,3.5vw,40px) 90px;align-items:start">
+
+  <nav data-m="rail" aria-label="Report sections" style="position:sticky;top:150px;display:flex;flex-direction:column;gap:1px">
+    <sc-for list="{{ rail }}" as="r" hint-placeholder-count="12">
+      <a href="{{ r.href }}" style="display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px;align-items:baseline;padding:7px 8px;color:#3D423C;font-size:12.5px;border-left:2px solid {{ r.mark }}">
+        <span style="font-family:'Martian Mono',monospace;font-size:8px;color:#A7ACA3">{{ r.k }}</span>
+        <span>{{ r.title }}</span>
+      </a>
+    </sc-for>
+    <p style="margin:16px 8px 0;font-size:11.5px;line-height:1.55;color:#7A7F77">No code was changed. Findings describe the implementation as read and exercised on 31 Aug 2026.</p>
+  </nav>
+
+  <main style="min-width:0">
+
+    <section id="method" style="scroll-margin-top:150px;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(18px,2.6vw,26px)">
+      <h2 style="margin:0;font-stretch:125%;font-weight:700;font-size:20px;letter-spacing:-.015em">Method, and what changed since the first audit</h2>
+      <p style="margin:11px 0 0;max-width:76ch;font-size:13.5px;line-height:1.65;color:#3D423C">The previous audit found four screens of hardcoded fixtures. That is no longer the product. There is now a real data layer — <strong style="font-weight:600">dlt-store.js</strong>, 2,176 lines — holding users, trips, seats, holds, bookings, passengers, payments, provider events, refunds, passes, boarding events, waitlist, reviews, notifications, sessions and an audit trail, with optimistic concurrency, idempotency keys, role permissions and a policy engine. The screens read from it and cannot bypass it. A real QR encoder produces genuine ISO 18004 symbols. A {{ suiteOriginal }}-assertion rule suite (<strong style="font-weight:600">store-tests.html</strong>) passes end to end. Most of the first audit's P1 list is genuinely closed.</p>
+      <p style="margin:11px 0 0;max-width:76ch;font-size:13.5px;line-height:1.65;color:#3D423C">So this audit is not a repeat. It assumes nothing from the last one and re-tests the current behaviour: I read every implementation file, walked the student and returning-student journeys, worked the admin console as an operator, and then attacked the store directly in the running page to see what the rule suite does not cover. Four defects were reproduced live rather than inferred — they are marked <strong style="font-weight:600">reproduced</strong> below, with the observed output.</p>
+      <div style="margin:20px 0 0;border-top:1px solid rgba(14,16,20,.14);padding-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px 24px">
+        <sc-for list="{{ tally }}" as="t" hint-placeholder-count="5">
+          <div>
+            <div style="font-family:'Martian Mono',monospace;font-size:8px;letter-spacing:.11em;text-transform:uppercase;color:#7A7F77;margin-bottom:4px">{{ t.k }}</div>
+            <div style="font-size:17px;font-weight:600;color:{{ t.fg }};font-variant-numeric:tabular-nums">{{ t.v }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin:20px 0 0;border-left:3px solid #B8730A;background:#FFFDF6;padding:13px 16px">
+        <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;color:#8A5A0E">What I could not verify</div>
+        <p style="margin:8px 0 0;max-width:74ch;font-size:12.5px;line-height:1.6;color:#3D423C">Three things are outside what this environment can prove, and I will not claim them either way. <strong style="font-weight:600">The 3D frame itself:</strong> the WebGL buffer cannot be read back for capture here, so the journey's cinematography is audited from its source — the splines, the speed profile, the rig table and the scene graph — not from pixels. Judgements about camera variety and stops follow from the authored numbers; judgements about beauty do not appear at all. <strong style="font-weight:600">The QR symbols:</strong> the encoder is a correct-looking implementation and the app decodes its own codes, but no physical scanner or third-party reader was put in front of one. <strong style="font-weight:600">Real devices:</strong> layout was inspected at width breakpoints, not on a handset.</p>
+      </div>
+    </section>
+
+    <section id="phase1" style="scroll-margin-top:150px;margin:36px 0 0;border:1px solid rgba(14,75,52,.3);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(18px,2.6vw,26px)">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:12px">
+        <div>
+          <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.15em;text-transform:uppercase;color:#0E4B34">Remediation · phases 1–4 · 31 Aug 2026</div>
+          <h2 style="margin:8px 0 0;font-stretch:125%;font-weight:700;font-size:20px;letter-spacing:-.015em">Phases 1–4 — fixed and verified</h2>
+        </div>
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#0E4B34;font-variant-numeric:tabular-nums">{{ suiteLabel }}</div>
+      </div>
+      <p style="margin:12px 0 0;max-width:78ch;font-size:13.5px;line-height:1.65;color:#3D423C">Each defect got a regression test in <strong style="font-weight:600">store-tests.html</strong> first, was confirmed failing against the old implementation, then fixed. The suite now runs {{ suiteTotal }} assertions — the original {{ suiteOriginal }} plus {{ suiteNew }} new ones — with nothing failing, so the fixes are proved and the existing booking, payment, boarding, refund and admin behaviour is proved unbroken.</p>
+      <div style="margin:16px 0 0;display:flex;flex-direction:column;gap:0">
+        <sc-for list="{{ phase1 }}" as="p" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:52px 74px minmax(0,1fr);gap:12px;align-items:baseline;padding:11px 0;border-top:1px solid rgba(14,16,20,.10)">
+            <span style="font-family:'Martian Mono',monospace;font-size:9.5px;color:#7A7F77">{{ p.id }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:{{ p.fg }}">{{ p.state }}</span>
+            <p style="margin:0;font-size:13px;line-height:1.6;color:#25322B">{{ p.body }}</p>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin:22px 0 0;border-top:1px solid rgba(14,16,20,.14);padding-top:16px">
+        <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.15em;text-transform:uppercase;color:#0E4B34">Phase 2 · booking experience</div>
+        <h3 style="margin:8px 0 0;font-size:17px;font-weight:600;letter-spacing:-.012em">One continuous flow, verified click by click</h3>
+        <p style="margin:9px 0 0;max-width:78ch;font-size:13px;line-height:1.6;color:#3D423C">Homepage → chosen departure → seat → passenger → authentication only where the specification puts it → payment. Walked end to end in the browser, signed out and then signed in mid-flow, plus a reload at the review step.</p>
+        <div style="margin:14px 0 0;display:flex;flex-direction:column;gap:0">
+          <sc-for list="{{ phase2 }}" as="p" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:52px 74px minmax(0,1fr);gap:12px;align-items:baseline;padding:11px 0;border-top:1px solid rgba(14,16,20,.10)">
+              <span style="font-family:'Martian Mono',monospace;font-size:9.5px;color:#7A7F77">{{ p.id }}</span>
+              <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:{{ p.fg }}">{{ p.state }}</span>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#25322B">{{ p.body }}</p>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="margin:22px 0 0;border-top:1px solid rgba(14,16,20,.14);padding-top:16px">
+        <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.15em;text-transform:uppercase;color:#0E4B34">Phase 3 · operations</div>
+        <h3 style="margin:8px 0 0;font-size:17px;font-weight:600;letter-spacing:-.012em">Screens for the workflows that already existed underneath</h3>
+        <p style="margin:9px 0 0;max-width:78ch;font-size:13px;line-height:1.6;color:#3D423C">No business logic was duplicated: each control calls the store method that was already written, tested and audited. Only genuinely missing rules were added — request decisions, staff assignment and the override itself. Every workflow below was walked in the console as an operator.</p>
+        <div style="margin:14px 0 0;display:flex;flex-direction:column;gap:0">
+          <sc-for list="{{ phase3 }}" as="p" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:52px 74px minmax(0,1fr);gap:12px;align-items:baseline;padding:11px 0;border-top:1px solid rgba(14,16,20,.10)">
+              <span style="font-family:'Martian Mono',monospace;font-size:9.5px;color:#7A7F77">{{ p.id }}</span>
+              <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:{{ p.fg }}">{{ p.state }}</span>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#25322B">{{ p.body }}</p>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="margin:22px 0 0;border-top:1px solid rgba(14,16,20,.14);padding-top:16px">
+        <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.15em;text-transform:uppercase;color:#0E4B34">Phase 4 · boarding</div>
+        <h3 style="margin:8px 0 0;font-size:17px;font-weight:600;letter-spacing:-.012em">Two decoders, one validation chain — and a QR that never worked</h3>
+        <div style="margin:14px 0 0;display:flex;flex-direction:column;gap:0">
+          <sc-for list="{{ phase4 }}" as="p" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:52px 74px minmax(0,1fr);gap:12px;align-items:baseline;padding:11px 0;border-top:1px solid rgba(14,16,20,.10)">
+              <span style="font-family:'Martian Mono',monospace;font-size:9.5px;color:#7A7F77">{{ p.id }}</span>
+              <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:{{ p.fg }}">{{ p.state }}</span>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#25322B">{{ p.body }}</p>
+            </div>
+          </sc-for>
+        </div>
+        <p style="margin:14px 0 0;max-width:78ch;font-size:12.5px;line-height:1.6;color:#5B6058"><strong style="font-weight:600">Device limits, stated plainly.</strong> No camera and no physical scanner exist in this environment, so what is proved is the decode path — a rendered pass decoded back to its exact token by the same library the console runs — and the failure paths, exercised by stubbing the camera to refuse permission and to report no device. Camera capture on real handsets, and third-party hardware scanners, remain untested by anyone but a person holding a phone. jsQR loads from a pinned CDN (jsqr@1.4.0) with no subresource integrity hash, because the bytes cannot be fetched here to compute one; vendor the file and add the hash before launch.</p>
+      </div>
+      <p style="margin:16px 0 0;font-size:12.5px;line-height:1.6;color:#5B6058">F-04 is deliberately not marked done. The prototype-side improvements it enabled are listed above; everything that only a server can deliver — Cashfree orders and signed webhooks, cross-device seat arbitration, server-side authority, sessions, email — is written up in <strong style="font-weight:600">PRODUCTION_BACKEND.md</strong> with a porting order, and is unchanged as a launch blocker.</p>
+    </section>
+
+    <section id="findings" style="scroll-margin-top:150px;margin:36px 0 0">
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:2px solid #0E1014;padding-bottom:11px">
+        <div>
+          <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.15em;text-transform:uppercase;color:#7A7F77">Section 10</div>
+          <h2 style="margin:8px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(19px,2.2vw,25px);letter-spacing:-.018em">Master findings list</h2>
+        </div>
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#5B6058;font-variant-numeric:tabular-nums">{{ shownLabel }}</div>
+      </div>
+
+      <div style="margin:14px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <sc-for list="{{ chips }}" as="c" hint-placeholder-count="5">
+          <button type="button" onClick="{{ c.onPick }}" aria-pressed="{{ c.on }}" style="background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.bd }};padding:9px 13px;border-radius:2px;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;cursor:pointer;min-height:36px">{{ c.label }} {{ c.n }}</button>
+        </sc-for>
+        <span style="flex:1"></span>
+        <sc-for list="{{ views }}" as="v" hint-placeholder-count="2">
+          <button type="button" onClick="{{ v.onPick }}" aria-pressed="{{ v.on }}" style="background:{{ v.bg }};color:{{ v.fg }};border:1px solid {{ v.bd }};padding:9px 13px;border-radius:2px;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;cursor:pointer;min-height:36px">{{ v.label }}</button>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ detail }}" hint-placeholder-val="{{ true }}">
+        <div style="margin:18px 0 0;display:flex;flex-direction:column;gap:14px">
+          <sc-for list="{{ findings }}" as="f" hint-placeholder-count="8">
+            <article style="border:1px solid rgba(14,16,20,.14);border-left:3px solid {{ f.accent }};background:#FFFFFF;padding:16px 18px">
+              <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px">
+                <span style="font-family:'Martian Mono',monospace;font-size:10px;letter-spacing:.08em;color:#0E1014;font-weight:500">{{ f.id }}</span>
+                <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;background:{{ f.accent }};color:#F7F5F0;padding:3px 7px">{{ f.sev }}</span>
+                <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#7A7F77">{{ f.cat }} · {{ f.persp }}</span>
+                <sc-if value="{{ f.proved }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#0E4B34;border:1px solid rgba(14,75,52,.4);padding:2px 6px">Reproduced</span>
+                </sc-if>
+              </div>
+              <h3 style="margin:11px 0 0;font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:1.35">{{ f.title }}</h3>
+              <div data-m="find" style="margin:12px 0 0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px 24px">
+                <div>
+                  <div style="font-family:'Martian Mono',monospace;font-size:8px;letter-spacing:.11em;text-transform:uppercase;color:#7A7F77;margin-bottom:5px">Current behaviour</div>
+                  <p style="margin:0;font-size:13px;line-height:1.6;color:#3D423C">{{ f.now }}</p>
+                </div>
+                <div>
+                  <div style="font-family:'Martian Mono',monospace;font-size:8px;letter-spacing:.11em;text-transform:uppercase;color:#7A7F77;margin-bottom:5px">Expected</div>
+                  <p style="margin:0;font-size:13px;line-height:1.6;color:#3D423C">{{ f.want }}</p>
+                </div>
+              </div>
+              <div style="margin:12px 0 0;border-top:1px solid rgba(14,16,20,.10);padding-top:10px;display:flex;flex-direction:column;gap:7px">
+                <p style="margin:0;font-size:12.5px;line-height:1.6;color:#4A4F49"><span style="font-family:'Martian Mono',monospace;font-size:8px;letter-spacing:.11em;text-transform:uppercase;color:#7A7F77">Evidence · </span>{{ f.ev }}</p>
+                <p style="margin:0;font-size:12.5px;line-height:1.6;color:#25322B"><span style="font-family:'Martian Mono',monospace;font-size:8px;letter-spacing:.11em;text-transform:uppercase;color:#0E4B34">Fix · </span>{{ f.fix }}</p>
+              </div>
+            </article>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ compact }}" hint-placeholder-val="{{ false }}">
+        <div style="margin:18px 0 0;display:flex;flex-direction:column">
+          <sc-for list="{{ findings }}" as="f" hint-placeholder-count="8">
+            <div style="display:grid;grid-template-columns:56px 30px minmax(0,1fr) 130px;gap:12px;align-items:baseline;padding:9px 0;border-bottom:1px solid rgba(14,16,20,.10)">
+              <span style="font-family:'Martian Mono',monospace;font-size:9.5px;color:#7A7F77">{{ f.id }}</span>
+              <span style="font-family:'Martian Mono',monospace;font-size:9px;color:{{ f.accent }};font-weight:500">{{ f.sev }}</span>
+              <span style="font-size:13px;line-height:1.45">{{ f.title }}</span>
+              <span style="font-family:'Martian Mono',monospace;font-size:8px;letter-spacing:.09em;text-transform:uppercase;color:#7A7F77;text-align:right">{{ f.cat }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ noneShown }}" hint-placeholder-val="{{ false }}">
+        <p style="margin:18px 0 0;font-size:13px;color:#7A7F77">Nothing at this severity.</p>
+      </sc-if>
+    </section>
+
+    <sc-for list="{{ parts }}" as="p" hint-placeholder-count="13">
+      <section id="{{ p.id }}" style="scroll-margin-top:150px;margin:38px 0 0">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:2px solid #0E1014;padding-bottom:11px">
+          <div>
+            <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.15em;text-transform:uppercase;color:#7A7F77">{{ p.kicker }}</div>
+            <h2 style="margin:8px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(19px,2.2vw,25px);letter-spacing:-.018em">{{ p.title }}</h2>
+          </div>
+        </div>
+        <sc-if value="{{ p.lede }}" hint-placeholder-val="{{ true }}">
+          <p style="margin:13px 0 0;max-width:78ch;font-size:13.5px;line-height:1.65;color:#3D423C">{{ p.lede }}</p>
+        </sc-if>
+        <div style="margin:14px 0 0;display:flex;flex-direction:column;gap:0">
+          <sc-for list="{{ p.items }}" as="i" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:baseline;padding:11px 0;border-bottom:1px solid rgba(14,16,20,.10)">
+              <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:{{ i.tagFg }};white-space:nowrap">{{ i.tag }}</span>
+              <p style="margin:0;font-size:13.5px;line-height:1.6;color:#25322B"><strong style="font-weight:600">{{ i.head }}</strong> {{ i.body }}</p>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+
+    <section id="verdict" style="scroll-margin-top:150px;margin:40px 0 0;background:#0E1014;color:#F7F5F0;border-top:2px solid #0E4B34;padding:clamp(20px,3vw,30px)">
+      <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.15em;text-transform:uppercase;color:#8E948B">Section N · final readiness</div>
+      <h2 style="margin:10px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(20px,2.4vw,28px);letter-spacing:-.02em">Scores, and one verdict</h2>
+      <div style="margin:22px 0 0;display:flex;flex-direction:column;gap:0">
+        <sc-for list="{{ scoreRows }}" as="s" hint-placeholder-count="7">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 54px 150px;gap:14px;align-items:center;padding:12px 0;border-top:1px solid rgba(247,245,240,.16)">
+            <div>
+              <div style="font-size:14.5px;font-weight:600">{{ s.k }}</div>
+              <div style="margin-top:4px;font-size:12.5px;line-height:1.55;color:#A9AFA6">{{ s.why }}</div>
+            </div>
+            <div style="font-stretch:125%;font-weight:700;font-size:22px;line-height:1;color:{{ s.fg }};font-variant-numeric:tabular-nums">{{ s.v }}</div>
+            <div style="height:5px;background:rgba(247,245,240,.14)"><span style="display:block;height:5px;width:{{ s.bar }};background:{{ s.fg }}"></span></div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin:26px 0 0;border-top:1px solid rgba(247,245,240,.16);padding-top:20px;display:flex;flex-wrap:wrap;align-items:center;gap:16px">
+        <span style="display:block;width:14px;height:14px;border-radius:50%;background:#D14A2C"></span>
+        <span style="font-stretch:125%;font-weight:700;font-size:26px;letter-spacing:-.02em">NOT READY</span>
+        <p style="margin:0;flex:1;min-width:260px;max-width:70ch;font-size:13px;line-height:1.65;color:#C3C8BE">Not because it is unfinished-looking — it is the opposite, and that is the risk. It reads as a shipped product while a seat can be sold twice, a free booking can refund ₹259, a fare change strands a booking forever, a waitlist can be joined but never claimed, and every rule the specification assigns to a server is enforced in a file the student can edit. Close the six P0s and the fourteen P1s and this becomes 🟡 READY WITH FIXES; it does not become 🟢 until the store is a server.</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1240, &quot;height&quot;: 900}}">
+const P0 = '#A33A22', P1 = '#B8730A', P2 = '#0E4B34', P3 = '#5F6560';
+
+/* one source of truth for the suite arithmetic, counted from store-tests.html:
+   112 assertions existed before this audit, 34 + 6 + 48 were added by phases 1-3 */
+const SUITE = { original: 112, total: 222 };
+
+const FINDINGS = [
+  ['F-01', 'P0', 'Concurrency', 'Developer', true,
+    'A payment that lands after the hold expires resurrects the abandoned booking and re-takes the seat — including a seat another student has already bought',
+    'sweep() releases the hold and marks the booking ABANDONED. When the provider event applies afterwards, applyProviderEvents ignores booking status and calls finalizeBooking, which sets the seat to BOOKED and overwrites seat.bookingId without checking the seat is free.',
+    'Reproduced in the running store: student A abandons, sweep frees seat 2B, student B holds, pays and is confirmed, then A\u2019s webhook lands — result was two CONFIRMED bookings, two VALID passes and two paid fares on one seat, and both scan as VALID at the door.',
+    'A late success on an abandoned booking must not confirm it. Either re-acquire the seat atomically or move the payment to a refund-required state and alert operations.',
+    'In applyProviderEvents, refuse finalisation when the booking is ABANDONED or its hold has lapsed; in finalizeBooking, assert seat.status is HELD by this booking before writing BOOKED, and fail into BOOKING_PROCESSING with an alert when it is not.'],
+  ['F-02', 'P0', 'Waitlist', 'Documentation', true,
+    'The waitlist can be joined and offered but never claimed — there is no claim path anywhere in the product',
+    'waitlist.join, forTrip and reorder exist; a released seat moves an entry to CLAIM_OFFERED with a 30-minute expiry. Nothing can act on that offer: no claim API, no student surface, no admin promote, and the seat is not reserved for the offered student, so anyone can take it first.',
+    'typeof DLT.waitlist.claim === "undefined" in the live store; My Trips has no waitlist section; the admin Waitlist section offers only Move to top. SRS FR-013 requires a claim window; the project\u2019s own Final Verification page states the claim works.',
+    'An offered student can open the offer, is the only one who can take that seat for 30 minutes, and pays through the normal flow; expiry passes it to the next in line.',
+    'Add waitlist.claim(entryId) that holds the reserved seat for the offer window, a My Trips card that surfaces the offer with its countdown, and an admin view of offers outstanding.'],
+  ['F-03', 'P0', 'Payments', 'Developer', true,
+    'If the fare changes while a booking is unpaid, the booking can never be paid — the error loops forever',
+    'createIntent recalculates the amount, writes the new total, then throws PRICE_CHANGED. The throw rolls the whole transaction back, so the total is never updated and the next attempt throws the identical error. The message tells the student to "confirm the new total"; no such control exists.',
+    'Reproduced: fare moved 259 → 299 under a PAYMENT_PENDING booking; two consecutive createIntent calls both threw PRICE_CHANGED, stored totalAmount stayed 259 and priceChanged stayed false.',
+    'The student sees the new total, accepts or abandons it, and can pay the accepted amount. Master §52 treats a price change during booking as a handled interruption, not a dead end.',
+    'Persist the revalidated total and a pendingRepriceAt in one committed transaction, return it as data rather than an exception, and add the accept-the-new-total step to the review screen.'],
+  ['F-04', 'P0', 'Architecture', 'Documentation', false,
+    'There is still no server: seat allocation, payment truth, QR validity and permissions are all enforced in localStorage on the student\u2019s own machine',
+    'dlt-store.js is honest about this in its own header. Records live under one localStorage key; a session is a token in another; the acquirer is a sandbox object with buttons labelled "Pay the wrong amount" and "Decline the card"; concurrency is compare-and-set across tabs of one browser only.',
+    'PRD §8 and SRS FR-008 make Cashfree server-side confirmation the source of truth; the SRS non-functional list requires server-side authorization and secure payment handling. Any student can open devtools and grant themselves a confirmed booking, a valid pass or an admin session.',
+    'Every rule the specification assigns to the backend is enforced by a backend the client cannot reach around.',
+    'Treat the store as the API contract it was designed to be — its surface already mirrors the documented HTTP endpoints — and reimplement it server-side with real Cashfree orders and signed webhooks. Nothing above it needs to change shape.'],
+  ['F-05', 'P0', 'Refunds', 'Developer', true,
+    'Cancelling a complimentary (₹0) booking raises a ₹259 refund per seat',
+    'The refund amount is seats × (b.unitPrice || FARE). A complimentary booking has unitPrice 0, which is falsy, so it falls through to the ₹259 launch fare on a booking where nothing was ever charged.',
+    'Reproduced: a COMPLIMENTARY manual booking with totalAmount 0 and payment NOT_APPLICABLE quoted a ₹259 refund and cancel() returned refundAmount 259 with a refund record raised.',
+    'A booking that was never charged refunds nothing; a booking paid externally refunds through the external channel with an explicit operator decision.',
+    'Use b.unitPrice ?? FARE, and refuse to raise any refund where no SUCCESS payment of a non-zero amount exists on the booking.'],
+  ['F-06', 'P0', 'Security', 'Developer', false,
+    'Account security is demo-grade in ways that must not survive contact with real students',
+    'Passwords are SHA-256 with one shared constant salt and no stretching. requestReset returns the reset token to the caller, so anyone who knows an address can read its reset code. Login rate limiting keys on email alone and every failed attempt extends the lockout window, so a known student can be locked out indefinitely. Demo credentials are printed on the checkout screen.',
+    'auth.signIn / requestReset in dlt-store.js; the reset code is rendered into the account screen; demoHint is shown under the pay button in the booking flow.',
+    'Per-user salts and a slow KDF, reset tokens delivered only by email, rate limiting that cannot be weaponised against a victim, and no credentials in production UI.',
+    'Server-side auth with argon2/bcrypt; email delivery for reset; limit by IP plus account with a fixed window; gate the demo hint behind a build flag.'],
+
+  ['F-07', 'P1', 'Booking flow', 'User', false,
+    'Choosing a departure on the homepage does not choose it — every trip card links to the same generic booking page',
+    'All three trip CTAs, the sold-out "Join waitlist" CTA and the empty-state "Get notified" CTA use the same href with no trip identifier. The booking page always opens at step one, so the student picks the departure a second time.',
+    'Homepage renderVals: href is the booking page for every row regardless of trip.',
+    'Selecting Thursday 17:30 lands on Thursday 17:30\u2019s seat map. Join waitlist joins that trip\u2019s waitlist. Get notified opens the notify form.',
+    'Pass ?trip=<id> and have the booking page read it on mount; route the waitlist and notify CTAs to their own entry points.'],
+  ['F-08', 'P1', 'Booking flow', 'User', false,
+    'Signing in mid-booking throws the student back to the start — the seat they tapped is written down and never read',
+    'Tapping a seat while signed out stores the trip and seat in sessionStorage under dlt.pending and redirects to the account screen. After sign-in the account screen redirects to the booking page, which reads nothing: the trip, the seat and the pax details are gone.',
+    'dlt.pending is written in the booking page and appears nowhere else in the project.',
+    'Sign in, come back to the same seat map with the same seat held and the flow continuing.',
+    'Read dlt.pending on the booking page\u2019s mount, restore the trip, re-hold the seat and clear the key.'],
+  ['F-09', 'P1', 'Booking flow', 'Documentation', false,
+    'Seat selection requires an account, which contradicts the documented browse-freely rule and makes the review-step sign-in block unreachable',
+    'The store refuses seats.hold without a session, so the first seat tap bounces to sign-in. The carefully built inline sign-in panel on the review step can therefore never be seen — you cannot reach review without a held seat.',
+    'PRD §7 and SRS say authentication is required before payment; UX §4 and the booking copy say seats can be picked without an account. seats.hold throws denied for an anonymous user.',
+    'Anonymous students hold seats for the normal 10 minutes and authenticate once, at the point of payment, in the panel already built for it.',
+    'Allow anonymous holds keyed to a browser token and bind them to the account at booking creation — or delete the review-step auth panel and change the copy. Pick one; today the product says both.'],
+  ['F-10', 'P1', 'Boarding', 'Developer', false,
+    'The QR scanner only works in Chromium — boarding staff on an iPhone cannot scan at all',
+    'Camera scanning is built on window.BarcodeDetector, which Safari and Firefox do not implement. On an unsupported browser the camera button reads "Camera unsupported here" and the only path left is typing a 18-character token by hand at the coach door.',
+    'componentDidMount tests typeof window.BarcodeDetector; there is no decoder fallback in the project, although a full QR encoder is.',
+    'Boarding works on whatever handset is at the door.',
+    'Add a WASM/JS decode fallback (jsQR or ZXing) driving the same DLT.boarding.scan call, or specify and issue the scanning device.'],
+  ['F-11', 'P1', 'Boarding', 'User', false,
+    'The manual fallback asks for "a token or boarding code" but only accepts the token — typing the boarding code reads INVALID',
+    'boarding.scan matches the pass qrToken only. A boarding code (WX####) or booking code falls through to "This code is not a DLT boarding pass" and is written to the boarding event log as an invalid scan.',
+    'scan() looks up db.passes by qrToken; the manual input placeholder and the error toast both say "token or boarding code".',
+    'The documented scanner-failure path works: staff type the short code printed on the pass and get the same three-way result.',
+    'Resolve boarding codes and booking codes to their passengers, disambiguating multi-passenger bookings with a picker; keep the same validation chain.'],
+  ['F-12', 'P1', 'Refunds', 'Developer', false,
+    '"Refund outside policy" does not override the policy — it silently refunds nothing inside 12 hours',
+    'The Super Admin override calls the same bookings.cancel, which recomputes the refund from the 12-hour rule and returns zero. The toast then reports "Override applied", so the operator believes a refund was raised when none was.',
+    'adminOverride in the admin console prefixes the reason with "Policy override:" and changes nothing else about the call.',
+    'An override refunds an amount the operator chooses, records who overrode what and why, and never reports success on a zero-value action.',
+    'Add an explicit amount and override flag to cancel(), restrict it to Super Admin, and make the confirmation state the amount.'],
+  ['F-13', 'P1', 'Admin', 'Documentation', false,
+    'Four documented operator workflows exist in the data layer but have no screen: seat blocking, manual/complimentary bookings, changing a booking contact, and approving ID-change or deletion requests',
+    'admin.blockSeat, admin.createManualBooking and bookings.updateContact are fully implemented, audited and tested — and are called from nowhere in the admin console. The Requests section lists STUDENT_ID_CHANGE and ACCOUNT_DELETION rows with an action button wired only for GET_NOTIFIED, so review requests can be read and never resolved.',
+    'No reference to those three methods in DLT Admin.dc.html; canAct in the Requests list is gated to r.kind === "GET_NOTIFIED".',
+    'Master §13.4, §40, §14.3, §8.1 and §8.3 are operable by an operator, not only by a developer in the console.',
+    'Add a seat-block control to the trip seat map, a manual booking form behind Super Admin, a contact field on the booking detail, and approve/reject with reason on every request kind.'],
+  ['F-14', 'P1', 'Admin', 'Documentation', false,
+    'Vehicle management is status-only — no create, no registration edit, no seat configuration',
+    'The store\u2019s saveVehicle handles name, registration, row count with a booked-seat guard, and derived capacity. The console calls it with nothing but {id, status}. SRS FR-015 and Admin §4 require managing registration, capacity and compatible seat configurations.',
+    'The single saveVehicle call site in the admin file passes only a status.',
+    'Operators add a coach, correct a registration and change a seat configuration when no seats are sold, with the conflict rules the store already enforces.',
+    'Build the vehicle form against the existing method; it needs no new business logic.'],
+  ['F-15', 'P1', 'Account', 'Documentation', false,
+    'Email verification is unreachable, and account deletion can be requested endlessly',
+    'auth.verifyEmail exists and nothing links to it: a student who signs up sees "not verified" on their profile forever with no way to act. Separately, deletionPending is hardcoded false, so the "already filed" state never appears and every click files another request.',
+    'No caller for verifyEmail; deletionOpen: true, deletionPending: false as literals in the account screen.',
+    'SRS FR-001 verification is completable; a filed deletion request shows as filed and cannot be duplicated.',
+    'Surface the verification token path (and, in production, the email), and read the pending request from notifications rather than hardcoding it.'],
+  ['F-16', 'P1', 'Mobile', 'User', false,
+    'On a phone the booking summary and the only Continue button sit below the entire seat map',
+    'Below 880px the two-column grid collapses and the aside — which holds the hold countdown, the running total and the single primary action — falls after the main column. On the seat step that means scrolling past 44 seats to find the button, with no indication it is there.',
+    'The 880px rule sets one column and static positioning on the aside; the primary CTA exists only inside it.',
+    'The price, the hold clock and the primary action stay reachable on a phone, as UX §4 intends by calling the summary persistent.',
+    'Make the summary a sticky bottom bar under 880px, or duplicate the primary action at the foot of each step.'],
+  ['F-17', 'P1', '3D', 'Documentation', false,
+    'The coach never stops, and the camera never leaves the rear three-quarter — two of the eleven documented journey beats are not implemented',
+    'The 3D specification calls for the bus to slow and stop at Woxsen and at Miyapur, with occasional front, side and aerial moves especially at the endpoints. The speed profile only dips 34% at each stop and never reaches zero; the rig table holds azimuth between 140° and 165° for the whole run, so every frame of the journey is shot from behind-left.',
+    'spDip in journey.js applies a 0.34 Gaussian reduction; RIG_AZIM = [146,149,140,148,158,150,155,165].',
+    '3D §3 steps 4 and 9 (slow/stop at each endpoint) and §5 (occasional front/side/aerial at endpoints).',
+    'Take the speed to zero across the stop windows and hold it there over a scroll range; add two authored endpoint shots — a front three-quarter at Woxsen, a high side at Miyapur — as additional rig keys rather than as cuts.'],
+  ['F-18', 'P1', 'Performance', 'Developer', false,
+    'The 4.8 MB coach loads after first paint and pops into a scene the student is already scrolling; if it fails, nothing says so',
+    'dlt-coach.glb is 4,783,488 bytes, fetched on requestIdleCallback or first scroll. The loading overlay is dismissed on the first painted frame — the road — so the bus arrives late into a moving shot. The element dispatches journeycoachfailed on error; the homepage listens for journeyready and journeyfailed only, so a failed model leaves an empty road with no message.',
+    'Asset size on disk; _loadCoach and the homepage event listeners.',
+    'The hero subject is present when the hero is revealed, or its absence is explained.',
+    'Draco/meshopt-compress the GLB (a coach of this complexity should land near 300–600 KB), hold the overlay until the coach is in the scene or a short budget expires, and handle journeycoachfailed.'],
+  ['F-19', 'P1', 'Boarding', 'Documentation', false,
+    'Boarding staff have no assigned trip — the scanner guesses which trip they are on and they cannot correct it',
+    'The specification scopes Boarding Staff to their assigned trip. There is no assignment in the data model. The scanner picks the first BOARDING trip, else the first BOOKING_CLOSED, else the first OPEN, and the trip picker is hidden from staff, so on a two-coach evening they are locked to whichever trip sorts first.',
+    '_tripId() in the admin console; canPickTrip is !isStaff.',
+    'Staff are assigned to a trip by operations and scan against it; wrong-trip passes are refused on that basis.',
+    'Add a staffing assignment to the trip entity and drive both the scanner scope and the manifest from it.'],
+  ['F-20', 'P1', 'Booking flow', 'User', false,
+    'Two moments tell the student something untrue: removing your last seat reports a hold expiry, and the expiry screen promises details that are not restored',
+    'The one-second expiry watcher fires whenever no seats are held, so deliberately removing your last seat from the summary shows "Your seats went back on sale". The expiry screen then says the passenger details "are kept — pick your seats again and they\u2019ll be reapplied in order"; details are keyed to seat numbers, so choosing different seats loses them and no reapply-in-order logic exists.',
+    '_expireCheck in the booking page; state.pax is keyed by seat number and never remapped.',
+    'A deliberate removal reads as a removal. A promise about kept details is either implemented or not made.',
+    'Distinguish user-initiated release from expiry, and either remap stored details onto the new seats in order or change the copy.'],
+
+  ['F-21', 'P2', 'Admin', 'Developer', false,
+    'The reports screen recomputes every report on every render just to print row counts',
+    'reportButtons runs DLT.admin.report() for nine to eleven report kinds, and posttrip separately, on each render — and renders fire on a six-second timer plus every store change. Each report walks bookings, passengers, refunds and reviews.',
+    'reportButtons and post in the admin renderVals.',
+    'Counts are cheap or deferred; the console does not do full-table scans at idle.',
+    'Compute counts once per filter change with a memo keyed on the filter, or drop the counts until a report is opened.'],
+  ['F-22', 'P2', 'Admin', 'Developer', false,
+    'The Bookings report ignores the trip filter, and the post-cancellation export exports everyone',
+    'report("bookings") filters by date range and status but never reads filter.tripId, while the UI presents the trip selector as applying to all reports. The "export the affected list" action after a trip cancellation calls exportCsv("passengers", {tripId: null}) — every passenger in the system.',
+    'The bookings branch of admin.report; exportAffected in the admin console.',
+    'A filter that is shown is a filter that applies; an affected-passenger export contains the affected passengers.',
+    'Honour tripId in the bookings branch and pass the cancelled trip\u2019s id to the export.'],
+  ['F-23', 'P2', 'Admin', 'Developer', false,
+    'Any manual status change pins a trip out of automation permanently',
+    'setTripStatus sets statusPinned = true, and sweep() refuses to advance a pinned trip. Closing booking ten minutes early therefore means an operator must also hand-drive boarding, departure and completion for that trip, forever.',
+    'setTripStatus and the pinned guard in sweep().',
+    'A correction corrects one transition; the clock resumes afterwards unless the trip is cancelled.',
+    'Pin the single transition that was overridden rather than the trip, or expire the pin at the next scheduled boundary.'],
+  ['F-24', 'P2', 'Boarding pass', 'User', false,
+    'Print / PDF on a boarding pass prints the whole dashboard',
+    'The button calls window.print(). The print stylesheet hides the header and the action buttons but nothing else, so the output is the greeting, banners, next-trip panel, trip history and quick actions, with the pass somewhere inside it.',
+    'printPass: () => print(); the @media print block hides only [data-m="noprint"].',
+    'One pass, one page, scannable.',
+    'Print-scope to the pass container, or reuse the existing savePng canvas as the PDF source.'],
+  ['F-25', 'P2', 'Accessibility', 'User', false,
+    'The journey takes the mouse wheel away from the whole page while it is on screen',
+    'A non-passive wheel listener on window intercepts and calls preventDefault whenever the pinned section is in range, remapping one notch to a fixed fraction of the journey and animating the scroll itself. Trackpad inertia is remapped to raw deltas, and keyboard scrolling (space, PageDown, arrows) has no journey path at all.',
+    '_onWheel and _wheelStep in journey.js.',
+    'Scroll behaves the way the user\u2019s device and settings say it should; the journey is reachable by keyboard.',
+    'Drop the wheel takeover and drive t from the native scroll position only (which the frame loop already does), and add keyboard stepping through the beats.'],
+  ['F-26', 'P2', 'Accessibility', 'User', false,
+    'The cancel, receipt and reason dialogs are not dialogs',
+    'They are inline sections carrying role="dialog" with no focus move, no focus trap, no Escape and no return focus. A keyboard or screen-reader user is told a dialog opened and left where they were, and destructive confirmations (cancel a booking, deny boarding, refund a duplicate) are among them.',
+    'The cancel and receipt panels in the dashboard; the shared reason prompt in the admin console.',
+    'A dialog takes focus, traps it, closes on Escape and returns focus to the trigger.',
+    'Use <dialog> with showModal, or add the focus contract to the existing panels.'],
+  ['F-27', 'P2', '3D', 'Developer', false,
+    'The signage is drawn in a fallback typeface',
+    'The WOXSEN board and both stop markers are drawn into canvases during scene construction, which runs as soon as the module loads. Archivo is fetched from Google Fonts in parallel and is normally not ready yet, so the lettering in the 3D world is set in Helvetica or the system sans while every DOM element around it is Archivo.',
+    'signTexture() and markerTexture() run inside _initScene; the font link is a stylesheet request in the same document.',
+    'The world and the page share one typeface.',
+    'await document.fonts.load("700 88px Archivo") before building the textures, and redraw them if the font arrives late.'],
+  ['F-28', 'P2', 'Content', 'User', false,
+    'Small gaps at the edges of the journeys: the boarding token is printed in clear text beside the QR and on the saved image, notify requests never carry the trip they were made from, and the mobile header hides both Sign in and My trips',
+    'The pass caption reads "Token dlt.xxxxxxxxxxxxxx" and savePng writes the same token across the bottom of the downloadable image — a photograph of a screen is enough to copy it. requestNotify accepts a tripId that no caller passes. Below 720px the homepage nav hides Sign in and My trips, and only My trips reappears in the footer.',
+    'qrCaption and savePng in the dashboard; notify() in the booking page; the 720px rules on the homepage.',
+    'A secure token is not also printed as text; a notify request knows what it was about; a signed-out phone user can find sign-in.',
+    'Drop the token caption to a short reference, pass the trip through, and keep an account entry in the mobile header.'],
+  ['F-29', 'P2', 'Data', 'Documentation', false,
+    'The audit log is capped at 600 entries in a system whose specification says operational records are never deleted',
+    'audit() truncates auditLogs to 600 with a comment acknowledging the real store would not. On a busy day of scans, status changes and reconciliations, the oldest evidence rolls off first.',
+    'db.auditLogs.length = 600 in dlt-store.js; Admin §9 and §10.',
+    'Retention is a documented policy, applied server-side, with export before expiry.',
+    'Remove the cap when the store becomes a server; until then, note the limitation in the audit screen.'],
+
+  ['F-30', 'P3', 'Code health', 'Developer', false,
+    'Small pockets of dead code and unreachable states',
+    'bookings.mine filters ABANDONED out and then contains a bucket branch for it; the passengers report masks phone numbers for BOARDING_STAFF, a role that cannot run reports; the account screen returns name and email twice in one object literal and works only because the later key wins.',
+    'Read across dlt-store.js and DLT Account.dc.html.',
+    'No branch exists for a state that cannot occur.',
+    'Remove them while touching those files for the P0 work.'],
+  ['F-31', 'P3', 'Typography', 'User', false,
+    'The 8–9px Martian Mono metadata is below comfortable reading size, and there is a lot of it',
+    'Labels, statuses, kickers and table headers across the admin console, the boarding pass and the trip rows sit at 8 to 9.5px with wide tracking. It is a deliberate and handsome choice at desktop; on a phone at arm\u2019s length it is a texture rather than a label.',
+    'Consistent across the four screens.',
+    'Small type stays legible on the device the audience actually uses.',
+    'Raise the smallest tier to 10–11px on touch widths and keep the tracking.'],
+];
+
+const PARTS = [
+  ['a', 'Section A', 'What is genuinely working', 'The gap between this build and the previous one is large, and the strongest parts should be protected from the next round of changes.', [
+    ['Keep', 'One data layer with real authority.', 'Every rule lives in dlt-store.js and the screens are clients of it. Seats, holds, prices, statuses and permissions are read back after every action rather than assumed. This is the single best decision in the project and the reason the rest of the audit could be specific.'],
+    ['Keep', 'Payment truth is never taken from the browser.', 'The interface can create an intent and ask for reconciliation; only an applied provider event can make a payment SUCCESS. Duplicate charges, amount mismatches and finalisation failures all have real states, real records and honest student-facing copy that says do not pay again.'],
+    ['Keep', 'The boarding chain is complete and least-privilege.', 'Scan validation checks pass, booking, payment, trip, cancellation, refund, completion and prior boarding, in that order, and records an event for every attempt including invalid ones. Boarding staff never receive a phone number, from the manifest or from a booking view.'],
+    ['Keep', 'Reasons and audit entries are enforced, not requested.', 'Manual boarding, denial, no-show, seat blocking, waitlist reorder, trip cancellation and emergency-contact reveal all refuse to proceed without a reason, and all write actor, action, before, after and reason.'],
+    ['Keep', 'The reduced-motion path is real.', 'It is a purpose-built static route section with the same facts, not the 3D scene with its animations disabled, and booking never depends on WebGL succeeding.'],
+    ['Keep', 'The visual language.', 'Paper, ink, one green, Archivo with Martian Mono for metadata, 2px radii, hairline rules. It is consistent across four screens and an admin console, it reads as one product, and it does not look like anything generic.'],
+  ]],
+  ['b', 'Section B', 'What is confusing for a real user', '', [
+    ['User', 'The departure you chose is not the departure you get.', 'Picking a time on the homepage drops you at a page that asks you to pick a time. It is the first interaction of the funnel and it discards the decision the student just made. (F-07)'],
+    ['User', 'Signing in costs you your seat.', 'The bounce to the account screen loses the trip, the seat and anything typed. The product wrote the state down and then never looked at it. (F-08)'],
+    ['User', 'You are told you can browse without an account until you tap a seat.', 'The FAQ and the sign-up blurb both promise seat selection without signing in. The first seat tap redirects. (F-09)'],
+    ['User', 'Removing a seat is reported as an expiry.', 'Deliberate and accidental loss of seats produce the same screen and the same wording. (F-20)'],
+    ['User', 'On a phone the price and the button are below everything.', 'The summary is called persistent and stops being persistent at exactly the width where it matters most. (F-16)'],
+    ['User', 'The waitlist promises a 30-minute claim window that cannot be claimed.', 'A student who joins is told what will happen and then has no surface on which it can happen — My Trips does not mention the waitlist at all. (F-02)'],
+  ]],
+  ['c', 'Section C', 'What is technically weak', '', [
+    ['Dev', 'Late events are applied without regard to the state they land in.', 'The provider-event applier checks the payment but not the booking, which is how an abandoned booking becomes confirmed. (F-01)'],
+    ['Dev', 'Finalisation trusts the seat.', 'finalizeBooking writes BOOKED over whatever the seat currently is. It is the last line of defence against double allocation and it does not check. (F-01)'],
+    ['Dev', 'Business errors are thrown out of transactions that must persist.', 'The price-change path writes the corrected total and then throws, rolling the correction back. The same class of mistake was already found and fixed once in sign-in rate limiting; the pattern survives here. (F-03)'],
+    ['Dev', 'Money arithmetic falls back through falsy zero.', 'unitPrice || FARE turns a free seat into a ₹259 refund. (F-05)'],
+    ['Dev', 'Render is treated as free.', 'Full report computations, dashboard aggregation and per-row canRate checks all run inside renderVals, on a timer and on every store broadcast. (F-21)'],
+    ['Dev', 'Browser-capability assumptions are single-vendor.', 'BarcodeDetector for scanning, and canvas letterSpacing in the 3D texture drawing, are both Chromium-only. (F-10, F-27)'],
+  ]],
+  ['d', 'Section D', 'What contradicts the documentation', '', [
+    ['Doc', 'FR-013 waitlist.', 'Documented as join, priority, 30-minute claim, expiry to the next student. Implemented as join, priority and an offer nobody can accept. The project\u2019s own Final Verification page states this requirement is met. (F-02)'],
+    ['Doc', 'FR-008 / PRD §8 payments.', 'Documented as Cashfree with server-side webhook verification. Implemented as a labelled sandbox object in the page, which the code is honest about and the verification page is less so. (F-04)'],
+    ['Doc', 'PRD §7 / UX §5 browsing.', 'Documented as browse and select seats without an account. Implemented as sign-in required at the first seat. (F-09)'],
+    ['Doc', '3D §3 and §5.', 'Documented as the bus slowing and stopping at both endpoints with occasional front, side and aerial camera work. Implemented as a continuous 34% slowdown from one fixed camera angle. (F-17)'],
+    ['Doc', 'Admin §4 / FR-015 vehicles.', 'Documented as managing registration, capacity and seat configuration. Implemented as a status dropdown. (F-14)'],
+    ['Doc', 'Master §13.4, §40, §14.3, §8.1, §8.3.', 'Seat blocking, manual bookings, booking-contact change, ID-change review and deletion review are all specified, all built in the store, and none reachable by an operator. (F-13)'],
+    ['Doc', 'Admin §9–§10 retention.', 'Documented as never deleted. Implemented with a 600-entry cap. (F-29)'],
+    ['Doc', 'SRS non-functional.', 'Server-side authorization, secure payment handling and secure QR tokens are all specified; all three are currently client-side. (F-04, F-06)'],
+  ]],
+  ['e', 'Section E', 'What is missing', '', [
+    ['Missing', 'The waitlist claim, end to end.', 'API, student surface, seat reservation during the window, and the admin view of outstanding offers.'],
+    ['Missing', 'Operator screens for five built capabilities.', 'Seat blocking, manual and complimentary bookings, booking-contact change, ID-change approval, deletion approval.'],
+    ['Missing', 'Vehicle create and edit.'],
+    ['Missing', 'Email verification anywhere in the interface.'],
+    ['Missing', 'A trip assignment for boarding staff.'],
+    ['Missing', 'A non-Chromium scanning path.'],
+    ['Missing', 'Deep links: no trip id, no booking id, no admin section in the URL. Browser back and forward move between the four pages but never within a flow, and a refresh during seat selection returns to step one with the seats still held.'],
+    ['Missing', 'A support contact. Correctly shown as pending rather than faked, but Master §34 remains unmet and the Help column currently offers no way to reach a human.'],
+  ]],
+  ['f', 'Section F', 'What is broken', '', [
+    ['Broken', 'Seat integrity under a late payment.', 'Reproduced: two confirmed bookings and two valid passes on one seat. (F-01)'],
+    ['Broken', 'The fare-change path.', 'Reproduced: a booking that can never be paid. (F-03)'],
+    ['Broken', 'Complimentary refunds.', 'Reproduced: ₹259 refunded against ₹0 paid. (F-05)'],
+    ['Broken', 'The policy override.', 'Reports success, refunds nothing. (F-12)'],
+    ['Broken', 'The manual boarding-code fallback.', 'Advertised, refused. (F-11)'],
+    ['Broken', 'The trip filter on the bookings report, and the affected-passenger export.', '(F-22)'],
+  ]],
+  ['g', 'Section G', 'What should be redesigned', 'Not restyled — the underlying interaction is wrong.', [
+    ['Redesign', 'The entry into booking.', 'Homepage selection, sign-in continuity and the seat-hold lifecycle are one flow pretending to be three pages. Give the flow a URL, carry the trip and seat through authentication, and let a refresh land where it left off.'],
+    ['Redesign', 'The mobile booking layout.', 'The summary should be a bottom bar, not a column that falls to the end.'],
+    ['Redesign', 'The endpoints of the 3D journey.', 'The scroll–bus–camera–environment system genuinely is one system, and that is the hardest part and it is done. What is missing is event: the coach does not stop, so arriving at Woxsen and arriving at Miyapur feel the same as the road between them. Stopping at the two stops, and moving the camera once at each, would deliver the documented experience without touching the rig architecture.'],
+    ['Redesign', 'The waitlist, as a student-facing object.', 'It currently exists only as a paragraph after you join. It needs a place in My Trips with a state, a position and a countdown.'],
+    ['Redesign', 'Destructive confirmations.', 'Cancel a booking, deny boarding, refund a charge — these should be real dialogs with real focus behaviour, not inline panels.'],
+  ]],
+  ['h', 'Section H', 'What should not be touched', '', [
+    ['Leave', 'The store\u2019s architecture and API shape.', 'It is deliberately shaped like the documented HTTP surface. Keep it; move it to a server unchanged.'],
+    ['Leave', 'The payment state machine and its student-facing copy.', 'Pending, held, processing, discrepancy and duplicate all read calmly and all say do not pay again. This is the best writing in the product.'],
+    ['Leave', 'The scan validation order and the boarding event log.'],
+    ['Leave', 'The reason-prompt pattern in the admin console.', 'One shared component, mandatory text, audit-backed. Only its focus behaviour needs work.'],
+    ['Leave', 'The visual system.', 'Palette, type pairing, hairlines, the green centre-line motif carried from the road into the UI.'],
+    ['Leave', 'The reduced-motion static route.'],
+    ['Leave', 'store-tests.html.', 'Extend it with the four reproduced defects as regression cases rather than replacing it.'],
+  ]],
+  ['i', 'Section I', 'P0 — launch blockers', '', [
+    ['P0', 'F-01', 'Late payment resurrects an abandoned booking and double-allocates the seat.'],
+    ['P0', 'F-02', 'The waitlist cannot be claimed.'],
+    ['P0', 'F-03', 'A fare change strands a booking permanently.'],
+    ['P0', 'F-04', 'No server: all authority is client-side and editable.'],
+    ['P0', 'F-05', 'Free bookings refund ₹259 a seat.'],
+    ['P0', 'F-06', 'Demo-grade auth, reset tokens returned to the caller, weaponisable lockout.'],
+  ]],
+  ['j', 'Section J', 'P1 — important', '', [
+    ['P1', 'Flow', 'F-07 trip choice lost · F-08 sign-in loses the seat · F-09 anonymous browsing contradiction · F-20 misleading expiry and details copy · F-16 mobile summary.'],
+    ['P1', 'Operations', 'F-13 five missing operator screens · F-14 vehicle management · F-19 staff trip assignment · F-12 the override that does not override.'],
+    ['P1', 'Boarding', 'F-10 Chromium-only scanning · F-11 boarding-code fallback.'],
+    ['P1', 'Account', 'F-15 email verification and duplicate deletion requests.'],
+    ['P1', '3D', 'F-17 no stops and one camera angle · F-18 4.8 MB model, late pop, unhandled failure.'],
+  ]],
+  ['k', 'Section K', 'P2 — improvements', '', [
+    ['P2', 'Correctness', 'F-22 report filter and export scope · F-23 permanent status pinning · F-29 audit cap.'],
+    ['P2', 'Performance', 'F-21 reports recomputed every render.'],
+    ['P2', 'Accessibility', 'F-25 wheel takeover and no keyboard journey · F-26 dialogs that are not dialogs.'],
+    ['P2', 'Craft', 'F-24 print output · F-27 fallback font in the 3D signage · F-28 token in clear text, untracked notify requests, hidden mobile account link.'],
+  ]],
+  ['l', 'Section L', 'P3 — polish', '', [
+    ['P3', 'F-30', 'Dead branches and duplicate object keys.'],
+    ['P3', 'F-31', 'Smallest type tier below comfortable phone legibility.'],
+    ['P3', 'Detail', 'FAQ summary markers are hidden only in Chromium; the sold-out row\u2019s 0.72 opacity drops its text below 4.5:1; the "Skip the journey" control sits directly under the progress rail at short viewport heights.'],
+  ]],
+  ['m', 'Section M', 'Recommended execution order', 'Sequenced so that each step is testable before the next begins, and so nothing is built twice.', [
+    ['01', 'Stop the money and seat defects where they are.', 'F-01, F-05, F-03, F-12. Four contained changes in dlt-store.js plus one review-screen step. Add all four to store-tests.html as regression cases first, watch them fail, then fix. This is a day of work and it removes three of the six P0s.'],
+    ['02', 'Decide the backend, then port the store.', 'F-04 and F-06 are one project. The API shape already exists; the work is a server, a database, Cashfree orders with signed webhooks, and sessions. Do not build new features into the client store before this decision — everything built now must be built again.'],
+    ['03', 'Close the waitlist.', 'F-02. Claim API with a reserved seat, My Trips surface, admin offers view. It is the only P0 that is a missing feature rather than a defect.'],
+    ['04', 'Repair the funnel.', 'F-07, F-08, F-09, F-20, F-16. Trip in the URL, state through sign-in, one answer on anonymous browsing, honest empty and expiry copy, mobile summary bar. Highest conversion value per hour in the list.'],
+    ['05', 'Finish operations.', 'F-13, F-14, F-19, F-11, F-10. Mostly forms over methods that already exist and are already audited.'],
+    ['06', 'Give the journey its two stops.', 'F-17, F-18. Speed to zero at both endpoints, one camera move at each, compress the GLB, hold the loader until the coach lands. Then re-review the cinematography on a real screen — it cannot be judged from source.'],
+    ['07', 'Accessibility and performance pass.', 'F-25, F-26, F-21, F-24, F-27.'],
+    ['08', 'Polish, then re-audit.', 'P3, then re-run this list end to end on a real handset and a real scanner.'],
+  ]],
+];
+
+const SCORES = [
+  ['User experience', '6.5', '#DFA85C', 65, 'Individually excellent screens; the seams between them lose the student\u2019s trip, seat and place twice in the first minute.'],
+  ['Functional completeness', '6.0', '#DFA85C', 60, 'The store implements nearly everything specified; five capabilities have no interface and the waitlist has no ending.'],
+  ['Documentation compliance', '5.5', '#DFA85C', 55, 'Eight direct contradictions, two of them in requirements the project\u2019s own verification page marks as met.'],
+  ['Visual / design quality', '8.5', '#5FAE86', 85, 'Consistent, confident, un-generic, and carried across an admin console without dilution. The strongest dimension by a distance.'],
+  ['3D experience', '6.0', '#DFA85C', 60, 'One continuous scroll–bus–camera system, which is the hard part, but no stops, one camera angle, a 4.8 MB late-loading model, and unverifiable here.'],
+  ['Responsive quality', '6.0', '#DFA85C', 60, 'Purpose-built reflows exist; the phone loses the booking summary below the fold and the smallest type tier is under-sized.'],
+  ['Technical readiness', '3.0', '#D14A2C', 30, 'A reproducible double-booking, a reproducible payment dead end, a reproducible bad refund, and no server behind any rule.'],
+];
+
+class Component extends DCLogic {
+  state = { sev: 'All', view: 'Detail' };
+
+  renderVals() {
+    const st = this.state;
+    const sevOf = (s) => ({ P0: P0, P1: P1, P2: P2, P3: P3 }[s]);
+    const all = FINDINGS.map(f => ({
+      id: f[0], sev: f[1], cat: f[2], persp: f[3], proved: f[4],
+      title: f[5], now: f[6], ev: f[7], want: f[8], fix: f[9], accent: sevOf(f[1]),
+    }));
+    const counts = { All: all.length };
+    ['P0', 'P1', 'P2', 'P3'].forEach(s => { counts[s] = all.filter(f => f.sev === s).length; });
+    const shown = st.sev === 'All' ? all : all.filter(f => f.sev === st.sev);
+    const detail = st.view === 'Detail';
+
+    const PHASE1 = [
+      ['F-01', 'Fixed', 'A settlement that lands after the hold lapsed no longer confirms the booking: the payment is recorded as SUCCESS, a refund is raised automatically, the seat is not reissued and operations get an alert. finalizeBooking now refuses any seat that is not already ours or genuinely free. Four assertions, including the two-student conflict that produced the double booking.'],
+      ['F-02', 'Fixed', 'A released seat is reserved for the offered student for the whole 30-minute window; waitlist.claim turns the reservation into a normal hold, decline passes it on immediately, expiry releases and re-offers to the next student, and a paid claim converts the entry. Claim surfaces added to the booking flow and My Trips.'],
+      ['F-03', 'Fixed', 'A fare change now returns a repricing decision instead of throwing an exception that rolled its own correction back. The new total and unit price persist, stale intents expire, and the student accepts the new fare on the review screen before anything is charged.'],
+      ['F-05', 'Fixed', 'Refunds are capped by money actually received minus money already returned, and the unit price no longer falls through zero, so a complimentary booking refunds nothing. Caught a second instance in passing: a repriced booking was refunding its old fare.'],
+      ['F-06', 'Fixed', 'PBKDF2-SHA256 at 120,000 iterations with a per-account random salt; reset codes are never returned to the requester (a Super Admin support lookup replaces it, with a mandatory reason and an audit entry); the lockout window is fixed from the first failure so it cannot be extended against a victim.'],
+      ['F-04', 'Blocked', 'Not fixable in a browser and not pretended otherwise. No Cashfree, no webhooks, no server authority, no cross-device concurrency, no email. Documented in PRODUCTION_BACKEND.md with the porting order and the demo affordances that must not ship.'],
+    ];
+
+    const PHASE2 = [
+      ['F-07', 'Fixed', 'Every homepage departure carries its own id: Select seats opens that trip\u2019s seat map, a sold-out row joins that trip\u2019s waitlist, and the empty state opens the notify form. The query string is consumed and stripped on arrival.'],
+      ['F-09', 'Fixed', 'Resolved the way \u00a77.2 actually reads \u2014 "they may begin the booking flow without signing in; authentication is required before payment". A hold now belongs to a holder: the account where there is one, an anonymous browser token where there is not. The review-step sign-in panel, previously unreachable, is now the single point where the account is required.'],
+      ['F-08', 'Fixed', 'Signing in adopts every seat the browser was holding, so authenticating costs nothing. The in-flight flow (trip, step, passenger details, contact) also survives a reload. Verified live: held 1B signed out, filled details, signed in on the review screen \u2014 seat, details and step all intact, no bounce.'],
+      ['F-20', 'Fixed', 'Taking a seat off the booking returns to the seat map with "Seat 1B removed. Nothing has been charged" instead of the expiry screen. A genuine expiry now keeps the entered details in order and reapplies them to the next seats picked, so that screen\u2019s promise is true.'],
+      ['F-16', 'Fixed', 'Under 880px the summary becomes a fixed bottom bar carrying the seat count, the live hold countdown, the total and a 48px primary action, with the page padded so nothing hides behind it. Measured at 390 and 768: position fixed, pinned to the viewport bottom, action always in view.'],
+    ];
+
+    const PHASE3 = [
+      ['F-12', 'Fixed', 'A genuine override path, not the policy call wearing a different label. admin.overrideRefund takes an explicit amount and a mandatory reason, is Super Admin only, refuses \u20b90, refuses more than the money still held, optionally cancels and releases the seats, and returns the amount it actually raised \u2014 the console now says "\u20b9100 refund created on DLT-40989. 1 seat released. \u20b9199 still refundable" instead of "Override applied".'],
+      ['F-13', 'Fixed', 'Five operator workflows that existed only in the data layer now have screens: a per-trip seat map that blocks and releases seats with a mandatory reason; a Super-Admin manual booking form (complimentary at \u20b90 or paid-externally, never presented as Cashfree); booking contact editing; and Approve/Reject with a reason on ID-change and account-deletion requests. Approving an ID change really moves the protected field; approving a deletion anonymises the person and keeps every financial and boarding record. A second deletion request while one is pending is refused.'],
+      ['F-14', 'Fixed', 'Vehicles can be created and edited \u2014 name, registration, row count with live derived capacity, and status \u2014 on top of the existing saveVehicle validation. The guards hold and now explain themselves: "Seat configuration cannot change while this vehicle has booked seats" and "Reassign published trips before taking this vehicle out of service".'],
+      ['F-19', 'Fixed', 'Trips carry assigned boarding staff. The store decides the scanner\u2019s trip from that assignment and ignores whatever the client sends, so staff cannot reach another trip through the UI, a URL or storage; unassigned staff get a clear refusal instead of a guessed trip. The validation chain is untouched \u2014 a pass from another departure is still INVALID.'],
+    ];
+
+    const PHASE4 = [
+      ['QR', 'Fixed', 'THE BIG ONE, and it was not on the original list: every boarding pass QR this product has ever issued was undecodable. The audit could only flag the encoder as unverified because nothing here could read one back. Putting a real decoder in front of it took two minutes and it failed at every version. In dlt-qr.js\u2019s reserved-area loop the two guards were swapped, which overwrote the dark module and left one format cell holding a data bit \u2014 symbols that look perfectly like QR codes and scan nowhere. Fixed, and the suite now renders a real pass and decodes it back to exactly its token at both 320px and the 176px the phone shows.'],
+      ['F-10', 'Fixed', 'Native BarcodeDetector where the browser has it, jsQR everywhere it does not \u2014 Safari, Firefox and iOS included. The decoder only decodes: DLT.boarding.scan is still the sole authority for pass, booking, payment, trip, cancellation, refund and prior boarding. Camera refusal, no camera and no decoder each produce their own plain-English message that points at code entry rather than a dead end.'],
+      ['F-11', 'Fixed', 'The manual fallback now accepts what the label always promised: a boarding code, a booking ID or a pass token, in any case, with spaces. Resolution happens before the validation chain, so hand-typed codes run through exactly the same checks \u2014 there is no second path. A code that names a multi-passenger booking returns CHOOSE with that booking\u2019s passengers and boards nobody until staff pick one; the pick is recorded as code entry, not as a scan.'],
+      ['F-19', 'Holds', 'Re-verified under the new code path: a staff member supplying another trip\u2019s id has it ignored in favour of their assignment, another trip\u2019s manifest is still refused, unassigned staff cannot scan or type codes at all, and a pass from another departure is still INVALID.'],
+    ];
+
+    return {
+      phase4: PHASE4.map(p => ({ id: p[0], state: p[1], body: p[2],
+        fg: p[1] === 'Holds' ? '#0E4B34' : '#0E4B34' })),
+      phase3: PHASE3.map(p => ({ id: p[0], state: p[1], body: p[2],
+        fg: p[1] === 'Fixed' ? '#0E4B34' : '#8A5A0E' })),
+      suiteLabel: SUITE.total + ' / ' + SUITE.total + ' passing',
+      suiteTotal: String(SUITE.total),
+      suiteOriginal: String(SUITE.original),
+      suiteNew: String(SUITE.total - SUITE.original),
+      suiteOriginalLabel: SUITE.original + ' / ' + SUITE.original + ' pass',
+      phase1: PHASE1.map(p => ({ id: p[0], state: p[1], body: p[2],
+        fg: p[1] === 'Fixed' ? '#0E4B34' : '#8A5A0E' })),
+      phase2: PHASE2.map(p => ({ id: p[0], state: p[1], body: p[2],
+        fg: p[1] === 'Fixed' ? '#0E4B34' : '#8A5A0E' })),
+      scores: SCORES.map(s => ({ k: s[0], v: s[1], fg: s[2] })),
+      scoreRows: SCORES.map(s => ({ k: s[0], v: s[1], fg: s[2], bar: s[3] + '%', why: s[4] })),
+      tally: [
+        { k: 'Findings recorded', v: String(all.length), fg: '#0E1014' },
+        { k: 'Launch blockers', v: String(counts.P0), fg: P0 },
+        { k: 'Important', v: String(counts.P1), fg: P1 },
+        { k: 'Reproduced live', v: String(all.filter(f => f.proved).length), fg: '#0E4B34' },
+        { k: 'Rule suite at audit time', v: SUITE.original + ' / ' + SUITE.original + ' pass', fg: '#0E4B34' },
+      ],
+      rail: [
+        ['00', 'Method', '#0E4B34', '#method'],
+        ['P1', 'Phases 1–4 · fixed', '#0E4B34', '#phase1'],
+        ['10', 'Master findings', '#0E1014', '#findings'],
+      ].concat(PARTS.map(p => [p[1].replace('Section ', '').toUpperCase(), p[2], '#C9C6BC', '#' + p[0]]))
+        .concat([['N', 'Verdict & scoring', '#A33A22', '#verdict']])
+        .map(r => ({ k: r[0], title: r[1], mark: r[2], href: r[3] })),
+      chips: ['All', 'P0', 'P1', 'P2', 'P3'].map(s => ({
+        label: s, n: counts[s] ? '· ' + counts[s] : '· 0', on: st.sev === s,
+        bg: st.sev === s ? '#0E1014' : '#FFFFFF',
+        fg: st.sev === s ? '#F7F5F0' : '#3D423C',
+        bd: st.sev === s ? '#0E1014' : 'rgba(14,16,20,.2)',
+        onPick: () => this.setState({ sev: s }),
+      })),
+      views: ['Detail', 'Compact'].map(v => ({
+        label: v, on: st.view === v,
+        bg: st.view === v ? '#0E4B34' : '#FFFFFF',
+        fg: st.view === v ? '#F7F5F0' : '#3D423C',
+        bd: st.view === v ? '#0E4B34' : 'rgba(14,16,20,.2)',
+        onPick: () => this.setState({ view: v }),
+      })),
+      shownLabel: shown.length + ' of ' + all.length + ' findings',
+      findings: shown, detail, compact: !detail, noneShown: shown.length === 0,
+      parts: PARTS.map(p => ({
+        id: p[0], kicker: p[1], title: p[2], lede: p[3],
+        items: p[4].map(i => ({
+          tag: i[0], head: i[1], body: i[2] || '',
+          tagFg: i[0] === 'P0' || i[0] === 'Broken' ? P0
+            : i[0] === 'P1' ? P1
+            : i[0] === 'Keep' || i[0] === 'Leave' ? '#0E4B34' : '#7A7F77',
+        })),
+      })),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

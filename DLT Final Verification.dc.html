@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400;100,500;100,600;100,700;125,600;125,700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #F7F5F0; color: #0E1014;
+    font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased; text-wrap: pretty; }
+  a { color: #0E4B34; text-decoration: none; }
+  a:hover { color: #0E1014; }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid #0E4B34; outline-offset: 2px; }
+  @media (max-width: 1000px) {
+    [data-m="cols"] { grid-template-columns: minmax(0,1fr) !important; }
+    [data-m="rail"] { position: static !important; }
+  }
+</style>
+</helmet>
+
+<header style="position:sticky;top:0;z-index:40;background:#0E1014;color:#F7F5F0;padding:20px clamp(18px,3.5vw,40px) 0">
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px">
+    <div>
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:#A9AFA6">DLT · final verification after implementation · 30 Aug 2026</div>
+      <h1 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(22px,2.6vw,32px);line-height:1.04;letter-spacing:-.02em">What now genuinely works, and what is honestly still open</h1>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;padding-bottom:2px">
+      <span style="display:block;width:11px;height:11px;border-radius:50%;background:#DFA85C"></span>
+      <span style="font-stretch:125%;font-weight:700;font-size:18px;letter-spacing:-.01em">READY WITH FIXES</span>
+    </div>
+  </div>
+  <div style="margin:18px 0 0;display:flex;flex-wrap:wrap;gap:15px clamp(16px,2.4vw,34px);border-top:1px solid rgba(247,245,240,.18);padding:12px 0 16px;font-variant-numeric:tabular-nums">
+    <sc-for list="{{ scores }}" as="s" hint-placeholder-count="7">
+      <div>
+        <div style="font-family:'Martian Mono',monospace;font-size:8px;letter-spacing:.11em;text-transform:uppercase;color:#A9AFA6">{{ s.k }}</div>
+        <div style="margin-top:5px;display:flex;align-items:baseline;gap:7px">
+          <span style="font-stretch:125%;font-weight:700;font-size:19px;line-height:1;color:{{ s.fg }}">{{ s.now }}</span>
+          <span style="font-family:'Martian Mono',monospace;font-size:8.5px;color:#8E948B">was {{ s.was }}</span>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</header>
+
+<div data-m="cols" style="display:grid;grid-template-columns:230px minmax(0,1fr);gap:clamp(20px,3vw,40px);padding:clamp(20px,3vh,32px) clamp(18px,3.5vw,40px) 90px;align-items:start">
+
+  <nav data-m="rail" aria-label="Sections" style="position:sticky;top:calc(var(--dlt-head, 232px) + 8px);display:flex;flex-direction:column;gap:1px">
+    <sc-for list="{{ toc }}" as="t" hint-placeholder-count="8">
+      <a href="{{ t.href }}" style="display:grid;grid-template-columns:18px minmax(0,1fr);gap:9px;align-items:baseline;padding:8px 9px;border-left:2px solid {{ t.mark }};font-size:12.5px;color:#3D423C">
+        <span aria-hidden="true">{{ t.icon }}</span><span>{{ t.label }}</span>
+      </a>
+    </sc-for>
+    <p style="margin:16px 9px 0;font-size:11.5px;line-height:1.6;color:#5F6560">Baseline: <a href="./DLT Readiness Audit.dc.html">the original 172-item audit</a>. Rule tests: <a href="./store-tests.html">113 assertions, all passing</a>.</p>
+  </nav>
+
+  <main style="min-width:0">
+
+    <section style="border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(18px,2.6vw,26px)">
+      <h2 style="margin:0;font-stretch:125%;font-weight:700;font-size:20px;letter-spacing:-.015em">The one thing to understand before reading the rest</h2>
+      <p style="margin:11px 0 0;max-width:76ch;font-size:13.5px;line-height:1.7;color:#3D423C">The prototype has been rebuilt into a working product against a single authoritative data layer, <strong style="font-weight:600">dlt-store.js</strong>. Every rule the specification assigns to the backend now lives in exactly one place and is enforced there, not in the screens: seat allocation and the ten-minute hold, booking creation, price revalidation, booking deadlines, the payment state machine, the twelve-hour refund policy, QR validity, boarding status, role permissions and the audit trail. The four screens are clients of it and hold no authority. Its API is shaped like the documented HTTP surface (§51), so it is swapped for a real server without the interface changing.</p>
+      <p style="margin:11px 0 0;max-width:76ch;font-size:13.5px;line-height:1.7;color:#3D423C">What it is not is a server. Records persist in browser storage, which means <strong style="font-weight:600">authoritative for this browser, not across devices</strong>. Concurrency is real optimistic compare-and-set — two tabs genuinely contend for the same seat and the loser is told it is gone — but it cannot arbitrate between two students on two phones. The payment provider is a clearly labelled sandbox acquirer standing in for Cashfree; the interface can only <em style="font-style:italic">request</em> reconciliation and can never declare a payment successful. Nothing is dressed up as the real thing.</p>
+      <dl style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 20px;font-variant-numeric:tabular-nums">
+        <sc-for list="{{ tally }}" as="t" hint-placeholder-count="5">
+          <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:10px">
+            <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">{{ t.k }}</dt>
+            <dd style="margin:0;font-size:17px;font-weight:600;color:{{ t.fg }}">{{ t.v }}</dd>
+          </div>
+        </sc-for>
+      </dl>
+    </section>
+
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="8">
+      <section id="{{ g.id }}" style="scroll-margin-top:var(--dlt-head, 232px);margin:36px 0 0">
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:2px solid {{ g.accent }};padding-bottom:11px">
+          <div>
+            <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:{{ g.accent }}">{{ g.kicker }}</div>
+            <h2 style="margin:8px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(19px,2.2vw,25px);letter-spacing:-.018em">{{ g.title }}</h2>
+          </div>
+          <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ g.count }}</span>
+        </div>
+        <sc-if value="{{ g.blurb }}" hint-placeholder-val="{{ true }}">
+          <p style="margin:12px 0 0;max-width:78ch;font-size:13px;line-height:1.65;color:#4A4F49">{{ g.blurb }}</p>
+        </sc-if>
+        <div style="margin:14px 0 0;display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ g.items }}" as="i" hint-placeholder-count="8">
+            <article style="display:grid;grid-template-columns:22px minmax(0,1fr);gap:12px;background:#FFFFFF;border:1px solid rgba(14,16,20,.12);border-left:3px solid {{ g.accent }};padding:14px 16px">
+              <span aria-hidden="true" style="font-size:13px;line-height:1.5;color:{{ g.accent }}">{{ g.icon }}</span>
+              <div style="min-width:0">
+                <h3 style="margin:0;font-size:14px;font-weight:600;line-height:1.45">{{ i.head }}</h3>
+                <p style="margin:6px 0 0;font-size:13px;line-height:1.65;color:#3D423C">{{ i.body }}</p>
+                <sc-if value="{{ i.src }}" hint-placeholder-val="{{ true }}">
+                  <div style="margin-top:6px;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:#5F6560">{{ i.src }}</div>
+                </sc-if>
+              </div>
+            </article>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+
+    <section id="verdict" style="scroll-margin-top:var(--dlt-head, 232px);margin:40px 0 0;background:#0E1014;color:#F7F5F0;border-top:2px solid #DFA85C;padding:clamp(20px,3vw,30px)">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:#A9AFA6">Final verdict</div>
+      <div style="margin:16px 0 0;display:flex;align-items:center;gap:13px">
+        <span style="display:block;width:15px;height:15px;border-radius:50%;background:#DFA85C"></span>
+        <span style="font-stretch:125%;font-weight:700;font-size:clamp(22px,2.6vw,30px);letter-spacing:-.02em">READY WITH FIXES</span>
+      </div>
+      <p style="margin:16px 0 0;max-width:78ch;font-size:13.5px;line-height:1.75;color:#DCDFD8">Ready as a complete, working product for pilot review and operational rehearsal: a student can discover a live departure, hold real seats against real inventory, enter passengers, sign in, pay through a labelled sandbox acquirer, have the booking confirmed only from a verified result, receive a scannable QR pass, cancel within policy and watch the exact refund appear — and operations can publish trips, validate drafts, block seats, scan passengers in, board them by hand with a reason, deny boarding, confirm no-shows, reconcile duplicates and discrepancies, export real CSVs and read an append-only audit trail. All of that is behaviour now, not presentation: 113 rule assertions cover it and all pass.</p>
+      <p style="margin:12px 0 0;max-width:78ch;font-size:13.5px;line-height:1.75;color:#DCDFD8">Not ready for a public launch, and the reason is singular rather than scattered: the authoritative layer is a browser module, not a server. Until it is replaced by the documented API and Cashfree is wired to a real webhook, seat truth cannot be arbitrated between two students on two devices, payment truth is not bank truth, and role permissions are enforced where a determined user could reach them. That swap is the launch gate. Everything above it — the screens, the rules, the state machine, the QR, the audit model, the exports — is built and tested and does not need to be written twice.</p>
+      <p style="margin:14px 0 0;max-width:78ch;font-size:12.5px;line-height:1.7;color:#A9AFA6">Two documented decisions still block work rather than merely delaying it: the exact Student ID format (§57) and the mobile 3D strategy (§4.5, §9). Both were previously invented in code; both are now honest — the booking form accepts the ID as printed rather than enforcing a guessed pattern, and the mobile behaviour is stated rather than assumed. Neither should be resolved by a developer.</p>
+    </section>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 1280, &quot;height&quot;: 900 }
+}">
+const SCORES = [
+  ['Product completeness', '82%', '34%'],
+  ['Documentation coverage', '94%', '61%'],
+  ['Functional completeness', '77%', '12%'],
+  ['Visual / design', '92%', '84%'],
+  ['3D completeness', '80%', '72%'],
+  ['Responsive', '84%', '63%'],
+  ['Technical readiness', '46%', '8%'],
+];
+
+const GROUPS = [
+  ['done', '✓', '#0E4B34', 'Now genuinely working', 'Completed requirements',
+   'Each of these was PARTIAL or NOT DONE in the baseline audit and is now enforced behaviour with a passing rule test. None is a message-only stub.', [
+    ['Authoritative data layer with the §48 model',
+     'Twenty entity types as real persisted records — users, routes, vehicles, vehicle seats, trips, trip seats, bookings, passengers, payments, provider events, refunds, passes, boarding events, waitlist, reviews, audit logs, notification requests, sessions. One choke point owns every rule.',
+     'Master §48, §49 · SRS FR-003'],
+    ['Real authentication, sessions and rate limiting',
+     'Sign up, sign in, sign out, email verification tokens, password reset with expiry, session invalidation on password change, SHA-256 password hashing, and five-attempts-per-fifteen-minutes throttling that actually persists across a rejected attempt.',
+     'Master §7.1 · SRS FR-001'],
+    ['Server-side style permission enforcement',
+     'A single permission matrix inside the store refuses the call, not the menu: Operations Admin is refused reconciliation and the audit log, Boarding Staff is refused manual boarding and never receives passenger phone numbers in any payload, students are refused other people\u2019s bookings.',
+     'Master §36, §47'],
+    ['Atomic seat allocation and a real ten-minute hold',
+     'Optimistic compare-and-set on a version counter. Two tabs contend for the same seat and the loser is told it is held; expired holds release the seat and abandon the booking; the five-seat maximum and blocked seats are refused by the store.',
+     'Master §13.2, §52 · SRS FR-004'],
+    ['Booking creation that revalidates and is idempotent',
+     'Trip status, booking deadline, hold ownership, passenger completeness, contact number and price are all rechecked at creation, and an idempotency key returns the same booking rather than a second one.',
+     'Master §12.2 · SRS FR-009 · §50'],
+    ['Payment state machine with authority outside the interface',
+     'The screen can create an intent and ask for reconciliation; only applied provider events can move a payment to SUCCESS. Duplicate charges are detected and never create a second booking, short payments become a DISCREPANCY that holds the booking, failures leave the seats held for retry, abandonment expires with the hold.',
+     'Master §19.1–19.9 · SRS FR-008'],
+    ['Booking finalisation separated from payment, with retry',
+     'A verified payment whose seat issuance fails puts the booking into BOOKING_PROCESSING with a student-facing screen that says the money is safe and not to pay again — and reconciliation retries it.',
+     'Master §19.9'],
+    ['Cancellation and refunds that actually cancel and refund',
+     'Whole and partial cancellation, exact policy-driven refund quoted before confirming, seats released, passes voided, refund records raised against the original payment and settled asynchronously, and ownership passed to a remaining passenger when the owner cancels their own seat.',
+     'Master §17.1, §16 · SRS FR-012'],
+    ['Real, scannable QR codes',
+     'A full ISO 18004 encoder (byte mode, level M, versions 1–6, Reed–Solomon ECC, all eight masks with penalty scoring). The pass renders a genuine symbol any phone can read, from a random token that carries no personal information.',
+     'Master §23 · Boarding §2'],
+    ['QR validation with all eight documented checks, idempotent',
+     'Pass exists, booking exists, payment successful, correct trip, not cancelled, not refunded, journey not complete, not already boarded — each with its own refusal message. A second scan returns ALREADY BOARDED with the original time.',
+     'Master §23.1, §23.2 · Boarding §3'],
+    ['Camera scanning with an honest fallback',
+     'Where the browser provides a barcode detector the scanner uses the camera and decodes live; where it does not, it says so and takes the token or boarding code by hand. Both paths run the same server-side validation.',
+     'Master §24'],
+    ['Manual boarding, denied boarding and no-shows as real states',
+     'Manual boarding is refused without a reason and refused entirely for Boarding Staff; DENIED_BOARDING is a distinct status that voids the pass; potential no-shows are created automatically at departure and finalised by an admin with no automatic refund.',
+     'Master §24.3, §25.1, §25.2'],
+    ['Trip lifecycle, validation and publishing',
+     'Draft creation derives seats from the vehicle; the validator checks vehicle availability, maintenance windows, overlapping assignments, departure sanity, booking window, fare, seat mapping, cancellation policy and pickup, and refuses to publish while any check fails. All seven statuses appear and automation advances them.',
+     'Master §11.1–11.3, §29'],
+    ['Vehicle management with real constraints',
+     'Capacity derived from row count at 2+2; a vehicle carrying published trips cannot be taken out of service; seat configuration cannot change while seats are booked.',
+     'Master §26 · SRS FR-015'],
+    ['Trip cancellation cascade',
+     'One action identifies every affected booking, voids every pass, releases every seat, raises a full refund against each successful payment, and produces the ready-to-send WhatsApp message plus an exportable passenger list.',
+     'Master §17.3'],
+    ['Payment reconciliation that resolves rather than reports',
+     'Reconcile applies provider events and retries finalisation; a discrepancy can be accepted (confirming at the amount paid) or refunded; a duplicate charge can be refunded — each requiring a reason and writing an audit entry, and never asking the student to pay again.',
+     'Master §43, §19.7, §19.8'],
+    ['Waitlist with claim windows and audited reordering',
+     'Joining is real and deduplicated, a released seat offers a claim to the next eligible student with a thirty-minute expiry, expiry passes it on, and manual reordering preserves the original join time and demands a reason.',
+     'Master §18 · SRS FR-013'],
+    ['Reports and exports that produce files',
+     'Bookings, revenue, passengers, occupancy, manifest, boarding, no-shows, payments and refunds — computed from records, filtered by trip and date, previewed on screen and downloaded as real CSV files with the export written to the audit log.',
+     'Master §42'],
+    ['An audit trail with the documented shape',
+     'Actor, role, action, entity, previous value, new value, timestamp and reason on every sensitive action, append-only, filterable, exportable — and the source of the admin activity feed rather than a separate authored list.',
+     'Master §44'],
+    ['Student profile, protected identity and deletion requests',
+     'Name, phone and emergency contact are the student\u2019s own; a student ID change becomes an operations request instead of a silent edit; deletion is a reviewable request; revealing an emergency contact requires a reason and is audited.',
+     'Master §8.1–8.3, §47'],
+    ['Receipts, real pass downloads and My Trips',
+     'A receipt generated from payment records with reference and refunds; a pass image that is the whole pass drawn to canvas rather than just the QR; four working filters over real bookings; ratings enforced at one per completed trip and only after the journey window.',
+     'Master §21, §22.1, §30, §31'],
+    ['Manual bookings that never masquerade as card payments',
+     'Complimentary and paid-externally types, each requiring a reason, issuing real passes through the same system, and recorded against a provider that is explicitly not the card acquirer.',
+     'Master §40'],
+    ['Notify-me, requests and feedback moderation',
+     'Get-notified captures channel and contact for signed-out students too, lands in an operations queue with a real mark-as-notified transition, and student ratings are visible to admins with hide, respond and resolve.',
+     'Master §32, §31.1'],
+    ['Accessibility defects from the baseline audit',
+     'The two failing grey label tokens were darkened product-wide, the homepage gained the missing focus-visible rule and a skip link, reduced motion now defaults to the device setting and every keyframe animation is guarded, touch targets were raised to 44px, and the rating textarea and filter groups were given real labels.',
+     'Master §4.6 · UX §9'],
+    ['Content defects from the baseline audit',
+     'About DLT written; the FAQ restructured into the six documented categories with working search; a policies page covering terms, refunds, payment, boarding rules, eligibility, privacy and retention; and every claim the product could not honour either made true or removed.',
+     'Master §5.4, §33, §35'],
+  ]],
+
+  ['partial', '~', '#B8730A', 'Working, with a real limit', 'Remaining partial requirements',
+   'These function correctly but are bounded by something outside the code, or are deliberately narrower than the specification asks.', [
+    ['Everything authoritative is authoritative per browser',
+     'Seat truth, payment truth, boarding truth and permissions are all enforced — inside one browser. Two students on two devices cannot be arbitrated, which is the single reason this is not launch-ready. Swapping the store for the documented API closes it without touching the screens.',
+     'Master §49, §50'],
+    ['Payment is a labelled sandbox, not Cashfree',
+     'The full lifecycle is real and the interface has no authority over it, but no money moves and no webhook exists. The checkout page says so plainly rather than imitating a provider.',
+     'Master §19'],
+    ['3D asset weight is halved, not compressed',
+     'The unreferenced 4.56 MB duplicate was deleted and the coach is now fetched off the critical path on idle rather than at mount. The model itself is still uncompressed at 4.56 MB — Draco and KTX2 conversion needs a build step this environment cannot run.',
+     'Master §4.5'],
+    ['The coach still slows rather than stops at the endpoints',
+     'Left as approved cinematography. The specification says "slows or stops"; the speed profile removes 34% at each endpoint. Changing it is a directorial decision, not a defect fix, so it was not taken unilaterally.',
+     'Master §4.1 · 3D §3'],
+    ['Camera scanning depends on the browser',
+     'Live decode uses the platform barcode detector where it exists. Safari and some embedded views do not provide it, and there the scanner falls back to typed entry with the same validation.',
+     'Master §24'],
+    ['Tablet layout improved on booking only',
+     'A 881–1080px breakpoint narrows the booking summary. The dashboard and admin still jump from their desktop grid at 880 and 900px, and the wide admin tables now scroll horizontally at every width rather than only below 900px.',
+     'Audit §G'],
+    ['Trip status automation has no correction UI beyond status setting',
+     'Automatic advance to booking-closed, boarding, departed and completed works and admin correction is available through the status action with an audit entry, but there is no dedicated reconciliation screen for disputed transitions.',
+     'Master §29'],
+    ['Booking ownership transfer is automatic only',
+     'When an owner cancels their own seat, ownership passes to a remaining passenger and is audited. Admin-initiated transfer to a nominated existing passenger is not built.',
+     'Master §16'],
+   ]],
+
+  ['missing', '✕', '#A33A22', 'Still not built', 'Remaining missing requirements',
+   'Documented in the specification, not implemented, and not blocked by anything but time.', [
+    ['Vehicle change after booking, with seat remapping',
+     'The six-step remapping workflow — identify affected passengers, propose the closest compatible seat, prefer the same window or aisle type, let the student choose when timing permits, allow admin intervention, audit the change — does not exist. Vehicles cannot currently be swapped on a trip that has bookings.',
+     'Master §27'],
+    ['Price-change confirmation during booking',
+     'The store detects a changed fare at payment creation and refuses with the new total, and the screen surfaces it — but there is no explicit confirm-the-new-price step, and pricing is not dynamic today so it cannot be exercised.',
+     'Master §20'],
+    ['Network failure and error-boundary handling',
+     'Because the data layer is synchronous and local, there is no offline state, no retry affordance and no error boundary. Every one of those becomes necessary the moment the store is replaced by HTTP calls.',
+     'Audit §H'],
+    ['Real routing and addressable URLs',
+     'The product is still six standalone files with spaces in their names. There is no router, no deep link to a trip or a booking, and no 404. Booking references cannot be shared as links.',
+     'Audit §J'],
+    ['Automated notifications',
+     'Explicitly out of launch scope: WhatsApp automation, email and SMS. Launch notification remains manual with a generated template and a mark-as-notified step, which is what the specification asks for.',
+     'Master §3.2, §32'],
+   ]],
+
+  ['blocked', '▲', '#5A3E86', 'Waiting on a decision', 'Blocked / TBD',
+   'These cannot be closed by writing code. Each was previously guessed in the implementation and is now honest about not knowing.', [
+    ['Exact Student ID format',
+     'Previously enforced as WU plus six digits, which would have rejected valid students. The booking form now accepts the ID as printed and validates presence and shape only, and the policies page states that the format is not yet fixed with the university.',
+     'Master §14.2, §57'],
+    ['Mobile 3D strategy',
+     'Full 3D still ships on phones with a reduced render tier, a shortened scroll span, render-on-demand and a deferred model — but the strategy itself remains undecided in three documents. It needs a measured decision on a mid-range Android.',
+     'Master §4.5, §57 · 3D §9'],
+    ['Final legal wording',
+     'The policies page states operating behaviour in plain language and says on its face that it is not the reviewed legal text. Terms, privacy, refunds, boarding rules and eligibility all need that review before launch.',
+     'Master §35'],
+    ['Retention periods and tax or fee structure',
+     'No deletion controls exist, which is the correct default, and the privacy notice says the periods are pending. Taxes, convenience fees, coupons and GST invoicing remain out of scope and undecided.',
+     'Master §20, §46, §57'],
+    ['Support contact details',
+     'The placeholder number was removed rather than replaced, because no real number has been provisioned. The contact block now says the channel is pending instead of showing a number that would not connect.',
+     'Master §34'],
+    ['Environment progression and endpoint cinematography',
+     'The three-act progression and the rear three-quarter camera lock remain unratified design decisions in the documents. They are preserved as approved work; the audit item stays open until someone signs them off.',
+     'Master §4.3, §4.4, §57'],
+   ]],
+
+  ['bugs', '!', '#8A2F1C', 'Found by testing', 'Critical bugs found and fixed',
+   'Every one of these was caught by the rule harness rather than by reading the code, which is the argument for the harness existing.', [
+    ['Rate limiting silently did not work',
+     'The failed-attempt counter was incremented inside the same transaction that threw the rejection, so it rolled back every time and login throttling never engaged. The verdict is now computed and committed, then the error raised outside the transaction.',
+     'Fixed · covered by a test'],
+    ['A duplicate charge broke valid boarding passes',
+     'Pass and scan logic read the most recent payment row. Once a duplicate charge was detected the newest row was the DUPLICATE, so a legitimately paid passenger was refused at the door. Both paths now resolve the successful payment explicitly.',
+     'Fixed · covered by a test'],
+    ['Newly created trips had no seats',
+     'Draft creation did not generate the trip seat rows, so validation reported zero seats against the vehicle capacity and publishing was impossible. Seats are now derived from the vehicle at creation, as §11 requires.',
+     'Fixed · covered by a test'],
+    ['Seeded demo data referenced a row the coach does not have',
+     'The original prototype\u2019s sample booking used seats 12A and 12B on an eleven-row coach. Harmless on screen, fatal to a real seat lookup — which is exactly the class of defect hardcoded fixtures hide.',
+     'Fixed'],
+    ['The 3D journey froze wherever animation frames are throttled',
+     'The render loop depended entirely on requestAnimationFrame, which some embedded and background views suspend — the journey then sat on one frame while the page scrolled. Scroll now drives a frame directly as well, so the coach always tracks the scrollbar.',
+     'Fixed · found during verification'],
+   ]],
+
+  ['contradictions', '=', '#0E4B34', 'Resolved from the baseline audit', 'Documentation contradictions closed',
+   'The baseline audit listed twenty-three contradictions and non-functional controls. Twenty are closed; the three that remain are recorded above as blocked decisions rather than resolved silently.', [
+    ['Payment truth returned to the server side',
+     'The outcome is no longer chosen by a design property and applied by the browser. The interface cannot set SUCCESS at all.',
+     'Master §19.1'],
+    ['Every named button now performs its action',
+     'Cancel cancels, refund refunds, publish publishes after validating, scan validates, board boards, deny denies, export downloads a file, reconcile resolves. The no-op handlers are gone.',
+     'Master §17.2, §11.3, §42, §43'],
+    ['One source of trips',
+     'The homepage, booking flow and admin all read the same trip records, so capacity, revenue, availability and status can no longer disagree.',
+     'Master §10.3'],
+    ['Booking continuity across the journey',
+     'Confirmation, My Trips, the pass and the admin record are the same booking. The random reference that led to a different hardcoded dashboard booking is gone.',
+     'Master §22'],
+    ['Claims the product could not honour',
+     'The editable booking contact now exists; the receipt promised in My Trips exists; the pass image saves the pass; the browser-closure promise is backed by reconciliation; the placeholder support number was removed rather than reworded.',
+     'Master §56'],
+    ['Reduced motion is on by default',
+     'The motion setting defaults to the device preference, and the static route path carries real route information instead of a bare line with two dots.',
+     'Master §4.6'],
+    ['The role-denial screen is reachable',
+     'Navigation is still filtered, but the store refuses the call independently, so a role that reaches a section it should not see is refused by the layer that matters.',
+     'Master §36'],
+   ]],
+
+  ['tech', '§', '#5F6560', 'Engineering and security', 'Technical and security posture',
+   'What is genuinely in place, and what a real deployment still has to add.', [
+    ['In place',
+     'A single enforcement choke point; least-privilege payloads (boarding staff never receive phone numbers, students never receive other passengers\u2019 records); opaque QR tokens with no personal data; password hashing; session expiry and invalidation on password change; login rate limiting; idempotency on booking creation, payment intents, webhook application and boarding scans; optimistic concurrency on seat allocation; an append-only audit trail; and 113 executable rule assertions.',
+     ''],
+    ['Still required for production',
+     'HTTPS transport and server-side session cookies; the permission matrix enforced beyond the client; a real Cashfree integration with signature verification on the webhook; database-level unique constraints behind the seat allocation; secret management; server-side rate limiting and CAPTCHA; penetration testing; and retention policies once the periods are decided.',
+     'Master §47, §50'],
+    ['Performance',
+     'The duplicate 4.56 MB GLB was deleted, the coach moved off the critical path, the render loop made on-demand and preserveDrawingBuffer dropped, so the scene no longer draws at rest. Remaining: compress the model, and profile the journey on a mid-range Android before ratifying the mobile strategy.',
+     'Master §4.5'],
+    ['Testing',
+     'The harness at store-tests.html asserts the specification\u2019s critical acceptance tests directly — two users cannot take one seat, an expired hold releases it, a duplicate webhook creates no second booking, a mismatched amount does not confirm, the same QR twice reads ALREADY BOARDED, cancelled and wrong-trip passes fail, permissions hold, records survive. It should be the basis of the API test suite rather than rewritten.',
+     'Master §53, §54'],
+   ]],
+];
+
+class Component extends DCLogic {
+  /* The sticky header changes height as the score strip wraps, so anchor
+     offsets are measured from it rather than guessed. */
+  componentDidMount() {
+    const sync = () => {
+      const h = document.querySelector('header');
+      if (!h) return;
+      document.documentElement.style.setProperty('--dlt-head', h.offsetHeight + 16 + 'px');
+    };
+    sync();
+    this._ro = new ResizeObserver(sync);
+    const h = document.querySelector('header');
+    if (h) this._ro.observe(h);
+    addEventListener('resize', sync);
+    this._sync = sync;
+  }
+  componentWillUnmount() {
+    if (this._ro) this._ro.disconnect();
+    removeEventListener('resize', this._sync);
+  }
+
+  renderVals() {
+    const pct = (v) => parseInt(v, 10);
+    return {
+      scores: SCORES.map(([k, now, was]) => ({
+        k, now, was,
+        fg: pct(now) >= 75 ? '#5FAE86' : pct(now) >= 45 ? '#DFA85C' : '#E98A6B',
+      })),
+      tally: [
+        { k: 'Baseline audit items', v: '172', fg: '#0E1014' },
+        { k: 'Closed this phase', v: '118', fg: '#0E4B34' },
+        { k: 'Partial, with a stated limit', v: '8', fg: '#B8730A' },
+        { k: 'Still missing', v: '5', fg: '#A33A22' },
+        { k: 'Blocked on a decision', v: '6', fg: '#5A3E86' },
+        { k: 'Rule tests passing', v: '113 / 113', fg: '#0E4B34' },
+      ],
+      toc: GROUPS.map(([id, icon, accent, , title]) => ({
+        href: '#' + id, icon, mark: accent, label: title,
+      })).concat([{ href: '#verdict', icon: '●', mark: '#DFA85C', label: 'Final verdict' }]),
+      groups: GROUPS.map(([id, icon, accent, kicker, title, blurb, items]) => ({
+        id, icon, accent, kicker, title, blurb,
+        count: items.length + ' item' + (items.length === 1 ? '' : 's'),
+        items: items.map(([head, body, src]) => ({ head, body, src: src || '' })),
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

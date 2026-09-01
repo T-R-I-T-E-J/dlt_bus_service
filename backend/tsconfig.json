@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    /* `--experimental-strip-types` runs TypeScript directly: types are erased,
+     * never compiled. So nothing is emitted, and syntax that requires a
+     * transform (enums, namespaces, parameter properties, decorators) is
+     * forbidden — allowImportingTsExtensions/verbatimModuleSyntax keep the
+     * import forms honest. */
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+
+    /* Node's type stripping runs the .ts file ITSELF, and does not rewrite a
+     * '.js' specifier to '.ts'. So every relative import names the real file
+     * with its real extension, and this option is what lets tsc accept that.
+     * Getting this wrong is not a warning — nothing resolves at all. */
+    "allowImportingTsExtensions": true,
+
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

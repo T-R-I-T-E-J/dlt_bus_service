@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400;100,500;100,600;100,700;125,600;125,700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #F7F5F0; color: #0E1014;
+    font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased; text-wrap: pretty; }
+  a { color: #0E4B34; text-decoration: none; }
+  a:hover { color: #0E1014; }
+  :focus-visible { outline: 2px solid #0E4B34; outline-offset: 2px; }
+  @media (max-width: 900px) {
+    [data-m="cols"] { grid-template-columns: minmax(0,1fr) !important; }
+    [data-m="rail"] { position: static !important; }
+  }
+</style>
+</helmet>
+
+<header style="height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(18px,4vw,44px);border-bottom:1px solid rgba(14,16,20,.10)">
+  <a href="./DLT Homepage.dc.html" style="display:flex;align-items:baseline;gap:9px;color:#0E1014">
+    <span style="font-stretch:125%;font-weight:700;font-size:19px;letter-spacing:.02em">DLT</span>
+    <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Policies</span>
+  </a>
+  <nav style="display:flex;align-items:center;gap:clamp(14px,2.4vw,26px);font-size:13.5px;font-weight:500">
+    <a href="./DLT Homepage.dc.html#help" style="color:#3D423C">Help</a>
+    <a href="./DLT Booking.dc.html" style="background:#0E1014;color:#F7F5F0;padding:12px 17px;border-radius:2px;font-weight:600;font-size:13px;min-height:44px;display:flex;align-items:center;box-sizing:border-box">Book a seat</a>
+  </nav>
+</header>
+
+<main style="padding:clamp(26px,5vh,54px) clamp(18px,4vw,44px) 90px">
+<div data-m="cols" style="max-width:1080px;margin:0 auto;display:grid;grid-template-columns:220px minmax(0,1fr);gap:clamp(24px,4vw,56px);align-items:start">
+
+  <nav data-m="rail" aria-label="Policies" style="position:sticky;top:24px;display:flex;flex-direction:column;gap:2px">
+    <sc-for list="{{ toc }}" as="t" hint-placeholder-count="7">
+      <a href="{{ t.href }}" style="padding:9px 10px;border-left:2px solid rgba(14,16,20,.14);font-size:13px;color:#3D423C">{{ t.label }}</a>
+    </sc-for>
+    <p style="margin:16px 10px 0;font-size:11.5px;line-height:1.6;color:#5F6560">These are the operating rules as built. Final legal wording is a separate review and is not yet complete.</p>
+  </nav>
+
+  <div>
+    <div style="border:1px solid rgba(184,115,10,.34);background:#FFFDF6;padding:16px 18px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#8A5A0E">Not yet legally reviewed</div>
+      <p style="margin:8px 0 0;max-width:70ch;font-size:13px;line-height:1.65;color:#3D423C">The Master Specification requires the final wording of these policies to be reviewed separately before launch. What follows describes exactly how the product behaves today, in plain language, so students are not misled in the meantime — it is not a substitute for the reviewed text.</p>
+    </div>
+
+    <sc-for list="{{ sections }}" as="s" hint-placeholder-count="7">
+      <section id="{{ s.id }}" style="scroll-margin-top:24px;margin:38px 0 0">
+        <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">{{ s.kicker }}</div>
+        <h2 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(22px,2.4vw,29px);line-height:1.07;letter-spacing:-.018em">{{ s.title }}</h2>
+        <div style="margin:16px 0 0;display:flex;flex-direction:column;gap:13px;max-width:74ch">
+          <sc-for list="{{ s.paras }}" as="p" hint-placeholder-count="3">
+            <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">{{ p }}</p>
+          </sc-for>
+        </div>
+        <sc-if value="{{ s.hasList }}" hint-placeholder-val="{{ false }}">
+          <ul style="margin:14px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:8px;max-width:72ch">
+            <sc-for list="{{ s.list }}" as="l" hint-placeholder-count="4">
+              <li style="font-size:13.5px;line-height:1.65;color:#3D423C">{{ l }}</li>
+            </sc-for>
+          </ul>
+        </sc-if>
+        <sc-if value="{{ s.hasOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="margin:16px 0 0;border-left:2px solid rgba(184,115,10,.5);padding:2px 0 2px 14px;max-width:72ch">
+            <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#8A5A0E">Still to be decided</div>
+            <p style="margin:7px 0 0;font-size:13px;line-height:1.65;color:#4A4F49">{{ s.open }}</p>
+          </div>
+        </sc-if>
+      </section>
+    </sc-for>
+
+    <p style="margin:44px 0 0;font-size:12.5px;color:#5F6560">Last updated {{ updated }} · DLT, Woxsen University → Miyapur · fares in INR</p>
+  </div>
+</div>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 1120, &quot;height&quot;: 900 }
+}">
+const SECTIONS = [
+  ['terms', 'Terms', 'Terms of service', [
+    'DLT sells a seat on a specific departure of a specific coach on the Woxsen University to Miyapur route. Booking a seat is an agreement between you and DLT for that journey only.',
+    'A booking is confirmed when we have verified the payment on our own side. Until then the seats are held, not sold, and nothing is guaranteed. What a payment page shows you in your browser is never what confirms a booking.',
+    'You must travel on the departure you booked, with the passenger details you gave us. Bookings are not transferable between people, and a pass belongs to one named passenger.',
+  ], [
+    'Up to five passengers may travel on one booking, each with their own seat and pass.',
+    'The person who paid owns the booking and can see all of it. Other passengers see only their own pass.',
+    'We may change a departure or a vehicle for operational reasons. Where that materially affects your journey, refund options are offered even inside the normal refund window.',
+  ], null],
+
+  ['refunds', 'Cancellation', 'Cancellation and refunds', [
+    'Cancel more than 12 hours before departure and the fare is refunded in full. Cancel inside 12 hours and the fare is not refundable — the seat has already been held out of sale for the run.',
+    'You can cancel a whole booking or single passengers. The exact refund is calculated and shown to you before you confirm, and the seats you cancel are released back to other students immediately.',
+    'Refunds go back to the original payment method. The status reads refund pending until the acquirer settles it, which is normally three to five working days. If a refund fails, it is escalated internally rather than left to you to chase.',
+  ], [
+    'If DLT cancels a trip, every booking on it is cancelled, all passes stop working and full refunds are raised automatically.',
+    'No-shows are not refunded. A confirmed passenger who does not board is recorded as a no-show after the coach departs.',
+    'Denied boarding is recorded separately with its reason, and does not by itself create a refund.',
+  ], null],
+
+  ['payment', 'Payment', 'Payment information', [
+    'Fares are charged in Indian rupees. The launch fare is ₹259 per seat, and checkout itemises it: seats multiplied by the fare, then the total payable. There are no booking fees or taxes added today.',
+    'Payment is taken through a payment provider; DLT never sees or stores your card details. Your booking is created only against a payment we have verified, and a payment record is never deleted.',
+    'If a payment succeeds but something goes wrong before your seats are issued, the money stays with us against your booking and we finish the job — you are never asked to pay a second time. The same applies if we receive a different amount from the one due: the payment is held and resolved by our team.',
+  ], [], 'Taxes, convenience fees and any discount or coupon structure are not part of this release and have not been decided. GST invoicing is also out of scope; what you get today is a basic receipt.'],
+
+  ['rules', 'Boarding', 'Boarding and travel rules', [
+    'Report at the pickup point 20 minutes before departure. The coach leaves at its published departure time and does not wait.',
+    'Bring the QR on your boarding pass and your student ID. Every passenger scans their own pass — one scan each. A second scan of the same pass is refused at the door.',
+    'Arrival time is approximate. We publish an expected journey of about two hours and a window rather than a promise, because traffic decides the last stretch.',
+  ], [
+    'A pass is valid only for the trip it was issued for. A cancelled, refunded or already-boarded pass will not scan.',
+    'If a QR cannot be read, operations staff can board you by hand after checking your ID against the manifest. It is recorded with a reason.',
+    'Seats reserved by operations, such as crew seats, are held out of sale and cannot be selected.',
+  ], null],
+
+  ['eligibility', 'Eligibility', 'Student eligibility', [
+    'DLT is for enrolled students. Every passenger needs a full name, a student ID and an Indian mobile number on the booking, and the student ID is checked against the passenger at the door.',
+    'We do not yet verify student IDs automatically against university records, so the check is a human one at boarding. Travelling on someone else\u2019s pass, or giving details that do not match the person travelling, means boarding can be refused.',
+  ], [], 'The exact student ID format is not yet fixed with the university, so the booking form accepts the ID as printed on your card rather than enforcing a pattern that might reject a valid student.'],
+
+  ['privacy', 'Privacy', 'Privacy notice', [
+    'We collect what a booking needs and little else: your name, email, phone, student ID and university, the passenger details on each booking, and the records of payments, refunds and boarding.',
+    'Your boarding QR contains a random token, not your personal information. Someone who photographs your pass learns nothing about you from the code itself.',
+    'Access follows the job. Boarding staff see the manifest they need to board a coach and are not shown passenger phone numbers. Emergency contacts are not listed to staff at all, and any admin who views one must give a reason that is recorded against their name.',
+    'Sensitive actions are written to an audit trail that cannot be edited or deleted, including who did them and why.',
+  ], [
+    'You can change your own name, phone and emergency contact at any time from your account.',
+    'A student ID change is reviewed by operations before it takes effect, because bookings and boarding checks depend on it.',
+    'You can request account deletion. The account is deactivated and personal information is removed where the law allows; payment, booking and boarding records are retained because we are required to retain them.',
+  ], 'Exact retention periods for each kind of record are pending legal and accounting review.'],
+
+  ['data', 'Data', 'What we keep and for how long', [
+    'Operational records — trips, bookings, passengers and boarding events — are kept as long-term history so a journey can always be reconstructed.',
+    'Financial records, meaning payments and refunds, are kept for the periods accounting and tax rules require, and are never deleted from the system. Where a record must stop being used it is marked cancelled, archived or anonymised rather than removed.',
+  ], [], 'The specific retention period for each category is not yet set, and is the one part of this notice that will change once legal and accounting review is complete.'],
+];
+
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      updated: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+      toc: SECTIONS.map(([id, kicker, title]) => ({ href: '#' + id, label: title })),
+      sections: SECTIONS.map(([id, kicker, title, paras, list, open]) => ({
+        id, kicker, title, paras,
+        hasList: !!(list && list.length), list: list || [],
+        hasOpen: !!open, open: open || '',
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

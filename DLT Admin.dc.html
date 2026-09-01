@@ -1,0 +1,2152 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400;100,500;100,600;100,700;125,600;125,700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #EFEDE6; color: #0E1014;
+    font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased; text-wrap: pretty; }
+  a { color: #0E4B34; text-decoration: none; }
+  a:hover { color: #0E1014; }
+  input, button, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid #0E4B34; outline-offset: 2px; }
+  @keyframes dltRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes dltFlash { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
+  }
+  [data-m="wide"] { overflow-x: auto; }
+  @media (max-width: 900px) {
+    [data-m="shell"] { grid-template-columns: minmax(0,1fr) !important; }
+    [data-m="side"] { position: static !important; height: auto !important; }
+    [data-m="nav"] { flex-direction: row !important; flex-wrap: wrap !important; }
+  }
+</style>
+<script src="./dlt-store.js"></script>
+<!-- QR decoding only. It never decides anything: DLT.boarding.scan remains the
+     authority for pass, booking, payment, trip, cancellation, refund and prior
+     boarding. Native BarcodeDetector is used where the browser has it (Chromium,
+     Android); jsQR covers Safari, Firefox and iOS, which do not. -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+</helmet>
+
+<div data-m="shell" style="min-height:100vh;display:grid;grid-template-columns:236px minmax(0,1fr);background:#EFEDE6">
+
+  <aside data-m="side" style="position:sticky;top:0;height:100vh;background:#0E1014;color:#F7F5F0;padding:20px 16px;display:flex;flex-direction:column;gap:20px">
+    <a href="./DLT Homepage.dc.html" style="display:flex;align-items:baseline;gap:8px;color:#F7F5F0">
+      <span style="font-stretch:125%;font-weight:700;font-size:18px;letter-spacing:.02em">DLT</span>
+      <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#A9AFA6">Operations</span>
+    </a>
+    <nav data-m="nav" aria-label="Admin sections" style="display:flex;flex-direction:column;gap:2px">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="9">
+        <button type="button" onClick="{{ n.onPick }}" aria-current="{{ n.on }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;background:{{ n.bg }};color:{{ n.fg }};border:0;padding:11px 12px;border-radius:2px;font-size:13.5px;font-weight:{{ n.weight }};cursor:pointer;min-height:44px">
+          {{ n.label }}
+          <span style="font-family:'Martian Mono',monospace;font-size:8.5px;color:{{ n.badgeFg }}">{{ n.badge }}</span>
+        </button>
+      </sc-for>
+    </nav>
+    <span style="flex:1"></span>
+    <div style="border-top:1px solid rgba(247,245,240,.16);padding-top:14px">
+      <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#A9AFA6">Signed in as</div>
+      <div style="margin-top:7px;font-size:13.5px;font-weight:600">{{ roleName }}</div>
+      <div style="margin-top:3px;font-size:12px;color:#A9AFA6">{{ roleScope }}</div>
+      <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+        <button type="button" onClick="{{ signOut }}" style="margin-top:12px;background:none;border:1px solid rgba(247,245,240,.3);color:#F7F5F0;padding:10px 13px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px;width:100%">Sign out</button>
+      </sc-if>
+    </div>
+  </aside>
+
+  <main style="padding:clamp(20px,3vw,34px) clamp(18px,3vw,38px) 64px">
+
+  <sc-if value="{{ signedOut }}" hint-placeholder-val="{{ true }}">
+  <section style="max-width:480px;margin:8vh auto 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;padding:clamp(24px,4vw,38px);text-align:center">
+    <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:25px;letter-spacing:-.015em">Operations sign-in required</h1>
+    <p style="margin:11px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">Trips, bookings, boarding, payments and the audit log are behind a staff account. Permissions are checked on every call, not in the menu.</p>
+    <a href="./DLT Account.dc.html" style="display:inline-flex;align-items:center;margin:20px 0 0;background:#0E1014;color:#F7F5F0;padding:14px 22px;border-radius:2px;font-size:14px;font-weight:600;min-height:48px;box-sizing:border-box">Sign in</a>
+  </section>
+  </sc-if>
+
+  <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+  <div>
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="margin:0 0 18px;border:1px solid {{ toastBd }};border-left:3px solid {{ toastAccent }};background:{{ toastBg }};padding:14px 16px;font-size:13px;line-height:1.6;color:#25322B;animation:dltRise .25s ease;display:flex;gap:12px;align-items:flex-start">
+      <span style="flex:1">{{ toast }}</span>
+      <button type="button" onClick="{{ clearToast }}" aria-label="Dismiss" style="background:none;border:0;padding:0 4px;font-size:15px;color:#4A4F49;cursor:pointer">×</button>
+    </div>
+  </sc-if>
+
+  <!-- DASHBOARD -->
+  <sc-if value="{{ atDash }}" hint-placeholder-val="{{ true }}">
+  <section>
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px">
+      <div>
+        <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">{{ today }} · Woxsen → Miyapur</div>
+        <h1 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);line-height:1.04;letter-spacing:-.02em">Today at a glance</h1>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:9px">
+        <button type="button" onClick="{{ goTrips }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:12px 17px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Trips</button>
+        <button type="button" onClick="{{ goBoarding }}" style="border:1px solid rgba(14,16,20,.2);background:#FFFFFF;padding:11px 16px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Open scanner</button>
+      </div>
+    </div>
+
+    <div style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px">
+      <sc-for list="{{ metrics }}" as="m" hint-placeholder-count="5">
+        <div style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12);padding:16px 16px 18px">
+          <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560">{{ m.label }}</div>
+          <div style="margin-top:10px;font-stretch:125%;font-weight:700;font-size:26px;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ m.value }}</div>
+          <div style="margin-top:6px;font-size:12px;color:{{ m.subFg }}">{{ m.sub }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start">
+      <div style="background:#FFFFFF;border:1px solid {{ alertBd }};border-top:2px solid {{ alertAccent }}">
+        <div style="padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.1);font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:{{ alertAccent }}">{{ alertTitle }}</div>
+        <sc-for list="{{ alerts }}" as="a" hint-placeholder-count="2">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.08)">
+            <div>
+              <div style="font-size:13.5px;font-weight:600">{{ a.title }}</div>
+              <div style="margin-top:4px;font-size:12.5px;color:#4A4F49">{{ a.detail }}</div>
+            </div>
+            <button type="button" onClick="{{ a.onOpen }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:10px 14px;border-radius:2px;font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer;min-height:44px">{{ a.cta }}</button>
+          </div>
+        </sc-for>
+        <sc-if value="{{ noAlerts }}" hint-placeholder-val="{{ false }}">
+          <p style="margin:0;padding:20px 16px;font-size:13px;color:#4A4F49">Nothing needs a decision right now.</p>
+        </sc-if>
+      </div>
+      <div style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
+        <div style="padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.1);font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Activity · from the audit trail</div>
+        <sc-for list="{{ activity }}" as="a" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.08)">
+            <span style="font-family:'Martian Mono',monospace;font-size:9px;color:#7A7F77;font-variant-numeric:tabular-nums">{{ a.at }}</span>
+            <span style="font-size:13px;color:#3D423C">{{ a.text }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- TRIPS -->
+  <sc-if value="{{ atTrips }}" hint-placeholder-val="{{ false }}">
+  <section>
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px">
+      <div>
+        <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em">Trips</h1>
+        <p style="margin:9px 0 0;max-width:60ch;font-size:13px;line-height:1.6;color:#3D423C">A trip is created as a draft, validated against vehicle availability and seat mapping, then explicitly published. Publishing is what makes it bookable, and the validator refuses anything that would strand a student.</p>
+      </div>
+      <sc-if value="{{ canCreateTrip }}" hint-placeholder-val="{{ false }}">
+        <button type="button" onClick="{{ toggleNewTrip }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:12px 17px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ newTripCta }}</button>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ newTripOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:18px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;padding:clamp(18px,2.6vw,24px);animation:dltRise .25s ease">
+        <h2 style="margin:0;font-size:17px;font-weight:600">New trip draft</h2>
+        <div style="margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px 16px">
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Date</span>
+            <input type="date" value="{{ ntDate }}" onChange="{{ onNtDate }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+          </label>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Departure</span>
+            <input type="time" value="{{ ntTime }}" onChange="{{ onNtTime }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+          </label>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Vehicle</span>
+            <select value="{{ ntVehicle }}" onChange="{{ onNtVehicle }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px">
+              <sc-for list="{{ vehicleOptions }}" as="v" hint-placeholder-count="2">
+                <option value="{{ v.id }}">{{ v.label }}</option>
+              </sc-for>
+            </select>
+          </label>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Fare (₹)</span>
+            <input type="number" value="{{ ntPrice }}" onChange="{{ onNtPrice }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
+          </label>
+        </div>
+        <button type="button" onClick="{{ createDraft }}" style="margin:16px 0 0;background:#0E4B34;color:#F7F5F0;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Create draft</button>
+        <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:#5F6560">Reporting time is set 20 minutes before departure and booking closes an hour before, per the launch policy. Seat rows come from the vehicle.</p>
+      </div>
+    </sc-if>
+
+    <div data-m="wide" style="margin:20px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
+      <div style="min-width:900px">
+        <div style="display:grid;grid-template-columns:120px 84px minmax(0,1fr) 96px 96px 130px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+          <span>Date</span><span>Depart</span><span>Vehicle</span><span>Seats</span><span>Revenue</span><span>Status</span><span>Action</span>
+        </div>
+        <sc-for list="{{ tripRows }}" as="t" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:120px 84px minmax(0,1fr) 96px 96px 130px auto;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px">
+            <span style="font-weight:600">{{ t.date }}</span>
+            <span style="font-variant-numeric:tabular-nums">{{ t.depart }}</span>
+            <span style="color:#3D423C">{{ t.vehicle }}</span>
+            <span style="font-variant-numeric:tabular-nums">{{ t.seats }}</span>
+            <span style="font-variant-numeric:tabular-nums">{{ t.revenue }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ t.statusFg }}">{{ t.status }}</span>
+            <span style="display:flex;gap:7px;flex-wrap:wrap">
+              <button type="button" onClick="{{ t.onPrimary }}" style="border:1px solid {{ t.actBd }};background:{{ t.actBg }};color:{{ t.actFg }};padding:9px 13px;border-radius:2px;font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer;min-height:40px">{{ t.act }}</button>
+              <sc-if value="{{ t.canSeats }}" hint-placeholder-val="{{ false }}">
+                <button type="button" onClick="{{ t.onSeats }}" style="border:1px solid rgba(14,16,20,.2);background:none;color:#0E1014;padding:9px 13px;border-radius:2px;font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer;min-height:40px">Seats &amp; staff</button>
+              </sc-if>
+              <sc-if value="{{ t.canCancel }}" hint-placeholder-val="{{ false }}">
+                <button type="button" onClick="{{ t.onCancel }}" style="border:1px solid rgba(163,58,34,.4);background:none;color:#8A2F1C;padding:9px 13px;border-radius:2px;font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer;min-height:40px">Cancel trip</button>
+              </sc-if>
+            </span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <sc-if value="{{ seatPanelOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.14);padding:18px 20px;animation:dltRise .25s ease">
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:12px">
+          <div>
+            <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Seat map · {{ seatTripLabel }}</div>
+            <p style="margin:9px 0 0;max-width:62ch;font-size:12.5px;line-height:1.55;color:#3D423C">Tap an available seat to take it off sale with a reason, or a blocked seat to release it. A booked seat cannot be blocked. Every change is audit logged.</p>
+          </div>
+          <button type="button" onClick="{{ closeSeatPanel }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:9px 14px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px">Close</button>
+        </div>
+
+        <sc-if value="{{ canAssignStaff }}" hint-placeholder-val="{{ false }}">
+          <div style="margin:16px 0 0;padding:14px 16px;background:#FAF8F4;border:1px solid rgba(14,16,20,.1)">
+            <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560">Boarding staff on this departure</div>
+            <p style="margin:8px 0 0;font-size:13px;color:#25322B">{{ assignedStaffLabel }}</p>
+            <div style="margin:12px 0 0;display:flex;flex-wrap:wrap;gap:9px;align-items:center">
+              <select value="{{ staffPick }}" onChange="{{ onStaffPick }}" style="padding:10px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FFFFFF;font-size:13px;min-height:40px">
+                <sc-for list="{{ staffOptions }}" as="s" hint-placeholder-count="2">
+                  <option value="{{ s.id }}">{{ s.label }}</option>
+                </sc-for>
+              </select>
+              <button type="button" onClick="{{ assignStaff }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:10px 15px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px">{{ assignCta }}</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="margin:18px 0 0;display:flex;flex-wrap:wrap;gap:8px 18px;font-size:12px;color:#3D423C">
+          <sc-for list="{{ seatLegend }}" as="l" hint-placeholder-count="4">
+            <span style="display:flex;align-items:center;gap:7px"><span aria-hidden="true" style="display:block;width:13px;height:13px;border-radius:2px;background:{{ l.bg }};border:1px solid {{ l.bd }}"></span>{{ l.label }}</span>
+          </sc-for>
+        </div>
+        <div role="group" aria-label="Seat map" style="margin:16px auto 0;display:grid;grid-template-columns:repeat(2,40px) 26px repeat(2,40px);gap:8px;justify-content:center">
+          <sc-for list="{{ adminSeats }}" as="c" hint-placeholder-count="55">
+            <sc-if value="{{ c.isSeat }}" hint-placeholder-val="{{ true }}">
+              <button type="button" onClick="{{ c.onPick }}" disabled="{{ c.disabled }}" title="{{ c.title }}" aria-label="{{ c.title }}" style="height:40px;width:40px;border-radius:3px 3px 5px 5px;border:1px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;cursor:{{ c.cursor }}">{{ c.id }}</button>
+            </sc-if>
+            <sc-if value="{{ c.isLabel }}" hint-placeholder-val="{{ false }}">
+              <span style="display:flex;align-items:center;justify-content:center;font-family:'Martian Mono',monospace;font-size:8.5px;color:#7A7F77">{{ c.id }}</span>
+            </sc-if>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ reasonPromptOpen }}" hint-placeholder-val="{{ false }}">
+      <div role="dialog" aria-label="Reason required" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(184,115,10,.4);border-top:2px solid #B8730A;padding:18px 20px">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A5A0E">{{ reasonTitle }}</div>
+        <p style="margin:10px 0 0;max-width:60ch;font-size:13px;line-height:1.6;color:#3D423C">{{ reasonBlurb }}</p>
+        <label style="display:block;margin:14px 0 0;max-width:460px">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reason (required)</span>
+          <input type="text" value="{{ reasonValue }}" onChange="{{ onReasonValue }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+        <div style="margin:16px 0 0;display:flex;gap:10px">
+          <button type="button" onClick="{{ confirmReason }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ reasonCta }}</button>
+          <button type="button" onClick="{{ cancelReasonPrompt }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:11px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Cancel</button>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ validation }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:16px 0 0;background:#FFFFFF;border:1px solid {{ validBd }};border-top:2px solid {{ validAccent }};padding:18px 20px;animation:dltRise .25s ease">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:{{ validAccent }}">{{ validTitle }}</div>
+        <div style="margin:12px 0 0;display:grid;gap:7px">
+          <sc-for list="{{ validLines }}" as="l" hint-placeholder-count="6">
+            <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.5;color:{{ l.fg }}">
+              <span aria-hidden="true" style="width:14px">{{ l.mark }}</span><span>{{ l.text }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ canPublish }}" hint-placeholder-val="{{ false }}">
+          <button type="button" onClick="{{ publish }}" style="margin:16px 0 0;background:#0E4B34;color:#F7F5F0;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Publish this trip</button>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ cancelTripOpen }}" hint-placeholder-val="{{ false }}">
+      <div role="dialog" aria-label="Cancel trip" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(163,58,34,.32);border-top:2px solid #A33A22;padding:18px 20px;animation:dltRise .25s ease">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A2F1C">Cancel {{ cancelTripLabel }}</div>
+        <p style="margin:10px 0 0;max-width:64ch;font-size:13px;line-height:1.6;color:#3D423C">Every booking on this trip is cancelled, all passes are voided, seats are released and a full refund is raised against each successful payment. The reason is written to the audit log and appears in the message to students.</p>
+        <label style="display:block;margin:14px 0 0;max-width:460px">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reason (required)</span>
+          <input type="text" value="{{ cancelReason }}" onChange="{{ onCancelReason }}" placeholder="e.g. Vehicle failed its morning safety check" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+        <div style="margin:16px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+          <button type="button" onClick="{{ confirmCancelTrip }}" style="background:#8A2F1C;color:#FFF9F7;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Cancel the trip and refund</button>
+          <button type="button" onClick="{{ closeCancelTrip }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:11px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Keep it</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ templateOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.14);padding:18px 20px">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Ready to send · {{ templateCount }} passengers</div>
+        <p style="margin:10px 0 0;padding:14px;background:#F4F7F3;border:1px solid rgba(14,75,52,.2);font-size:13px;line-height:1.6;color:#25322B">{{ templateMessage }}</p>
+        <div style="margin:14px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+          <button type="button" onClick="{{ copyTemplate }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:12px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Copy message</button>
+          <button type="button" onClick="{{ exportAffected }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:11px 17px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Export passenger list</button>
+        </div>
+      </div>
+    </sc-if>
+  </section>
+  </sc-if>
+
+  <!-- VEHICLES -->
+  <sc-if value="{{ atVehicles }}" hint-placeholder-val="{{ false }}">
+  <section>
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px">
+      <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em">Vehicles</h1>
+      <sc-if value="{{ canWriteVehicle }}" hint-placeholder-val="{{ false }}">
+        <button type="button" onClick="{{ toggleVehicleForm }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:12px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ vehicleFormCta }}</button>
+      </sc-if>
+    </div>
+    <p style="margin:9px 0 0;max-width:60ch;font-size:13px;line-height:1.6;color:#3D423C">Capacity is derived from the row count at 2 + 2, and every trip's seat map comes from its vehicle. A vehicle carrying published trips cannot be taken out of service, and its seat configuration cannot change while seats are booked.</p>
+
+    <sc-if value="{{ vehicleFormOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:18px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;padding:18px 20px;animation:dltRise .25s ease">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#0E4B34">{{ vehicleFormTitle }}</div>
+        <div style="margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 16px;max-width:760px">
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Name</span>
+            <input type="text" value="{{ vfName }}" onChange="{{ onVfName }}" placeholder="DLT-03" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+          </label>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Registration</span>
+            <input type="text" value="{{ vfReg }}" onChange="{{ onVfReg }}" placeholder="TS07 JK 4412" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px;text-transform:uppercase" />
+          </label>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Rows (2 + 2)</span>
+            <input type="number" min="4" max="20" value="{{ vfRows }}" onChange="{{ onVfRows }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
+          </label>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Status</span>
+            <select value="{{ vfStatus }}" onChange="{{ onVfStatus }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px">
+              <option value="AVAILABLE">Available</option>
+              <option value="MAINTENANCE">Maintenance</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </label>
+        </div>
+        <p style="margin:12px 0 0;font-size:12.5px;color:#5F6560;font-variant-numeric:tabular-nums">{{ vfCapacityNote }}</p>
+        <div style="margin:16px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+          <button type="button" onClick="{{ saveVehicle }}" style="background:#0E4B34;color:#F7F5F0;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ vfSaveCta }}</button>
+          <button type="button" onClick="{{ toggleVehicleForm }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:11px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Cancel</button>
+        </div>
+      </div>
+    </sc-if>
+    <div style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+      <sc-for list="{{ vehicles }}" as="v" hint-placeholder-count="3">
+        <div style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12);padding:18px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+            <div>
+              <div style="font-size:16px;font-weight:600">{{ v.name }}</div>
+              <div style="margin-top:4px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">{{ v.registration }}</div>
+            </div>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ v.statusFg }}">{{ v.status }}</span>
+          </div>
+          <dl style="margin:14px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:10px;font-variant-numeric:tabular-nums">
+            <div><dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560">Rows</dt><dd style="margin:3px 0 0;font-size:14px;font-weight:600">{{ v.rows }}</dd></div>
+            <div><dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560">Capacity</dt><dd style="margin:3px 0 0;font-size:14px;font-weight:600">{{ v.capacity }}</dd></div>
+            <div><dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560">Assigned</dt><dd style="margin:3px 0 0;font-size:14px;font-weight:600">{{ v.assigned }}</dd></div>
+            <div><dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560">Next</dt><dd style="margin:3px 0 0;font-size:14px;font-weight:600">{{ v.next }}</dd></div>
+          </dl>
+          <sc-if value="{{ v.canEdit }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:16px 0 0;display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{ v.actions }}" as="a" hint-placeholder-count="2">
+                <button type="button" onClick="{{ a.onPick }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:9px 13px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px">{{ a.label }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- BOOKINGS -->
+  <sc-if value="{{ atBookings }}" hint-placeholder-val="{{ false }}">
+  <section>
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px">
+      <div>
+        <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(23px,2.5vw,30px);letter-spacing:-.02em">Bookings</h1>
+        <p style="margin:9px 0 0;max-width:52ch;font-size:13px;line-height:1.6;color:#3D423C">Search by booking ID, boarding code, name, student ID or phone. Payment references are Super Admin only.</p>
+      </div>
+      <label style="flex:0 0 auto;display:flex;align-items:center;gap:8px;background:#FFFFFF;border:1px solid rgba(14,16,20,.16);padding:10px 12px;min-height:44px;box-sizing:border-box">
+        <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">Search</span>
+        <input type="search" value="{{ query }}" onChange="{{ onQuery }}" placeholder="DLT-40219, WU204118, name…" style="border:0;background:none;font-size:13px;width:min(280px,50vw);outline:none" />
+      </label>
+    </div>
+
+    <sc-if value="{{ isSuper }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:16px 0 0">
+        <button type="button" onClick="{{ toggleManual }}" style="border:1px solid rgba(14,16,20,.2);background:#FFFFFF;padding:10px 15px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px">{{ manualCta }}</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ manualOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:14px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;padding:18px 20px;animation:dltRise .25s ease">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#0E4B34">Manual booking · Super Admin · §40</div>
+        <p style="margin:10px 0 0;max-width:66ch;font-size:12.5px;line-height:1.6;color:#3D423C">A booking made outside the online flow. A complimentary seat is worth ₹0 and can never produce a refund; a paid-externally seat records the fare against a manual provider and is never presented as a Cashfree payment.</p>
+        <div style="margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px 16px;max-width:900px">
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Departure</span>
+            <select value="{{ mbTrip }}" onChange="{{ onMbTrip }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:13.5px">
+              <sc-for list="{{ mbTripOptions }}" as="t" hint-placeholder-count="3">
+                <option value="{{ t.id }}">{{ t.label }}</option>
+              </sc-for>
+            </select>
+          </label>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Type</span>
+            <select value="{{ mbType }}" onChange="{{ onMbType }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:13.5px">
+              <option value="COMPLIMENTARY">Complimentary (₹0)</option>
+              <option value="PAID_EXTERNALLY">Paid externally</option>
+            </select>
+          </label>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Passenger name</span>
+            <input type="text" value="{{ mbName }}" onChange="{{ onMbName }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+          </label>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Student ID</span>
+            <input type="text" value="{{ mbSid }}" onChange="{{ onMbSid }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+          </label>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Phone</span>
+            <input type="tel" value="{{ mbPhone }}" onChange="{{ onMbPhone }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
+          </label>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Student email (optional)</span>
+            <input type="email" value="{{ mbEmail }}" onChange="{{ onMbEmail }}" placeholder="attach to their account" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+          </label>
+        </div>
+        <label style="display:block;margin:14px 0 0;max-width:560px">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reason (required, permanent)</span>
+          <input type="text" value="{{ mbReason }}" onChange="{{ onMbReason }}" placeholder="e.g. University staff escorting a group" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+        <div style="margin:16px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+          <button type="button" onClick="{{ createManual }}" style="background:#0E4B34;color:#F7F5F0;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ mbCta }}</button>
+          <button type="button" onClick="{{ toggleManual }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:11px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Cancel</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:16px 0 0;display:flex;flex-wrap:wrap;gap:8px">
+        <sc-for list="{{ results }}" as="r" hint-placeholder-count="3">
+          <button type="button" onClick="{{ r.onPick }}" style="border:1px solid {{ r.bd }};background:{{ r.bg }};color:{{ r.fg }};padding:10px 14px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">{{ r.label }}</button>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+      <p style="margin:16px 0 0;font-size:13px;color:#4A4F49">Nothing matches “{{ query }}”.</p>
+    </sc-if>
+
+    <sc-if value="{{ hasBooking }}" hint-placeholder-val="{{ true }}">
+    <div>
+      <div style="margin:20px 0 0;font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Booking {{ bkCode }} · {{ bkTrip }}</div>
+      <h2 style="margin:8px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(21px,2.3vw,27px);letter-spacing:-.02em">{{ bkOwner }} · {{ bkPaxCount }}</h2>
+
+      <div role="tablist" aria-label="Booking detail" style="margin:18px 0 0;display:flex;flex-wrap:wrap;gap:0;border-bottom:1px solid rgba(14,16,20,.16)">
+        <sc-for list="{{ bkTabs }}" as="t" hint-placeholder-count="5">
+          <button type="button" role="tab" aria-selected="{{ t.on }}" onClick="{{ t.onPick }}" style="background:none;border:0;border-bottom:2px solid {{ t.bd }};padding:12px 15px;font-size:13px;font-weight:600;color:{{ t.fg }};cursor:pointer;min-height:44px">{{ t.label }}</button>
+        </sc-for>
+      </div>
+
+      <div style="margin:20px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12);padding:clamp(16px,2.4vw,24px)">
+        <sc-if value="{{ bkOverview }}" hint-placeholder-val="{{ true }}">
+          <dl style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:16px 20px;margin:0;font-variant-numeric:tabular-nums">
+            <sc-for list="{{ bkFacts }}" as="f" hint-placeholder-count="8">
+              <div>
+                <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">{{ f.k }}</dt>
+                <dd style="margin:0;font-size:14px;font-weight:600;color:{{ f.fg }}">{{ f.v }}</dd>
+              </div>
+            </sc-for>
+          </dl>
+          <sc-if value="{{ canCancelBooking }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:22px 0 0;padding-top:18px;border-top:1px solid rgba(14,16,20,.1)">
+              <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560">Booking contact (§14.3 · this booking only)</div>
+              <div style="margin:10px 0 0;display:flex;flex-wrap:wrap;gap:9px;align-items:center">
+                <input type="tel" value="{{ bkContact }}" onChange="{{ onBkContact }}" placeholder="10-digit mobile" style="width:200px;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
+                <button type="button" onClick="{{ saveBkContact }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:11px 16px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Save contact</button>
+              </div>
+            </div>
+            <div style="margin:20px 0 0;padding-top:18px;border-top:1px solid rgba(14,16,20,.1)">
+              <label style="display:block;max-width:460px">
+                <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reason (required for any admin action)</span>
+                <input type="text" value="{{ adminReason }}" onChange="{{ onAdminReason }}" placeholder="Why this change is being made" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+              </label>
+              <div style="margin:14px 0 0;display:flex;flex-wrap:wrap;gap:9px">
+                <button type="button" onClick="{{ adminCancel }}" style="border:1px solid rgba(163,58,34,.4);color:#8A2F1C;background:none;padding:11px 16px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">{{ adminCancelLabel }}</button>
+                <sc-if value="{{ isSuper }}" hint-placeholder-val="{{ false }}">
+                  <button type="button" onClick="{{ openOverride }}" style="border:1px solid rgba(163,58,34,.4);color:#8A2F1C;background:none;padding:11px 16px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Refund outside policy…</button>
+                </sc-if>
+              </div>
+              <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:#5F6560">{{ adminCancelNote }}</p>
+            </div>
+
+            <sc-if value="{{ overrideOpen }}" hint-placeholder-val="{{ false }}">
+              <div role="dialog" aria-label="Refund outside policy" style="margin:16px 0 0;border:1px solid rgba(163,58,34,.32);border-top:2px solid #A33A22;background:#FFF9F7;padding:18px 20px;animation:dltRise .25s ease">
+                <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A2F1C">Policy override · Super Admin</div>
+                <p style="margin:10px 0 0;max-width:64ch;font-size:13px;line-height:1.6;color:#3D423C">{{ overrideBlurb }}</p>
+                <div style="margin:14px 0 0;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+                  <label style="display:block">
+                    <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Refund amount (₹)</span>
+                    <input type="number" min="1" value="{{ ovAmount }}" onChange="{{ onOvAmount }}" style="width:150px;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FFFFFF;font-size:14px;font-variant-numeric:tabular-nums" />
+                  </label>
+                  <label style="display:block;flex:1;min-width:220px">
+                    <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reason (permanent)</span>
+                    <input type="text" value="{{ ovReason }}" onChange="{{ onOvReason }}" placeholder="e.g. Departure retimed by 90 minutes" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FFFFFF;font-size:14px" />
+                  </label>
+                </div>
+                <label style="display:flex;align-items:center;gap:10px;margin:14px 0 0;font-size:13px;color:#3D423C">
+                  <input type="checkbox" checked="{{ ovCancel }}" onChange="{{ onOvCancel }}" style="width:16px;height:16px;accent-color:#8A2F1C" />
+                  Also cancel the booking, void the passes and release the seats
+                </label>
+                <div style="margin:16px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+                  <button type="button" onClick="{{ confirmOverride }}" style="background:#8A2F1C;color:#FFF9F7;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ ovConfirmCta }}</button>
+                  <button type="button" onClick="{{ closeOverride }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:11px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Cancel</button>
+                </div>
+              </div>
+            </sc-if>
+          </sc-if>
+        </sc-if>
+
+        <sc-if value="{{ bkPax }}" hint-placeholder-val="{{ false }}">
+          <div data-m="wide">
+            <div style="min-width:640px">
+              <div style="display:grid;grid-template-columns:minmax(0,1.3fr) 112px 132px 76px 130px;gap:12px;padding-bottom:11px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+                <span>Passenger</span><span>Student ID</span><span>Phone</span><span>Seat</span><span>Boarding</span>
+              </div>
+              <sc-for list="{{ bkPassengers }}" as="p" hint-placeholder-count="2">
+                <div style="display:grid;grid-template-columns:minmax(0,1.3fr) 112px 132px 76px 130px;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px;font-variant-numeric:tabular-nums">
+                  <span style="font-weight:600">{{ p.name }}</span>
+                  <span style="color:#3D423C">{{ p.sid }}</span>
+                  <span style="color:#3D423C">{{ p.phone }}</span>
+                  <span>{{ p.seat }}</span>
+                  <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ p.fg }}">{{ p.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ bkPay }}" hint-placeholder-val="{{ false }}">
+          <dl style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px 20px;margin:0;font-variant-numeric:tabular-nums">
+            <sc-for list="{{ payFacts }}" as="f" hint-placeholder-count="6">
+              <div>
+                <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">{{ f.k }}</dt>
+                <dd style="margin:0;font-size:14px;font-weight:600;color:{{ f.fg }}">{{ f.v }}</dd>
+              </div>
+            </sc-for>
+          </dl>
+          <p style="margin:20px 0 0;font-size:12.5px;line-height:1.6;color:#4A4F49">Payment records are never deleted. Refunds are raised against the original transaction and reconciled under Payments.</p>
+        </sc-if>
+
+        <sc-if value="{{ bkBoard }}" hint-placeholder-val="{{ false }}">
+          <p style="margin:0;font-size:13px;line-height:1.6;color:#3D423C">One secure token per passenger. Boarding is recorded per scan with the staff member and a timestamp; a second scan of the same token is refused.</p>
+          <div style="margin:16px 0 0;display:grid;gap:10px">
+            <sc-for list="{{ bkPassengers }}" as="p" hint-placeholder-count="2">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid rgba(14,16,20,.12);padding:12px 14px">
+                <div>
+                  <div style="font-size:13.5px;font-weight:600">{{ p.name }} · seat {{ p.seat }}</div>
+                  <div style="margin-top:4px;font-size:12.5px;color:#4A4F49">{{ p.boardMeta }}</div>
+                </div>
+                <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ p.fg }}">{{ p.state }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ bkAudit }}" hint-placeholder-val="{{ false }}">
+          <sc-for list="{{ bkTrail }}" as="a" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:140px minmax(0,1fr);gap:14px;padding:11px 0;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px">
+              <span style="font-family:'Martian Mono',monospace;font-size:9px;color:#7A7F77;font-variant-numeric:tabular-nums">{{ a.at }}</span>
+              <span style="color:#3D423C">{{ a.text }}</span>
+            </div>
+          </sc-for>
+          <sc-if value="{{ noTrail }}" hint-placeholder-val="{{ false }}">
+            <p style="margin:0;font-size:13px;color:#4A4F49">The audit trail is Super Admin only.</p>
+          </sc-if>
+        </sc-if>
+      </div>
+    </div>
+    </sc-if>
+  </section>
+  </sc-if>
+
+  <!-- BOARDING -->
+  <sc-if value="{{ atBoarding }}" hint-placeholder-val="{{ false }}">
+  <section>
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px">
+      <div>
+        <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">{{ boardTripLabel }}</div>
+        <h1 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(23px,2.5vw,30px);letter-spacing:-.02em">Boarding</h1>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:16px">
+        <sc-if value="{{ canPickTrip }}" hint-placeholder-val="{{ false }}">
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Trip</span>
+            <select value="{{ boardTripId }}" onChange="{{ onBoardTrip }}" style="padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FFFFFF;font-size:13px;min-height:44px">
+              <sc-for list="{{ boardTripOptions }}" as="o" hint-placeholder-count="3">
+                <option value="{{ o.id }}">{{ o.label }}</option>
+              </sc-for>
+            </select>
+          </label>
+        </sc-if>
+        <div style="text-align:right">
+          <div style="font-stretch:125%;font-weight:700;font-size:26px;line-height:1;font-variant-numeric:tabular-nums">{{ boardedCount }}<span style="color:#7A7F77">/{{ manifestCount }}</span></div>
+          <div style="margin-top:5px;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560">Boarded</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(336px,1fr));gap:16px;align-items:start">
+      <div style="background:#0E1014;color:#F7F5F0;border-top:2px solid #0E4B34;padding:20px">
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px">
+          <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5FAE86">Scanner</span>
+          <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#A9AFA6">{{ cameraLabel }}</span>
+        </div>
+        <div aria-live="assertive" style="margin:16px 0 0;border:1px solid rgba(247,245,240,.18);background:{{ scanBg }};color:{{ scanFg }};padding:22px 18px;text-align:center;animation:dltFlash .22s ease">
+          <div style="font-stretch:125%;font-weight:700;font-size:clamp(24px,3vw,34px);line-height:1;letter-spacing:-.02em">{{ scanResult }}</div>
+          <div style="margin-top:10px;font-size:13px;line-height:1.5">{{ scanDetail }}</div>
+          <sc-if value="{{ scanMeta }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:10px;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.8">{{ scanMeta }}</div>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ chooseOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="margin:14px 0 0;border:1px solid rgba(223,168,92,.5);background:rgba(223,168,92,.10);padding:14px">
+            <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#DFA85C">{{ chooseTitle }}</div>
+            <div style="margin:12px 0 0;display:grid;gap:8px">
+              <sc-for list="{{ choosePassengers }}" as="c" hint-placeholder-count="2">
+                <button type="button" onClick="{{ c.onPick }}" style="text-align:left;background:rgba(247,245,240,.08);color:#F7F5F0;border:1px solid rgba(247,245,240,.25);padding:13px 14px;border-radius:2px;cursor:pointer;min-height:52px">
+                  <span style="display:block;font-size:14.5px;font-weight:600">{{ c.label }}</span>
+                  <span style="display:block;margin-top:3px;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#A9AFA6">{{ c.sub }}</span>
+                </button>
+              </sc-for>
+            </div>
+            <button type="button" onClick="{{ cancelChoose }}" style="margin:10px 0 0;background:none;color:#A9AFA6;border:0;padding:8px 2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px">Not this booking</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ cameraOn }}" hint-placeholder-val="{{ false }}">
+          <video ref="{{ videoRef }}" playsinline="true" muted="true" style="margin-top:14px;width:100%;aspect-ratio:4/3;object-fit:cover;background:#000;border:1px solid rgba(247,245,240,.2)"></video>
+        </sc-if>
+
+        <sc-if value="{{ cameraError }}" hint-placeholder-val="{{ false }}">
+          <p role="alert" style="margin:14px 0 0;border-left:3px solid #DFA85C;background:rgba(223,168,92,.10);padding:12px 14px;font-size:13px;line-height:1.55;color:#F0E4CE">{{ cameraError }}</p>
+        </sc-if>
+
+        <div style="margin:16px 0 0;display:grid;gap:8px">
+          <sc-if value="{{ cameraSupported }}" hint-placeholder-val="{{ true }}">
+            <button type="button" onClick="{{ toggleCamera }}" style="background:#F7F5F0;color:#0E1014;border:0;padding:14px 16px;border-radius:2px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px">{{ cameraCta }}</button>
+          </sc-if>
+          <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#A9AFA6;margin-bottom:6px">Or type the boarding code, booking ID or pass token</span>
+            <input type="text" value="{{ manualToken }}" onChange="{{ onManualToken }}" placeholder="WX0000 · DLT-40219 · dlt.…" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(247,245,240,.25);border-radius:2px;background:rgba(247,245,240,.06);color:#F7F5F0;font-size:16px;min-height:48px" />
+          </label>
+          <button type="button" onClick="{{ scanManual }}" style="background:none;color:#F7F5F0;border:1px solid rgba(247,245,240,.3);padding:12px 14px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Validate this pass</button>
+        </div>
+        <p style="margin:14px 0 0;font-size:11.5px;line-height:1.55;color:#A9AFA6">Every scan is validated against the booking, the payment, the trip, cancellation, refund and prior boarding before a result is shown. The device never decides.</p>
+      </div>
+
+      <div style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.12)">
+          <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Manifest</span>
+          <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ pendingCount }} to board</span>
+        </div>
+        <div style="padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.1)">
+          <input type="search" value="{{ manifestQuery }}" onChange="{{ onManifestQuery }}" placeholder="Filter by name, student ID or seat" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.18);border-radius:2px;background:#FCFBF8;font-size:13px;min-height:44px" />
+        </div>
+        <div data-m="wide">
+          <div style="min-width:520px">
+            <sc-for list="{{ boardList }}" as="p" hint-placeholder-count="6">
+              <div style="display:grid;grid-template-columns:minmax(132px,1fr) 62px 116px auto;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px">
+                <div style="min-width:0">
+                  <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</div>
+                  <div style="margin-top:3px;font-size:12px;color:#4A4F49;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.sub }}</div>
+                </div>
+                <span style="font-variant-numeric:tabular-nums;white-space:nowrap">{{ p.seat }}<span style="color:#7A7F77;font-size:11px"> {{ p.typeShort }}</span></span>
+                <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ p.fg }}">{{ p.state }}</span>
+                <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                  <sc-for list="{{ p.actions }}" as="a" hint-placeholder-count="1">
+                    <button type="button" onClick="{{ a.onPick }}" style="border:1px solid {{ a.bd }};background:none;color:{{ a.fg }};padding:8px 11px;border-radius:2px;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;min-height:40px">{{ a.label }}</button>
+                  </sc-for>
+                  <sc-if value="{{ p.showTime }}" hint-placeholder-val="{{ true }}">
+                    <span style="font-size:11.5px;color:#7A7F77;white-space:nowrap">{{ p.at }}</span>
+                  </sc-if>
+                </span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{ emptyManifest }}" hint-placeholder-val="{{ false }}">
+          <p style="margin:0;padding:24px 16px;font-size:13px;color:#4A4F49;text-align:center">No passengers match that filter.</p>
+        </sc-if>
+      </div>
+    </div>
+
+    <sc-if value="{{ reasonPromptOpen }}" hint-placeholder-val="{{ false }}">
+      <div role="dialog" aria-label="Reason required" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(184,115,10,.4);border-top:2px solid #B8730A;padding:18px 20px;animation:dltRise .25s ease">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A5A0E">{{ reasonTitle }}</div>
+        <p style="margin:10px 0 0;max-width:60ch;font-size:13px;line-height:1.6;color:#3D423C">{{ reasonBlurb }}</p>
+        <label style="display:block;margin:14px 0 0;max-width:460px">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reason (required)</span>
+          <input type="text" value="{{ reasonValue }}" onChange="{{ onReasonValue }}" placeholder="{{ reasonPlaceholder }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+        <div style="margin:16px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+          <button type="button" onClick="{{ confirmReason }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ reasonCta }}</button>
+          <button type="button" onClick="{{ cancelReasonPrompt }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:11px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Cancel</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.14);padding:16px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A5A0E">After departure</div>
+      <p style="margin:9px 0 0;max-width:64ch;font-size:13px;line-height:1.6;color:#3D423C">Confirmed passengers who never boarded become <strong style="font-weight:600">potential no-show</strong> when the trip departs, and an admin confirms the final status — no refund follows automatically. Denied boarding is recorded separately with its reason.</p>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- PAYMENTS -->
+  <sc-if value="{{ atPayments }}" hint-placeholder-val="{{ false }}">
+  <section>
+    <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em">Payment reconciliation</h1>
+    <p style="margin:9px 0 0;max-width:62ch;font-size:13px;line-height:1.6;color:#3D423C">Super Admin only. A booking is confirmed only against a verified payment, never against what a browser reported. Discrepancies and duplicates are resolved here — the student is never asked to pay again.</p>
+    <div style="margin:18px 0 0;display:flex;flex-wrap:wrap;gap:8px">
+      <sc-for list="{{ payFilters }}" as="f" hint-placeholder-count="8">
+        <button type="button" onClick="{{ f.onPick }}" aria-pressed="{{ f.on }}" style="background:{{ f.bg }};color:{{ f.fg }};border:1px solid {{ f.bd }};padding:10px 13px;border-radius:2px;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;cursor:pointer;min-height:44px">{{ f.label }} {{ f.count }}</button>
+      </sc-for>
+    </div>
+    <div data-m="wide" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
+      <div style="min-width:940px">
+        <div style="display:grid;grid-template-columns:112px minmax(126px,1fr) 84px 138px 126px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+          <span>Booking</span><span>Student</span><span>Amount</span><span>Reference</span><span>Status</span><span>Action</span>
+        </div>
+        <sc-for list="{{ payRows }}" as="r" hint-placeholder-count="8">
+          <div style="display:grid;grid-template-columns:112px minmax(126px,1fr) 84px 138px 126px auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px;font-variant-numeric:tabular-nums">
+            <span style="font-weight:600">{{ r.code }}</span>
+            <span style="color:#3D423C">{{ r.student }}</span>
+            <span>{{ r.amount }}</span>
+            <span style="color:#3D423C;overflow:hidden;text-overflow:ellipsis">{{ r.ref }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ r.fg }}">{{ r.status }}</span>
+            <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+              <sc-for list="{{ r.actions }}" as="a" hint-placeholder-count="1">
+                <button type="button" onClick="{{ a.onPick }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:9px 12px;border-radius:2px;font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer;min-height:40px">{{ a.label }}</button>
+              </sc-for>
+            </span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ reasonPromptOpen }}" hint-placeholder-val="{{ false }}">
+      <div role="dialog" aria-label="Reason required" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(184,115,10,.4);border-top:2px solid #B8730A;padding:18px 20px;animation:dltRise .25s ease">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A5A0E">{{ reasonTitle }}</div>
+        <p style="margin:10px 0 0;max-width:60ch;font-size:13px;line-height:1.6;color:#3D423C">{{ reasonBlurb }}</p>
+        <label style="display:block;margin:14px 0 0;max-width:460px">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reason (required)</span>
+          <input type="text" value="{{ reasonValue }}" onChange="{{ onReasonValue }}" placeholder="{{ reasonPlaceholder }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+        <div style="margin:16px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+          <button type="button" onClick="{{ confirmReason }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ reasonCta }}</button>
+          <button type="button" onClick="{{ cancelReasonPrompt }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:11px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Cancel</button>
+        </div>
+      </div>
+    </sc-if>
+  </section>
+  </sc-if>
+
+  <!-- WAITLIST -->
+  <sc-if value="{{ atWaitlist }}" hint-placeholder-val="{{ false }}">
+  <section>
+    <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em">Waitlist</h1>
+    <p style="margin:9px 0 0;max-width:62ch;font-size:13px;line-height:1.6;color:#3D423C">When a seat is released it is offered to the next eligible student, who gets 30 minutes to claim and pay for it. Reordering keeps the original join time and requires a reason.</p>
+    <label style="display:block;margin:18px 0 0;max-width:320px">
+      <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Trip</span>
+      <select value="{{ wlTripId }}" onChange="{{ onWlTrip }}" style="width:100%;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FFFFFF;font-size:13px;min-height:44px">
+        <sc-for list="{{ wlTripOptions }}" as="o" hint-placeholder-count="3">
+          <option value="{{ o.id }}">{{ o.label }}</option>
+        </sc-for>
+      </select>
+    </label>
+    <div data-m="wide" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
+      <div style="min-width:680px">
+        <div style="display:grid;grid-template-columns:64px minmax(0,1fr) 128px 150px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+          <span>Pos</span><span>Student</span><span>Joined</span><span>Status</span><span>Action</span>
+        </div>
+        <sc-for list="{{ wlRows }}" as="w" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:64px minmax(0,1fr) 128px 150px auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px;font-variant-numeric:tabular-nums">
+            <span style="font-weight:600">{{ w.pos }}</span>
+            <span>{{ w.student }} <span style="color:#5F6560">· {{ w.studentId }}</span></span>
+            <span style="color:#3D423C">{{ w.joined }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ w.fg }}">{{ w.status }}</span>
+            <span style="display:flex;justify-content:flex-end">
+              <sc-if value="{{ w.canMove }}" hint-placeholder-val="{{ false }}">
+                <button type="button" onClick="{{ w.onMove }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:9px 12px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px">Move to top</button>
+              </sc-if>
+            </span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ emptyWaitlist }}" hint-placeholder-val="{{ false }}">
+      <p style="margin:16px 0 0;font-size:13px;color:#4A4F49">Nobody is waiting on this trip.</p>
+    </sc-if>
+    <sc-if value="{{ reasonPromptOpen }}" hint-placeholder-val="{{ false }}">
+      <div role="dialog" aria-label="Reason required" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(184,115,10,.4);border-top:2px solid #B8730A;padding:18px 20px">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A5A0E">{{ reasonTitle }}</div>
+        <p style="margin:10px 0 0;max-width:60ch;font-size:13px;line-height:1.6;color:#3D423C">{{ reasonBlurb }}</p>
+        <label style="display:block;margin:14px 0 0;max-width:460px">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reason (required)</span>
+          <input type="text" value="{{ reasonValue }}" onChange="{{ onReasonValue }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+        <div style="margin:16px 0 0;display:flex;gap:10px">
+          <button type="button" onClick="{{ confirmReason }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ reasonCta }}</button>
+          <button type="button" onClick="{{ cancelReasonPrompt }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:11px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Cancel</button>
+        </div>
+      </div>
+    </sc-if>
+  </section>
+  </sc-if>
+
+  <!-- STUDENTS -->
+  <sc-if value="{{ atStudents }}" hint-placeholder-val="{{ false }}">
+  <section>
+    <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em">Students</h1>
+    <p style="margin:9px 0 0;max-width:62ch;font-size:13px;line-height:1.6;color:#3D423C">Emergency contacts are not listed here. Revealing one is a sensitive action: it needs a reason and is written to the audit log.</p>
+    <div data-m="wide" style="margin:18px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
+      <div style="min-width:820px">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 120px 128px 84px 84px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+          <span>Student</span><span>Student ID</span><span>Phone</span><span>Bookings</span><span>Email</span><span>Action</span>
+        </div>
+        <sc-for list="{{ students }}" as="s" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 120px 128px 84px 84px auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px;font-variant-numeric:tabular-nums">
+            <div style="min-width:0">
+              <div style="font-weight:600">{{ s.name }}</div>
+              <div style="margin-top:3px;font-size:12px;color:#5F6560;overflow:hidden;text-overflow:ellipsis">{{ s.email }}</div>
+            </div>
+            <span style="color:#3D423C">{{ s.studentId }}</span>
+            <span style="color:#3D423C">{{ s.phone }}</span>
+            <span>{{ s.bookings }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ s.verifiedFg }}">{{ s.verified }}</span>
+            <span style="display:flex;justify-content:flex-end">
+              <sc-if value="{{ s.canReveal }}" hint-placeholder-val="{{ false }}">
+                <button type="button" onClick="{{ s.onReveal }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:9px 12px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px;white-space:nowrap">Emergency contact</button>
+              </sc-if>
+            </span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ reasonPromptOpen }}" hint-placeholder-val="{{ false }}">
+      <div role="dialog" aria-label="Reason required" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(184,115,10,.4);border-top:2px solid #B8730A;padding:18px 20px">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A5A0E">{{ reasonTitle }}</div>
+        <p style="margin:10px 0 0;max-width:60ch;font-size:13px;line-height:1.6;color:#3D423C">{{ reasonBlurb }}</p>
+        <label style="display:block;margin:14px 0 0;max-width:460px">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reason (required)</span>
+          <input type="text" value="{{ reasonValue }}" onChange="{{ onReasonValue }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+        <div style="margin:16px 0 0;display:flex;gap:10px">
+          <button type="button" onClick="{{ confirmReason }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ reasonCta }}</button>
+          <button type="button" onClick="{{ cancelReasonPrompt }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:11px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Cancel</button>
+        </div>
+      </div>
+    </sc-if>
+  </section>
+  </sc-if>
+
+  <!-- FEEDBACK -->
+  <sc-if value="{{ atFeedback }}" hint-placeholder-val="{{ false }}">
+  <section>
+    <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em">Feedback</h1>
+    <p style="margin:9px 0 0;max-width:62ch;font-size:13px;line-height:1.6;color:#3D423C">One rating per completed trip. Hiding a review keeps it on the record and removes it from any public view.</p>
+    <div style="margin:18px 0 0;display:grid;gap:12px">
+      <sc-for list="{{ reviews }}" as="r" hint-placeholder-count="3">
+        <div style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12);padding:16px 18px">
+          <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:10px">
+            <div>
+              <span style="font-size:15px;color:#0E4B34;letter-spacing:.08em">{{ r.stars }}</span>
+              <span style="margin-left:9px;font-size:13.5px;font-weight:600">{{ r.student }}</span>
+              <span style="margin-left:9px;font-size:12.5px;color:#4A4F49">{{ r.trip }}</span>
+            </div>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ r.statusFg }}">{{ r.status }}</span>
+          </div>
+          <sc-if value="{{ r.feedback }}" hint-placeholder-val="{{ true }}">
+            <p style="margin:10px 0 0;font-size:13px;line-height:1.6;color:#3D423C">{{ r.feedback }}</p>
+          </sc-if>
+          <div style="margin:14px 0 0;display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{ r.actions }}" as="a" hint-placeholder-count="2">
+              <button type="button" onClick="{{ a.onPick }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:9px 13px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px">{{ a.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <sc-if value="{{ noReviews }}" hint-placeholder-val="{{ false }}">
+      <p style="margin:18px 0 0;font-size:13px;color:#4A4F49">No ratings yet.</p>
+    </sc-if>
+  </section>
+  </sc-if>
+
+  <!-- NOTIFICATIONS -->
+  <sc-if value="{{ atRequests }}" hint-placeholder-val="{{ false }}">
+  <section>
+    <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em">Requests</h1>
+    <p style="margin:9px 0 0;max-width:62ch;font-size:13px;line-height:1.6;color:#3D423C">Notify-me requests, student ID change requests and account deletion requests. Messages are sent by hand at launch, so marking one notified is a real state change.</p>
+    <div data-m="wide" style="margin:18px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
+      <div style="min-width:760px">
+        <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 150px 116px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+          <span>Kind</span><span>Who</span><span>Detail</span><span>Status</span><span>Action</span>
+        </div>
+        <sc-for list="{{ requests }}" as="r" hint-placeholder-count="4">
+          <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 150px 116px auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px">
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#3D423C">{{ r.kind }}</span>
+            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis">{{ r.who }}</span>
+            <span style="color:#3D423C;overflow:hidden;text-overflow:ellipsis">{{ r.detail }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ r.fg }}">{{ r.status }}</span>
+            <span style="display:flex;justify-content:flex-end;gap:8px">
+              <sc-if value="{{ r.canAct }}" hint-placeholder-val="{{ false }}">
+                <button type="button" onClick="{{ r.onAct }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:9px 12px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px;white-space:nowrap">Mark notified</button>
+              </sc-if>
+              <sc-if value="{{ r.canDecide }}" hint-placeholder-val="{{ false }}">
+                <button type="button" onClick="{{ r.onApprove }}" style="border:1px solid rgba(14,75,52,.4);color:#0E4B34;background:none;padding:9px 12px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px;white-space:nowrap">Approve</button>
+                <button type="button" onClick="{{ r.onReject }}" style="border:1px solid rgba(163,58,34,.4);color:#8A2F1C;background:none;padding:9px 12px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px;white-space:nowrap">Reject</button>
+              </sc-if>
+            </span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ noRequests }}" hint-placeholder-val="{{ false }}">
+      <p style="margin:18px 0 0;font-size:13px;color:#4A4F49">No open requests.</p>
+    </sc-if>
+    <sc-if value="{{ reasonPromptOpen }}" hint-placeholder-val="{{ false }}">
+      <div role="dialog" aria-label="Reason required" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(184,115,10,.4);border-top:2px solid #B8730A;padding:18px 20px">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A5A0E">{{ reasonTitle }}</div>
+        <p style="margin:10px 0 0;max-width:60ch;font-size:13px;line-height:1.6;color:#3D423C">{{ reasonBlurb }}</p>
+        <label style="display:block;margin:14px 0 0;max-width:460px">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reason (required)</span>
+          <input type="text" value="{{ reasonValue }}" onChange="{{ onReasonValue }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+        <div style="margin:16px 0 0;display:flex;gap:10px">
+          <button type="button" onClick="{{ confirmReason }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ reasonCta }}</button>
+          <button type="button" onClick="{{ cancelReasonPrompt }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:11px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Cancel</button>
+        </div>
+      </div>
+    </sc-if>
+
+  </section>
+  </sc-if>
+
+  <!-- REPORTS -->
+  <sc-if value="{{ atReports }}" hint-placeholder-val="{{ false }}">
+  <section>
+    <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em">Reports</h1>
+    <p style="margin:9px 0 0;max-width:62ch;font-size:13px;line-height:1.6;color:#3D423C">Every report is computed from records, and every export downloads a real CSV. Payment and refund reports are Super Admin only.</p>
+
+    <div style="margin:20px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12);padding:clamp(16px,2.4vw,24px)">
+      <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end">
+        <label style="display:block">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Trip</span>
+          <select value="{{ repTripId }}" onChange="{{ onRepTrip }}" style="padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:13px;min-height:44px">
+            <option value="">All trips</option>
+            <sc-for list="{{ repTripOptions }}" as="o" hint-placeholder-count="4">
+              <option value="{{ o.id }}">{{ o.label }}</option>
+            </sc-for>
+          </select>
+        </label>
+        <label style="display:block">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">From</span>
+          <input type="date" value="{{ repFrom }}" onChange="{{ onRepFrom }}" style="padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:13px;min-height:44px" />
+        </label>
+        <label style="display:block">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">To</span>
+          <input type="date" value="{{ repTo }}" onChange="{{ onRepTo }}" style="padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:13px;min-height:44px" />
+        </label>
+      </div>
+
+      <div style="margin:20px 0 0;display:flex;flex-wrap:wrap;gap:9px">
+        <sc-for list="{{ reportButtons }}" as="b" hint-placeholder-count="8">
+          <button type="button" onClick="{{ b.onPick }}" style="border:1px solid {{ b.bd }};background:{{ b.bg }};color:{{ b.fg }};padding:11px 15px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">{{ b.label }} <span style="font-family:'Martian Mono',monospace;font-size:8.5px;opacity:.7">{{ b.rows }}</span></button>
+        </sc-for>
+      </div>
+    </div>
+
+    <sc-if value="{{ hasPreview }}" hint-placeholder-val="{{ false }}">
+      <div style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.12)">
+          <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">{{ previewTitle }} · {{ previewCount }} rows</span>
+          <button type="button" onClick="{{ exportPreview }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:11px 17px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Export CSV</button>
+        </div>
+        <div data-m="wide">
+          <div style="min-width:760px">
+            <div style="display:flex;gap:0;padding:10px 16px;border-bottom:1px solid rgba(14,16,20,.1)">
+              <sc-for list="{{ previewCols }}" as="c" hint-placeholder-count="6">
+                <span style="flex:1;font-family:'Martian Mono',monospace;font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ c }}</span>
+              </sc-for>
+            </div>
+            <sc-for list="{{ previewRows }}" as="r" hint-placeholder-count="6">
+              <div style="display:flex;gap:0;padding:11px 16px;border-bottom:1px solid rgba(14,16,20,.07);font-size:12.5px;font-variant-numeric:tabular-nums">
+                <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
+                  <span style="flex:1;color:#3D423C;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px">{{ c }}</span>
+                </sc-for>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ postTrip }}" hint-placeholder-val="{{ true }}">
+      <div style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12);padding:clamp(16px,2.4vw,24px)">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Post-trip summary · {{ postTripWhen }}</div>
+        <dl style="margin:18px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(126px,1fr));gap:16px 20px;font-variant-numeric:tabular-nums">
+          <sc-for list="{{ postTripRows }}" as="s" hint-placeholder-count="10">
+            <div>
+              <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">{{ s.k }}</dt>
+              <dd style="margin:0;font-size:15px;font-weight:600">{{ s.v }}</dd>
+            </div>
+          </sc-for>
+        </dl>
+      </div>
+    </sc-if>
+  </section>
+  </sc-if>
+
+  <!-- AUDIT -->
+  <sc-if value="{{ atAudit }}" hint-placeholder-val="{{ false }}">
+  <section>
+    <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em">Audit log</h1>
+    <p style="margin:9px 0 0;max-width:62ch;font-size:13px;line-height:1.6;color:#3D423C">Append-only. Every sensitive action records the actor, what changed from what to what, and the reason its actor gave.</p>
+    <div style="margin:18px 0 0;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+      <label style="display:block;flex:1;min-width:220px">
+        <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Filter</span>
+        <input type="search" value="{{ auditQuery }}" onChange="{{ onAuditQuery }}" placeholder="action, actor or reason" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FFFFFF;font-size:13px;min-height:44px" />
+      </label>
+      <button type="button" onClick="{{ exportAudit }}" style="border:1px solid rgba(14,16,20,.2);background:#FFFFFF;padding:11px 16px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Export CSV</button>
+    </div>
+    <div data-m="wide" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
+      <div style="min-width:900px">
+        <div style="display:grid;grid-template-columns:140px 150px minmax(0,1fr) minmax(0,.9fr);gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+          <span>When</span><span>Actor</span><span>Action</span><span>Reason</span>
+        </div>
+        <sc-for list="{{ auditRows }}" as="a" hint-placeholder-count="10">
+          <div style="display:grid;grid-template-columns:140px 150px minmax(0,1fr) minmax(0,.9fr);gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px">
+            <span style="font-family:'Martian Mono',monospace;font-size:9px;color:#7A7F77;font-variant-numeric:tabular-nums">{{ a.at }}</span>
+            <span style="color:#3D423C">{{ a.actor }}</span>
+            <span style="color:#0E1014">{{ a.action }}</span>
+            <span style="color:#4A4F49">{{ a.reason }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+  </sc-if>
+  </div>
+  </sc-if>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 1360, &quot;height&quot;: 900 }
+}">
+/* Operations console. Every action calls DLT, which enforces the permission,
+   demands a reason where the specification demands one, and writes the audit
+   entry. Nothing here is a message-only stub. */
+class Component extends DCLogic {
+  state = {
+    ready: false, tick: 0, section: 'Dashboard', toast: null, toastKind: 'ok',
+    bkTab: 'Overview', bookingId: null, query: '', adminReason: '',
+    boardTripId: null, manualToken: '', manifestQuery: '', scan: null, choose: null,
+    cameraOn: false, cameraSupported: false, cameraError: null, engine: null,
+    payFilter: 'All', wlTripId: null, auditQuery: '',
+    newTripOpen: false, ntDate: '', ntTime: '17:30', ntVehicle: '', ntPrice: 259,
+    validation: null, validationTripId: null,
+    cancelTripId: null, cancelReason: '', template: null,
+    repTripId: '', repFrom: '', repTo: '', preview: null,
+    prompt: null, reasonValue: '',
+    seatTripId: null, staffPick: '',
+    vehicleFormOpen: false, vfId: null, vfName: '', vfReg: '', vfRows: 11, vfStatus: 'AVAILABLE',
+    bkContact: null,
+    overrideOpen: false, ovAmount: '', ovReason: '', ovCancel: true,
+    manualOpen: false, mbTrip: '', mbType: 'COMPLIMENTARY', mbName: '', mbSid: '', mbPhone: '',
+    mbEmail: '', mbReason: '',
+  };
+
+  async componentDidMount() {
+    await DLT.ready;
+    this._unsub = DLT.subscribe(() => this.setState({ tick: this.state.tick + 1 }));
+    this._timer = setInterval(() => this.setState({ tick: this.state.tick + 1 }), 6000);
+    const supported = typeof window.BarcodeDetector === 'function' || typeof window.jsQR === 'function';
+    const d = new Date(); d.setDate(d.getDate() + 7);
+    this.setState({ ready: true, cameraSupported: supported,
+      ntDate: d.toISOString().slice(0, 10) });
+  }
+  componentWillUnmount() {
+    if (this._unsub) this._unsub();
+    clearInterval(this._timer);
+    this._stopCamera();
+  }
+
+  ok = (msg) => this.setState({ toast: msg, toastKind: 'ok' });
+  bad = (e) => this.setState({ toast: (e && e.message) || String(e), toastKind: 'bad' });
+
+  /* ---- camera scanning. Two decoders, one validation chain ---- */
+  _decoder() {
+    if (typeof window.BarcodeDetector === 'function') return 'native';
+    if (typeof window.jsQR === 'function') return 'jsqr';
+    return null;
+  }
+  async _startCamera() {
+    const engine = this._decoder();
+    if (!engine) {
+      this.setState({ cameraOn: false,
+        cameraError: 'No QR decoder is available in this browser. Enter the boarding code below instead.' });
+      return;
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    } catch (e) {
+      const name = e && e.name;
+      const msg = name === 'NotAllowedError' || name === 'SecurityError'
+        ? 'Camera permission was refused. Allow the camera in the browser, or enter the boarding code below.'
+        : name === 'NotFoundError' || name === 'OverconstrainedError'
+          ? 'No camera on this device. Enter the boarding code below.'
+          : 'The camera could not be started (' + (name || e.message || e) + '). Enter the boarding code below.';
+      this.setState({ cameraOn: false, cameraError: msg });
+      return;
+    }
+    this._stream = stream;
+    this.setState({ cameraOn: true, cameraError: null, engine });
+    setTimeout(() => {
+      if (this._video) { this._video.srcObject = stream; this._video.play(); }
+    }, 60);
+    const detector = engine === 'native' ? new window.BarcodeDetector({ formats: ['qr_code'] }) : null;
+    const canvas = document.createElement('canvas');
+    this._scanLoop = setInterval(async () => {
+      const v = this._video;
+      if (!v || v.readyState < 2 || !v.videoWidth) return;
+      let value = null;
+      try {
+        if (detector) {
+          const codes = await detector.detect(v);
+          value = codes && codes.length ? codes[0].rawValue : null;
+        } else {
+          /* sample the frame down before decoding: a 640-wide frame decodes in a
+             few milliseconds and keeps the door queue moving */
+          const w = 480, h = Math.round(v.videoHeight * (480 / v.videoWidth));
+          canvas.width = w; canvas.height = h;
+          const g = canvas.getContext('2d', { willReadFrequently: true });
+          g.drawImage(v, 0, 0, w, h);
+          const img = g.getImageData(0, 0, w, h);
+          const found = window.jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
+          value = found ? found.data : null;
+        }
+      } catch (e) { return; }
+      if (value && value !== this._lastCode) {
+        this._lastCode = value;
+        this._doScan(value);
+        setTimeout(() => { this._lastCode = null; }, 2500);
+      }
+    }, engine === 'native' ? 400 : 250);
+  }
+  _stopCamera() {
+    clearInterval(this._scanLoop);
+    if (this._stream) this._stream.getTracks().forEach(t => t.stop());
+    this._stream = null;
+  }
+
+  _doScan(code, passengerId) {
+    try {
+      const res = DLT.boarding.scan(code, this._tripId(), passengerId);
+      if (res.result === 'CHOOSE') {
+        this.setState({ scan: res, choose: res, manualToken: code });
+        return;
+      }
+      this.setState({ scan: res, choose: null, manualToken: '' });
+    } catch (e) { this.bad(e); }
+  }
+
+  _tripId() {
+    /* §Boarding 5 — staff are scoped to the trip operations assigned them; the
+       store enforces it, and the console must not pretend otherwise. */
+    const me = DLT.auth.current();
+    if (me && me.role === 'BOARDING_STAFF') {
+      const t = DLT.boarding.assignedTrip();
+      return t ? t.id : null;
+    }
+    if (this.state.boardTripId) return this.state.boardTripId;
+    const trips = DLT.trips.listAll();
+    const t = trips.find(t => t.status === 'BOARDING')
+      || trips.find(t => t.status === 'BOOKING_CLOSED')
+      || trips.find(t => t.status === 'OPEN');
+    return t ? t.id : null;
+  }
+
+  /* ---- the reason prompt every audited action goes through ---- */
+  ask(title, blurb, cta, placeholder, run) {
+    this.setState({ prompt: { title, blurb, cta, placeholder, run }, reasonValue: '' });
+  }
+  confirmReason = () => {
+    const p = this.state.prompt;
+    if (!p) return;
+    try {
+      p.run(this.state.reasonValue);
+      this.setState({ prompt: null, reasonValue: '' });
+    } catch (e) { this.bad(e); }
+  };
+
+  renderVals() {
+    const st = this.state;
+    if (!st.ready) {
+      return { signedIn: false, signedOut: false, nav: [], roleName: '—', roleScope: 'Loading',
+        metrics: [], alerts: [], activity: [], tripRows: [], bkTabs: [], bkFacts: [],
+        bkPassengers: [], payFacts: [], bkTrail: [], boardList: [], payRows: [],
+        payFilters: [], auditRows: [], vehicles: [], students: [], reviews: [],
+        requests: [], wlRows: [], reportButtons: [], postTripRows: [], validLines: [],
+        previewRows: [], previewCols: [], vehicleOptions: [], boardTripOptions: [],
+        wlTripOptions: [], repTripOptions: [], results: [] };
+    }
+
+    const me = DLT.auth.current();
+    if (!me || me.role === 'STUDENT') {
+      return { signedIn: false, signedOut: true, nav: [], roleName: me ? me.name : '—',
+        roleScope: me ? 'Student account — no operations access' : 'Not signed in',
+        signOut: () => { DLT.auth.signOut(); this.setState({ tick: st.tick + 1 }); },
+        metrics: [], alerts: [], activity: [], tripRows: [], bkTabs: [], bkFacts: [],
+        bkPassengers: [], payFacts: [], bkTrail: [], boardList: [], payRows: [],
+        payFilters: [], auditRows: [], vehicles: [], students: [], reviews: [],
+        requests: [], wlRows: [], reportButtons: [], postTripRows: [], validLines: [],
+        previewRows: [], previewCols: [], vehicleOptions: [], boardTripOptions: [],
+        wlTripOptions: [], repTripOptions: [], results: [] };
+    }
+
+    const isSuper = me.role === 'SUPER_ADMIN';
+    const isStaff = me.role === 'BOARDING_STAFF';
+    const allow = (a) => DLT.can(me.role, a);
+
+    /* navigation reflects real permissions */
+    const sections = [
+      ['Dashboard', 'trip.read'], ['Trips', 'trip.read'], ['Vehicles', 'vehicle.read'],
+      ['Bookings', 'booking.read'], ['Boarding', 'boarding.read'], ['Waitlist', 'waitlist.read'],
+      ['Students', 'student.read'], ['Feedback', 'feedback.read'], ['Requests', 'notification.read'],
+      ['Payments', '*'], ['Reports', 'report.read'], ['Audit', '*'],
+    ].filter(([, perm]) => allow(perm));
+    const section = sections.some(([s]) => s === st.section) ? st.section
+      : (isStaff ? 'Boarding' : 'Dashboard');
+
+    let dash = null;
+    try { dash = DLT.admin.dashboard(); } catch (e) { dash = null; }
+    const allTrips = DLT.trips.listAll();
+    const badge = {};
+    if (dash) {
+      badge.Boarding = dash.boarded + '/' + dash.passengers;
+      const pend = (function () { try { return DLT.admin.payments('Pending').length + DLT.admin.payments('Discrepancy').length + DLT.admin.payments('Duplicate').length; } catch (e) { return 0; } })();
+      if (pend) badge.Payments = String(pend);
+      const drafts = allTrips.filter(t => t.status === 'DRAFT').length;
+      if (drafts) badge.Trips = drafts + ' draft';
+      try {
+        const open = DLT.notifications.list().filter(n => n.status === 'PENDING').length;
+        if (open) badge.Requests = String(open);
+      } catch (e) {}
+    }
+
+    const nav = sections.map(([s]) => ({
+      label: s, on: section === s ? 'page' : 'false',
+      bg: section === s ? '#1E2329' : 'transparent',
+      fg: section === s ? '#F7F5F0' : '#C3C8BE',
+      weight: section === s ? 600 : 500,
+      badge: badge[s] || '', badgeFg: s === 'Payments' ? '#DFA85C' : '#A9AFA6',
+      onPick: () => this.setState({ section: s, toast: null }),
+    }));
+
+    /* ---------- boarding ---------- */
+    const tripId = this._tripId();
+    const boardTrip = tripId ? DLT.trips.get(tripId) : null;
+    let manifest = [];
+    try { manifest = tripId ? DLT.boarding.manifest(tripId) : []; } catch (e) { manifest = []; }
+    const q = st.manifestQuery.trim().toLowerCase();
+    const filteredManifest = manifest.filter(p => !q ||
+      (p.name + ' ' + p.studentId + ' ' + p.seatNumber).toLowerCase().indexOf(q) >= 0);
+    const boardedCount = manifest.filter(p => p.boardingStatus === 'BOARDED').length;
+    const scan = st.scan;
+    const tone = !scan ? ['rgba(247,245,240,.06)', '#F7F5F0']
+      : scan.result === 'VALID' ? ['#0E4B34', '#F7F5F0']
+      : scan.result === 'ALREADY BOARDED' ? ['#8A5A0E', '#FFF8EC']
+      : ['#8A2A18', '#FFF1ED'];
+
+    /* ---------- bookings ---------- */
+    let bookingList = [];
+    if (allow('booking.read')) {
+      try { bookingList = st.query.trim().length >= 3 ? DLT.admin.search(st.query) : DLT.admin.bookings({ limit: 12 }); }
+      catch (e) { bookingList = []; }
+    }
+    const booking = bookingList.find(b => b.id === st.bookingId) || bookingList[0] || null;
+    let trail = [];
+    if (booking && isSuper) {
+      try {
+        trail = DLT.admin.audit({ limit: 200 })
+          .filter(a => a.entity && a.entity.indexOf(booking.id.slice(0, 12)) >= 0)
+          .slice(0, 12);
+      } catch (e) {}
+    }
+
+    /* ---------- payments ---------- */
+    let payRows = [], payCounts = {};
+    if (isSuper) {
+      try {
+        const all = DLT.admin.payments();
+        all.forEach(r => { payCounts[r.bucket] = (payCounts[r.bucket] || 0) + 1; });
+        payRows = all.filter(r => st.payFilter === 'All' || r.bucket === st.payFilter);
+      } catch (e) {}
+    }
+
+    /* ---------- reports ---------- */
+    const repFilter = {
+      tripId: st.repTripId || null,
+      from: st.repFrom ? new Date(st.repFrom + 'T00:00:00').getTime() : null,
+      to: st.repTo ? new Date(st.repTo + 'T23:59:59').getTime() : null,
+    };
+    const reportKinds = [
+      ['bookings', 'Bookings'], ['revenue', 'Revenue'], ['passengers', 'Passengers'],
+      ['occupancy', 'Occupancy'], ['manifest', 'Manifest'], ['boarding', 'Boarding'],
+      ['noshow', 'No-shows'],
+    ].concat(isSuper ? [['payments', 'Payments'], ['refunds', 'Refunds']] : []);
+    const reportButtons = reportKinds.map(([kind, label]) => {
+      let rows = 0;
+      try { rows = (DLT.admin.report(kind, repFilter) || []).length; } catch (e) { rows = 0; }
+      const on = st.preview && st.preview.kind === kind;
+      return {
+        label, rows: rows ? '· ' + rows : '· 0',
+        bg: on ? '#0E1014' : 'transparent', fg: on ? '#F7F5F0' : '#0E1014',
+        bd: on ? '#0E1014' : 'rgba(14,16,20,.2)',
+        onPick: () => {
+          try {
+            const data = DLT.admin.report(kind, repFilter) || [];
+            this.setState({ preview: { kind, label, rows: data }, toast: null });
+          } catch (e) { this.bad(e); }
+        },
+      };
+    });
+    let post = null;
+    try { post = DLT.admin.report('posttrip', repFilter); } catch (e) {}
+
+    /* ---------- audit ---------- */
+    let auditRows = [];
+    if (isSuper) {
+      try {
+        auditRows = DLT.admin.audit({ q: st.auditQuery, limit: 60 }).map(a => ({
+          at: DLT.fmt.dateTime(a.at), actor: a.actor + ' · ' + a.actorRole,
+          action: a.text, reason: a.reason || '—',
+        }));
+      } catch (e) {}
+    }
+
+    /* ---------- vehicles ---------- */
+    let vehicles = [];
+    if (allow('vehicle.read')) {
+      try {
+        vehicles = DLT.admin.vehicles().map(v => ({
+          name: v.name, registration: v.registration, rows: v.rowCount, capacity: v.capacity,
+          status: v.status, assigned: v.assignedTrips,
+          next: v.nextTripAt ? DLT.fmt.date(v.nextTripAt) : '—',
+          statusFg: v.status === 'AVAILABLE' ? '#0E4B34' : v.status === 'MAINTENANCE' ? '#8A5A0E' : '#5F6560',
+          canEdit: allow('vehicle.write'),
+          actions: [{
+            label: 'Edit',
+            onPick: () => this.setState({ vehicleFormOpen: true, vfId: v.id, vfName: v.name,
+              vfReg: v.registration, vfRows: v.rowCount, vfStatus: v.status }),
+          }].concat((v.status === 'AVAILABLE'
+            ? [['Send to maintenance', 'MAINTENANCE'], ['Retire', 'INACTIVE']]
+            : [['Return to service', 'AVAILABLE']]).map(([label, status]) => ({
+            label,
+            onPick: () => {
+              try { DLT.admin.saveVehicle({ id: v.id, status }); this.ok(v.name + ' is now ' + status.toLowerCase() + '.'); }
+              catch (e) { this.bad(e); }
+            },
+          }))),
+        }));
+      } catch (e) {}
+    }
+
+    /* ---------- waitlist ---------- */
+    const wlTrips = allTrips.filter(t => ['OPEN', 'BOOKING_CLOSED'].indexOf(t.status) >= 0);
+    const wlTripId = st.wlTripId || (wlTrips.find(t => t.waitlistCount) || wlTrips[0] || {}).id || null;
+    let wlRows = [];
+    if (allow('waitlist.read') && wlTripId) {
+      try {
+        wlRows = DLT.waitlist.forTrip(wlTripId).map((w, i) => ({
+          pos: w.position, student: w.student, studentId: w.studentId || '—',
+          joined: DLT.fmt.dateTime(w.joinedAt), status: w.status.replace('_', ' '),
+          fg: w.status === 'CLAIM_OFFERED' ? '#8A5A0E' : w.status === 'WAITING' ? '#0E4B34' : '#5F6560',
+          canMove: allow('waitlist.reorder') && w.status === 'WAITING' && i > 0,
+          onMove: () => this.ask('Reorder the waitlist',
+            'Moving ' + w.student + ' to the top changes who is offered the next released seat. The original join time is preserved and this is written to the audit log.',
+            'Move to top', 'e.g. Medical appointment confirmed by the university',
+            (reason) => { DLT.waitlist.reorder(w.id, 1, reason); this.ok(w.student + ' moved to the top of the waitlist.'); }),
+        }));
+      } catch (e) {}
+    }
+
+    /* ---------- students, feedback, requests ---------- */
+    let students = [];
+    if (allow('student.read')) {
+      try {
+        students = DLT.admin.students().map(s => ({
+          name: s.name, email: s.email, studentId: s.studentId || '—', phone: s.phone || '—',
+          bookings: s.bookings, verified: s.emailVerified ? 'Verified' : 'Unverified',
+          verifiedFg: s.emailVerified ? '#0E4B34' : '#8A5A0E',
+          canReveal: isSuper && s.emergencyContactAvailable,
+          onReveal: () => this.ask('Reveal an emergency contact',
+            'This is protected personal information. Your name, the reason and the time are written to the audit log.',
+            'Reveal contact', 'e.g. Passenger taken ill on the 17:30 departure',
+            (reason) => {
+              const c = DLT.admin.revealEmergencyContact(s.id, reason);
+              this.ok(c ? s.name + ' — emergency contact: ' + c.name + ' (' + c.relation + ') ' + c.phone
+                : s.name + ' has no emergency contact on file.');
+            }),
+        }));
+      } catch (e) {}
+    }
+    let reviews = [];
+    if (allow('feedback.read')) {
+      try {
+        reviews = DLT.reviews.list().map(r => ({
+          stars: '★★★★★'.slice(0, r.rating) + '☆☆☆☆☆'.slice(0, 5 - r.rating),
+          student: r.student, trip: r.trip || '—', feedback: r.feedback || '',
+          status: r.status, statusFg: r.status === 'HIDDEN' ? '#8A2F1C' : r.status === 'RESOLVED' ? '#5F6560' : '#0E4B34',
+          actions: (r.status === 'HIDDEN'
+            ? [['Unhide', 'show']] : [['Hide from public', 'hide'], ['Mark resolved', 'resolve']])
+            .map(([label, action]) => ({
+              label,
+              onPick: () => {
+                try { DLT.reviews.moderate(r.id, action); this.ok('Review ' + action + 'd. The change is audit logged.'); }
+                catch (e) { this.bad(e); }
+              },
+            })),
+        }));
+      } catch (e) {}
+    }
+    let requests = [];
+    if (allow('notification.read')) {
+      try {
+        requests = DLT.notifications.list().map(r => ({
+          id: r.id, rawKind: r.kind,
+          kind: r.kind.replace(/_/g, ' '),
+          who: (r.student || 'Not signed in') + (r.studentId ? ' · ' + r.studentId : ''),
+          detail: r.kind === 'GET_NOTIFIED' ? (r.channel || '') + ' · ' + (r.contact || '')
+            : r.kind === 'STUDENT_ID_CHANGE' ? (r.current || '—') + ' → ' + r.requested
+            : (r.reason || '—'),
+          status: r.status, fg: r.status === 'PENDING' ? '#8A5A0E' : '#0E4B34',
+          canAct: r.status === 'PENDING' && r.kind === 'GET_NOTIFIED',
+          canDecide: r.status === 'PENDING' &&
+            ['STUDENT_ID_CHANGE', 'ACCOUNT_DELETION'].indexOf(r.kind) >= 0 && allow('notification.resolve'),
+          onApprove: () => this.ask(
+            r.kind === 'ACCOUNT_DELETION' ? 'Approve account deletion' : 'Approve the student ID change',
+            r.kind === 'ACCOUNT_DELETION'
+              ? 'The account is deactivated and the personal details are anonymised. Bookings, payments, refunds and boarding records are kept, as the retention policy requires. This cannot be undone.'
+              : 'This moves the protected Student ID on the account to the requested value. Boarding checks use it, so only approve it against a physical card.',
+            'Approve', 'e.g. Physical student card checked at the desk',
+            (reason) => {
+              const out = DLT.notifications.resolveRequest(r.id, 'approve', reason);
+              this.ok(out.kind.replace(/_/g, ' ').toLowerCase() + ' approved for ' + out.student + '. Audit logged.');
+            }),
+          onReject: () => this.ask('Reject this request',
+            'The student keeps their current details and sees the request as rejected. The reason is permanent.',
+            'Reject', 'e.g. ID card did not match the account',
+            (reason) => {
+              const out = DLT.notifications.resolveRequest(r.id, 'reject', reason);
+              this.ok('Request rejected for ' + out.student + '. Audit logged.');
+            }),
+          onAct: () => {
+            try { DLT.notifications.markNotified(r.id); this.ok('Marked notified.'); }
+            catch (e) { this.bad(e); }
+          },
+        }));
+      } catch (e) {}
+    }
+
+    const p = st.prompt;
+
+    /* ---------- trip seat map, staff, manual-booking and override inputs ---------- */
+    const seatTrip = st.seatTripId ? allTrips.find(t => t.id === st.seatTripId) || null : null;
+    const adminSeats = [];
+    if (seatTrip) {
+      DLT.trips.seatMap(seatTrip.id).forEach(r => {
+        r.seats.forEach((s, i) => {
+          if (i === 2) adminSeats.push({ isSeat: false, isLabel: true, id: String(r.row).padStart(2, '0') });
+          const paint = {
+            AVAILABLE: ['#FFFFFF', '#0E1014', 'rgba(14,16,20,.32)', 'pointer'],
+            SELECTED: ['#F6EBD5', '#8A5A0E', 'rgba(184,115,10,.4)', 'not-allowed'],
+            HELD: ['#F6EBD5', '#8A5A0E', 'rgba(184,115,10,.4)', 'not-allowed'],
+            BOOKED: ['#DFDCD3', '#6F746C', 'rgba(14,16,20,.14)', 'not-allowed'],
+            BLOCKED: ['#E7E4DB', '#8A2F1C', 'rgba(163,58,34,.45)', 'pointer'],
+          }[s.status] || ['#FFFFFF', '#0E1014', 'rgba(14,16,20,.3)', 'pointer'];
+          const blockable = s.status === 'AVAILABLE', releasable = s.status === 'BLOCKED';
+          adminSeats.push({
+            isSeat: true, isLabel: false, id: s.seatNumber,
+            bg: paint[0], fg: paint[1], bd: paint[2], cursor: paint[3],
+            disabled: !blockable && !releasable,
+            title: 'Seat ' + s.seatNumber + ' · ' + s.status.toLowerCase() +
+              (s.blockReason ? ' — ' + s.blockReason : '') +
+              (blockable ? ' · tap to block' : releasable ? ' · tap to release' : ''),
+            onPick: () => {
+              if (releasable) {
+                try {
+                  const r = DLT.admin.blockSeat(seatTrip.id, s.seatNumber);
+                  this.ok('Seat ' + r.seatNumber + ' released back on sale. Audit logged.');
+                } catch (e) { this.bad(e); }
+                return;
+              }
+              this.ask('Block seat ' + s.seatNumber,
+                'Taking seat ' + s.seatNumber + ' off sale on ' + DLT.fmt.when(seatTrip.departureAt) +
+                '. It stays out of the count until an operator releases it, and the reason is written to the audit log.',
+                'Block the seat', 'e.g. Crew seat, or water damage to the seat base',
+                (reason) => {
+                  const r = DLT.admin.blockSeat(seatTrip.id, s.seatNumber, reason);
+                  this.ok('Seat ' + r.seatNumber + ' blocked — ' + r.reason + '. Audit logged.');
+                });
+            },
+          });
+        });
+      });
+    }
+    let staffAccounts = [];
+    if (allow('staff.assign')) {
+      try { staffAccounts = DLT.admin.staffAccounts(); } catch (e) { staffAccounts = []; }
+    }
+    const mbTrips = allTrips.filter(t => ['OPEN', 'BOOKING_CLOSED', 'BOARDING'].indexOf(t.status) >= 0 && t.available > 0);
+    let policyQuote = 0, overrideCap = 0;
+    if (booking && isSuper) {
+      try { policyQuote = DLT.bookings.cancellationQuote(booking.id).amount; } catch (e) { policyQuote = 0; }
+      const paid = (booking.payment && ['SUCCESS', 'DUPLICATE'].indexOf(booking.payment.status) >= 0)
+        ? booking.payment.amount : 0;
+      const out = booking.refunds.filter(r => r.status !== 'REFUND_FAILED').reduce((n, r) => n + r.amount, 0);
+      overrideCap = Math.max(0, paid - out);
+    }
+
+    return {
+      signedIn: true, signedOut: false,
+      roleName: me.name + ' · ' + DLT.roleLabel(me.role),
+      roleScope: isStaff ? 'Assigned trip only, no financial access'
+        : isSuper ? 'Full access including reconciliation and audit'
+        : 'Operations, no financial overrides',
+      signOut: () => { DLT.auth.signOut(); location.href = './DLT Account.dc.html'; },
+      nav, isSuper,
+      toast: st.toast, clearToast: () => this.setState({ toast: null }),
+      toastAccent: st.toastKind === 'bad' ? '#A33A22' : '#0E4B34',
+      toastBg: st.toastKind === 'bad' ? '#FFF9F7' : '#EEF3EE',
+      toastBd: st.toastKind === 'bad' ? 'rgba(163,58,34,.3)' : 'rgba(14,75,52,.3)',
+
+      atDash: section === 'Dashboard', atTrips: section === 'Trips',
+      atVehicles: section === 'Vehicles', atBookings: section === 'Bookings',
+      atBoarding: section === 'Boarding', atWaitlist: section === 'Waitlist',
+      atStudents: section === 'Students', atFeedback: section === 'Feedback',
+      atRequests: section === 'Requests', atPayments: section === 'Payments',
+      atReports: section === 'Reports', atAudit: section === 'Audit',
+      goTrips: () => this.setState({ section: 'Trips' }),
+      goBoarding: () => this.setState({ section: 'Boarding' }),
+
+      /* trips · seat map, seat blocking (§13.4) and staff assignment (§Boarding 5) */
+      seatPanelOpen: !!seatTrip,
+      seatTripLabel: seatTrip ? DLT.fmt.when(seatTrip.departureAt) + ' · ' +
+        (seatTrip.vehicle ? seatTrip.vehicle.name : '') + ' · ' + seatTrip.available + ' free' : '',
+      closeSeatPanel: () => this.setState({ seatTripId: null }),
+      seatLegend: [
+        { label: 'Available', bg: '#FFFFFF', bd: 'rgba(14,16,20,.32)' },
+        { label: 'Booked', bg: '#DFDCD3', bd: 'rgba(14,16,20,.14)' },
+        { label: 'Held by a student', bg: '#F6EBD5', bd: 'rgba(184,115,10,.4)' },
+        { label: 'Blocked', bg: '#E7E4DB', bd: 'rgba(163,58,34,.45)' },
+      ],
+      adminSeats,
+      canAssignStaff: allow('staff.assign') && !!seatTrip,
+      assignedStaffLabel: seatTrip
+        ? (seatTrip.assignedStaff.length
+          ? seatTrip.assignedStaff.map(s => s.name).join(', ') + ' · the scanner is scoped to this trip for them'
+          : 'Nobody assigned. Boarding staff cannot scan or open a manifest until they are put on a departure.')
+        : '',
+      staffPick: st.staffPick || (staffAccounts[0] ? staffAccounts[0].id : ''),
+      onStaffPick: e => this.setState({ staffPick: e.target.value }),
+      staffOptions: staffAccounts.map(s => ({ id: s.id,
+        label: s.name + (s.assignedTo ? ' · on ' + s.assignedTo : ' · unassigned') })),
+      assignCta: (function () {
+        const id = st.staffPick || (staffAccounts[0] ? staffAccounts[0].id : '');
+        return seatTrip && seatTrip.staffUserIds.indexOf(id) >= 0 ? 'Take off this trip' : 'Assign to this trip';
+      })(),
+      assignStaff: () => {
+        const id = st.staffPick || (staffAccounts[0] ? staffAccounts[0].id : '');
+        if (!id) { this.bad(new Error('No boarding staff accounts exist')); return; }
+        try {
+          const r = DLT.admin.assignStaff(seatTrip.id, id, 'Door duty set from the trip seat map');
+          this.ok(r.assigned ? r.staff + ' is on the door for ' + r.trip + '. Their scanner is scoped to it.'
+            : r.staff + ' taken off ' + r.trip + '.');
+        } catch (e) { this.bad(e); }
+      },
+
+      /* vehicles · create and edit (§26 · FR-015) */
+      canWriteVehicle: allow('vehicle.write'),
+      vehicleFormOpen: st.vehicleFormOpen,
+      vehicleFormCta: st.vehicleFormOpen ? 'Close' : 'New vehicle',
+      vehicleFormTitle: st.vfId ? 'Edit ' + (st.vfName || 'vehicle') : 'New vehicle',
+      vfSaveCta: st.vfId ? 'Save changes' : 'Create vehicle',
+      vfName: st.vfName, vfReg: st.vfReg, vfRows: st.vfRows, vfStatus: st.vfStatus,
+      vfCapacityNote: 'Capacity will be ' + (Math.max(4, Math.min(20, Number(st.vfRows) || 0)) * 4) +
+        ' seats at 2 + 2. Seat configuration cannot change once seats on this vehicle are booked.',
+      onVfName: e => this.setState({ vfName: e.target.value }),
+      onVfReg: e => this.setState({ vfReg: e.target.value }),
+      onVfRows: e => this.setState({ vfRows: e.target.value }),
+      onVfStatus: e => this.setState({ vfStatus: e.target.value }),
+      toggleVehicleForm: () => this.setState({ vehicleFormOpen: !st.vehicleFormOpen,
+        vfId: null, vfName: '', vfReg: '', vfRows: 11, vfStatus: 'AVAILABLE' }),
+      saveVehicle: () => {
+        try {
+          const patch = { name: st.vfName, registration: st.vfReg, rowCount: Number(st.vfRows), status: st.vfStatus };
+          if (st.vfId) patch.id = st.vfId;
+          const v = DLT.admin.saveVehicle(patch);
+          this.setState({ vehicleFormOpen: false, vfId: null, vfName: '', vfReg: '', vfRows: 11, vfStatus: 'AVAILABLE' });
+          this.ok(v.name + ' saved · ' + v.registration + ' · ' + v.capacity + ' seats · ' + v.status.toLowerCase() + '. Audit logged.');
+        } catch (e) { this.bad(e); }
+      },
+
+      /* booking · contact (§14.3) and the real policy override (§17) */
+      bkContact: st.bkContact == null ? (booking ? (booking.contactPhone || '') : '') : st.bkContact,
+      onBkContact: e => this.setState({ bkContact: e.target.value }),
+      saveBkContact: () => {
+        try {
+          const v = st.bkContact == null ? (booking ? booking.contactPhone : '') : st.bkContact;
+          const r = DLT.bookings.updateContact(booking.id, v);
+          this.setState({ bkContact: null });
+          this.ok('Booking contact for ' + r.code + ' is now ' + r.contactPhone + '. This booking only, and audit logged.');
+        } catch (e) { this.bad(e); }
+      },
+      overrideOpen: st.overrideOpen && !!booking,
+      overrideBlurb: booking
+        ? 'The 12-hour policy would refund ₹' + policyQuote + ' on ' + booking.code + '. ₹' + overrideCap +
+          ' of the ₹' + (booking.totalAmount) + ' taken is still refundable. State the amount you are overriding to, and why.'
+        : '',
+      ovAmount: st.ovAmount, ovReason: st.ovReason, ovCancel: st.ovCancel,
+      onOvAmount: e => this.setState({ ovAmount: e.target.value }),
+      onOvReason: e => this.setState({ ovReason: e.target.value }),
+      onOvCancel: e => this.setState({ ovCancel: e.target.checked }),
+      ovConfirmCta: Number(st.ovAmount) > 0 ? 'Refund ₹' + Math.round(Number(st.ovAmount)) : 'Enter an amount',
+      openOverride: () => this.setState({ overrideOpen: true, ovAmount: String(overrideCap || ''), ovReason: '', ovCancel: true }),
+      closeOverride: () => this.setState({ overrideOpen: false }),
+      confirmOverride: () => {
+        try {
+          const r = DLT.admin.overrideRefund({ bookingId: booking.id, amount: st.ovAmount,
+            reason: st.ovReason, cancelBooking: st.ovCancel });
+          this.setState({ overrideOpen: false, ovAmount: '', ovReason: '' });
+          this.ok('₹' + r.amount + ' refund created on ' + booking.code + '.' +
+            (r.seatsReleased ? ' ' + r.seatsReleased + ' seat(s) released and passes voided.' : '') +
+            (r.remainingRefundable ? ' ₹' + r.remainingRefundable + ' still refundable.' : ''));
+        } catch (e) { this.bad(e); }
+      },
+
+      /* manual bookings (§40) */
+      manualOpen: st.manualOpen,
+      manualCta: st.manualOpen ? 'Close manual booking' : 'Manual booking…',
+      toggleManual: () => this.setState({ manualOpen: !st.manualOpen }),
+      mbTrip: st.mbTrip || (mbTrips[0] ? mbTrips[0].id : ''),
+      mbTripOptions: mbTrips.map(t => ({ id: t.id,
+        label: DLT.fmt.when(t.departureAt) + ' · ' + t.available + ' free' })),
+      mbType: st.mbType, mbName: st.mbName, mbSid: st.mbSid, mbPhone: st.mbPhone,
+      mbEmail: st.mbEmail, mbReason: st.mbReason,
+      onMbTrip: e => this.setState({ mbTrip: e.target.value }),
+      onMbType: e => this.setState({ mbType: e.target.value }),
+      onMbName: e => this.setState({ mbName: e.target.value }),
+      onMbSid: e => this.setState({ mbSid: e.target.value }),
+      onMbPhone: e => this.setState({ mbPhone: e.target.value }),
+      onMbEmail: e => this.setState({ mbEmail: e.target.value }),
+      onMbReason: e => this.setState({ mbReason: e.target.value }),
+      mbCta: st.mbType === 'COMPLIMENTARY' ? 'Create the complimentary booking' : 'Create the external booking',
+      createManual: () => {
+        try {
+          const b = DLT.admin.createManualBooking({
+            tripId: st.mbTrip || (mbTrips[0] ? mbTrips[0].id : null),
+            type: st.mbType, reason: st.mbReason, contactPhone: st.mbPhone,
+            studentEmail: st.mbEmail || null,
+            passengers: [{ name: st.mbName, studentId: st.mbSid, phone: st.mbPhone }],
+          });
+          this.setState({ manualOpen: false, mbName: '', mbSid: '', mbPhone: '', mbEmail: '', mbReason: '',
+            bookingId: b.id, query: '' });
+          this.ok(b.code + ' created · ' + b.bookingType.replace(/_/g, ' ').toLowerCase() +
+            ' · ₹' + b.totalAmount + ' · pass issued. Audit logged.');
+        } catch (e) { this.bad(e); }
+      },
+
+      /* dashboard */
+      today: DLT.fmt.date(Date.now()),
+      metrics: dash ? [
+        { label: 'Trips today', value: String(dash.tripsToday), sub: dash.tripsTodayDetail, subFg: '#4A4F49' },
+        { label: 'Passengers', value: String(dash.passengers), sub: dash.seatsSold + ' seats sold', subFg: '#4A4F49' },
+        { label: 'Seat occupancy', value: dash.occupancy + '%', sub: dash.seatsSold + ' of ' + dash.capacity + ' seats', subFg: '#4A4F49' },
+        { label: 'Revenue today', value: '₹' + dash.revenue, sub: dash.refundToday ? 'less ₹' + dash.refundToday + ' refunded' : 'no refunds today', subFg: '#4A4F49' },
+        { label: 'Boarding', value: dash.boarded + '/' + dash.passengers, sub: 'live', subFg: '#8A5A0E' },
+      ] : [],
+      alerts: dash ? dash.alerts.map(a => ({
+        title: a.title, detail: a.detail, cta: a.cta,
+        onOpen: () => this.setState({ section: allow('*') ? a.section : 'Bookings' }),
+      })) : [],
+      noAlerts: !!dash && dash.alerts.length === 0,
+      alertTitle: dash && dash.alerts.length ? 'Critical · needs a decision' : 'Critical · all clear',
+      alertAccent: dash && dash.alerts.length ? '#A33A22' : '#0E4B34',
+      alertBd: dash && dash.alerts.length ? 'rgba(163,58,34,.28)' : 'rgba(14,75,52,.28)',
+      activity: dash ? dash.activity.map(a => ({ at: DLT.fmt.time(a.at), text: a.text })) : [],
+
+      /* trips */
+      canCreateTrip: allow('trip.create'),
+      newTripOpen: st.newTripOpen,
+      newTripCta: st.newTripOpen ? 'Close' : 'New trip',
+      toggleNewTrip: () => this.setState({ newTripOpen: !st.newTripOpen }),
+      ntDate: st.ntDate, ntTime: st.ntTime, ntVehicle: st.ntVehicle || (vehicles.length ? undefined : ''),
+      ntPrice: st.ntPrice,
+      onNtDate: e => this.setState({ ntDate: e.target.value }),
+      onNtTime: e => this.setState({ ntTime: e.target.value }),
+      onNtVehicle: e => this.setState({ ntVehicle: e.target.value }),
+      onNtPrice: e => this.setState({ ntPrice: e.target.value }),
+      vehicleOptions: (function () {
+        try { return DLT.admin.vehicles().map(v => ({ id: v.id, label: v.name + ' · ' + v.capacity + ' seats · ' + v.status.toLowerCase() })); }
+        catch (e) { return []; }
+      })(),
+      createDraft: () => {
+        try {
+          const vid = st.ntVehicle || (DLT.admin.vehicles()[0] || {}).id;
+          const when = new Date(st.ntDate + 'T' + st.ntTime + ':00').getTime();
+          if (!when) throw new Error('Choose a date and time');
+          const tr = DLT.admin.createDraft({ vehicleId: vid, departureAt: when, price: Number(st.ntPrice) });
+          this.setState({ newTripOpen: false, validationTripId: tr.id,
+            validation: DLT.admin.validateDraft(tr.id) });
+          this.ok('Draft created for ' + DLT.fmt.when(when) + ' with ' + tr.capacity + ' seats mapped. Validate it, then publish.');
+        } catch (e) { this.bad(e); }
+      },
+      tripRows: allTrips.map(t => {
+        const act = t.status === 'DRAFT' ? 'Validate'
+          : t.status === 'OPEN' ? 'Close booking'
+          : t.status === 'BOOKING_CLOSED' ? 'Start boarding'
+          : t.status === 'BOARDING' ? 'Open scanner'
+          : t.status === 'DEPARTED' ? 'Mark completed'
+          : t.waitlistCount ? 'Waitlist' : 'View';
+        return {
+          date: DLT.fmt.date(t.departureAt), depart: DLT.fmt.time(t.departureAt),
+          vehicle: t.vehicle ? t.vehicle.name + ' · ' + t.vehicle.registration : '—',
+          seats: t.booked + '/' + t.capacity,
+          revenue: '₹' + t.revenue,
+          status: t.status.replace('_', ' ') + (t.soldOut && t.status === 'OPEN' ? ' · full' : ''),
+          statusFg: t.status === 'DRAFT' ? '#5F6560' : t.status === 'CANCELLED' ? '#8A2F1C'
+            : t.soldOut ? '#8A5A0E' : '#0E4B34',
+          act,
+          actBg: t.status === 'DRAFT' ? '#0E1014' : 'transparent',
+          actFg: t.status === 'DRAFT' ? '#F7F5F0' : '#0E1014',
+          actBd: t.status === 'DRAFT' ? '#0E1014' : 'rgba(14,16,20,.2)',
+          canCancel: allow('trip.cancel') && ['OPEN', 'BOOKING_CLOSED', 'BOARDING', 'DRAFT'].indexOf(t.status) >= 0,
+          canSeats: allow('seat.block') && t.status !== 'CANCELLED',
+          onSeats: () => this.setState({ seatTripId: st.seatTripId === t.id ? null : t.id }),
+          onCancel: () => this.setState({ cancelTripId: t.id, cancelReason: '', toast: null }),
+          onPrimary: () => {
+            try {
+              if (t.status === 'DRAFT') {
+                this.setState({ validationTripId: t.id, validation: DLT.admin.validateDraft(t.id), toast: null });
+              } else if (t.status === 'OPEN') {
+                DLT.admin.setTripStatus(t.id, 'BOOKING_CLOSED', 'Closed by operations');
+                this.ok('Booking closed for ' + DLT.fmt.when(t.departureAt) + '. Audit logged.');
+              } else if (t.status === 'BOOKING_CLOSED') {
+                DLT.admin.setTripStatus(t.id, 'BOARDING', 'Boarding opened at the gate');
+                this.setState({ section: 'Boarding', boardTripId: t.id });
+              } else if (t.status === 'BOARDING') {
+                this.setState({ section: 'Boarding', boardTripId: t.id });
+              } else if (t.status === 'DEPARTED') {
+                DLT.admin.setTripStatus(t.id, 'COMPLETED', 'Arrival confirmed by operations');
+                this.ok('Trip marked completed.');
+              } else if (t.waitlistCount) {
+                this.setState({ section: 'Waitlist', wlTripId: t.id });
+              } else {
+                this.setState({ section: 'Bookings', query: '' });
+              }
+            } catch (e) { this.bad(e); }
+          },
+        };
+      }),
+      validation: !!st.validation,
+      validTitle: st.validation && st.validation.valid
+        ? 'Draft validated · ready to publish' : 'Draft cannot be published yet',
+      validAccent: st.validation && st.validation.valid ? '#0E4B34' : '#A33A22',
+      validBd: st.validation && st.validation.valid ? 'rgba(14,75,52,.3)' : 'rgba(163,58,34,.3)',
+      validLines: st.validation
+        ? st.validation.problems.map(t => ({ mark: '✕', text: t, fg: '#8A2F1C' }))
+          .concat(st.validation.checks.map(t => ({ mark: '✓', text: t, fg: '#25322B' })))
+        : [],
+      canPublish: !!(st.validation && st.validation.valid && allow('trip.publish')),
+      publish: () => {
+        try {
+          const t = DLT.admin.publishTrip(st.validationTripId);
+          this.setState({ validation: null, validationTripId: null });
+          this.ok('Published ' + DLT.fmt.when(t.departureAt) + '. It is now bookable with ' + t.available + ' seats free.');
+        } catch (e) { this.bad(e); }
+      },
+      cancelTripOpen: !!st.cancelTripId,
+      cancelTripLabel: st.cancelTripId
+        ? (function () { const t = allTrips.find(t => t.id === st.cancelTripId); return t ? DLT.fmt.when(t.departureAt) : ''; })() : '',
+      cancelReason: st.cancelReason,
+      onCancelReason: e => this.setState({ cancelReason: e.target.value }),
+      closeCancelTrip: () => this.setState({ cancelTripId: null, cancelReason: '' }),
+      confirmCancelTrip: () => {
+        try {
+          const id = st.cancelTripId;
+          const res = DLT.admin.cancelTrip(id, st.cancelReason);
+          let tmpl = null;
+          try { tmpl = DLT.notifications.template(id); } catch (e) {}
+          this.setState({ cancelTripId: null, cancelReason: '', template: tmpl });
+          this.ok('Trip cancelled. ' + res.affectedBookings + ' booking(s) cancelled, passes voided, seats released and ₹' + res.refundInitiated + ' of refunds raised.');
+        } catch (e) { this.bad(e); }
+      },
+      templateOpen: !!st.template,
+      templateCount: st.template ? st.template.affected.length : 0,
+      templateMessage: st.template ? st.template.message : '',
+      copyTemplate: () => {
+        const text = st.template.message;
+        if (navigator.clipboard) navigator.clipboard.writeText(text).then(
+          () => this.ok('Message copied. Send it from the operations WhatsApp account, then mark students notified.'),
+          () => this.bad(new Error('Could not copy — select the text manually.')));
+        else this.bad(new Error('Clipboard unavailable in this browser.'));
+      },
+      exportAffected: () => {
+        try { const r = DLT.admin.exportCsv('passengers', { tripId: null }); this.ok('Exported ' + r.name + ' (' + r.rows + ' rows).'); }
+        catch (e) { this.bad(e); }
+      },
+
+      /* vehicles */
+      vehicles,
+
+      /* bookings */
+      query: st.query,
+      onQuery: e => this.setState({ query: e.target.value, bookingId: null }),
+      hasResults: st.query.trim().length >= 3 && bookingList.length > 0,
+      noResults: st.query.trim().length >= 3 && bookingList.length === 0,
+      results: bookingList.slice(0, 8).map(b => ({
+        label: b.code + ' · ' + (b.owner ? b.owner.name : '—'),
+        on: booking && b.id === booking.id,
+        bg: booking && b.id === booking.id ? '#0E1014' : '#FFFFFF',
+        fg: booking && b.id === booking.id ? '#F7F5F0' : '#0E1014',
+        bd: booking && b.id === booking.id ? '#0E1014' : 'rgba(14,16,20,.2)',
+        onPick: () => this.setState({ bookingId: b.id }),
+      })),
+      hasBooking: !!booking,
+      bkCode: booking ? booking.code : '',
+      bkTrip: booking && booking.trip ? DLT.fmt.when(booking.trip.departureAt) : '',
+      bkOwner: booking && booking.owner ? booking.owner.name : '—',
+      bkPaxCount: booking ? booking.passengers.length + (booking.passengers.length === 1 ? ' passenger' : ' passengers') : '',
+      bkTabs: ['Overview', 'Passengers', 'Payment', 'Boarding', 'Activity'].map(l => ({
+        label: l, on: st.bkTab === l,
+        bd: st.bkTab === l ? '#0E4B34' : 'transparent',
+        fg: st.bkTab === l ? '#0E1014' : '#5F6560',
+        onPick: () => this.setState({ bkTab: l }),
+      })),
+      bkOverview: st.bkTab === 'Overview', bkPax: st.bkTab === 'Passengers',
+      bkPay: st.bkTab === 'Payment', bkBoard: st.bkTab === 'Boarding', bkAudit: st.bkTab === 'Activity',
+      bkFacts: booking ? [
+        { k: 'Booking ID', v: booking.code, fg: '#0E1014' },
+        { k: 'Status', v: booking.status.replace(/_/g, ' '), fg: booking.status === 'CONFIRMED' ? '#0E4B34' : '#8A5A0E' },
+        { k: 'Trip', v: booking.trip ? DLT.fmt.when(booking.trip.departureAt) : '—', fg: '#0E1014' },
+        { k: 'Vehicle', v: booking.trip && booking.trip.vehicle ? booking.trip.vehicle.name + ' · ' + booking.trip.vehicle.registration : '—', fg: '#0E1014' },
+        { k: 'Seats', v: booking.passengers.map(x => x.seatNumber).join(', ') || '—', fg: '#0E1014' },
+        { k: 'Boarding code', v: booking.boardingCode, fg: '#0E1014' },
+        { k: 'Owner', v: booking.owner ? booking.owner.name + ' · ' + (booking.owner.studentId || '—') : '—', fg: '#0E1014' },
+        { k: 'Booked', v: DLT.fmt.dateTime(booking.createdAt), fg: '#0E1014' },
+        { k: 'Type', v: booking.bookingType.replace(/_/g, ' '), fg: '#0E1014' },
+        { k: 'Contact', v: booking.contactPhone || '—', fg: '#0E1014' },
+      ] : [],
+      canCancelBooking: !!booking && allow('booking.cancel') &&
+        ['CANCELLED_BY_DLT', 'CANCELLED_BY_STUDENT'].indexOf(booking.status) < 0,
+      adminReason: st.adminReason,
+      onAdminReason: e => this.setState({ adminReason: e.target.value }),
+      adminCancelLabel: booking ? 'Cancel booking' + (booking.trip &&
+        (booking.trip.departureAt - Date.now()) >= 12 * 3600000 ? ' · full refund' : ' · no refund due') : 'Cancel',
+      adminCancelNote: 'The refund is calculated from the 12-hour policy at the moment you confirm. A reason is mandatory and is written to the audit log.',
+      adminCancel: () => {
+        try {
+          if (!st.adminReason.trim()) throw new Error('Enter a reason before cancelling');
+          const res = DLT.bookings.cancel(booking.id, null, st.adminReason.trim());
+          this.setState({ adminReason: '' });
+          this.ok('Booking cancelled. ' + (res.refundAmount > 0
+            ? '₹' + res.refundAmount + ' refund raised against the original payment.' : 'No refund was due under the policy.'));
+        } catch (e) { this.bad(e); }
+      },
+      adminOverride: () => this.ask('Refund outside policy',
+        'This refunds a booking the 12-hour policy would not refund. Super Admin only, and the reason is permanent.',
+        'Raise the refund', 'e.g. Departure retimed by 90 minutes',
+        (reason) => {
+          const res = DLT.bookings.cancel(booking.id, null, 'Policy override: ' + reason);
+          this.ok('Override applied. ' + (res.refundAmount > 0 ? '₹' + res.refundAmount + ' refund raised.' : 'Seats released.'));
+        }),
+      bkPassengers: booking ? booking.passengers.map(x => ({
+        name: x.name, sid: x.studentId, phone: x.phone || '—', seat: x.seatNumber,
+        state: x.boardingStatus.replace(/_/g, ' '),
+        fg: x.boardingStatus === 'BOARDED' ? '#0E4B34'
+          : x.boardingStatus === 'DENIED_BOARDING' || x.boardingStatus === 'CANCELLED' ? '#8A2F1C' : '#8A5A0E',
+        boardMeta: x.boardedAt
+          ? (x.boardingMethod === 'MANUAL' ? 'Boarded manually at ' : 'Scanned at ') + DLT.fmt.time(x.boardedAt) +
+            ' by ' + x.boardedBy + (x.boardingReason ? ' — ' + x.boardingReason : '')
+          : x.passStatus === 'VALID' ? 'Pass issued · not yet scanned' : 'Pass ' + x.passStatus.toLowerCase(),
+      })) : [],
+      payFacts: booking && booking.payment ? [
+        { k: 'Amount', v: '₹' + booking.payment.amount, fg: '#0E1014' },
+        { k: 'Status', v: booking.payment.status, fg: booking.payment.status === 'SUCCESS' ? '#0E4B34' : '#8A5A0E' },
+        { k: 'Provider', v: booking.payment.provider.replace(/_/g, ' '), fg: '#0E1014' },
+        { k: 'Reference', v: booking.payment.providerReference || '—', fg: '#0E1014' },
+        { k: 'Updated', v: DLT.fmt.dateTime(booking.payment.updatedAt), fg: '#0E1014' },
+        { k: 'Expected', v: booking.payment.expectedAmount ? '₹' + booking.payment.expectedAmount : '—', fg: '#8A5A0E' },
+        { k: 'Refunds', v: booking.refunds.length ? booking.refunds.map(r => '₹' + r.amount + ' ' + r.status).join(', ') : 'None', fg: '#0E1014' },
+        { k: 'Refunded total', v: '₹' + booking.refundedTotal, fg: '#0E1014' },
+      ] : [{ k: 'Payment', v: 'No payment record', fg: '#8A5A0E' }],
+      bkTrail: trail.map(a => ({ at: DLT.fmt.dateTime(a.at), text: a.text })),
+      noTrail: !isSuper,
+
+      /* boarding */
+      boardTripLabel: boardTrip
+        ? 'Trip ' + DLT.fmt.when(boardTrip.departureAt) + ' · ' + (boardTrip.vehicle ? boardTrip.vehicle.name : '') + ' · ' + boardTrip.status.replace('_', ' ')
+        : (isStaff ? 'You are not assigned to a departure — operations puts staff on the door'
+          : 'No trip selected'),
+      canPickTrip: !isStaff,
+      boardTripId: tripId || '',
+      boardTripOptions: allTrips.filter(t => ['OPEN', 'BOOKING_CLOSED', 'BOARDING', 'DEPARTED'].indexOf(t.status) >= 0)
+        .map(t => ({ id: t.id, label: DLT.fmt.when(t.departureAt) + ' · ' + t.status.replace('_', ' ') })),
+      onBoardTrip: e => this.setState({ boardTripId: e.target.value, scan: null }),
+      boardedCount, manifestCount: manifest.length,
+      pendingCount: manifest.filter(x => x.boardingStatus === 'NOT_BOARDED').length,
+      scanResult: scan ? scan.result : 'Ready to scan',
+      scanDetail: scan ? scan.detail : 'Point the camera at a pass, or type the token below.',
+      scanMeta: scan && scan.passenger
+        ? scan.passenger.studentId + ' · ' + scan.passenger.bookingCode + ' · boarded ' + DLT.fmt.time(scan.passenger.boardedAt)
+        : '',
+      scanBg: tone[0], scanFg: tone[1],
+      cameraSupported: st.cameraSupported,
+      cameraOn: st.cameraOn,
+      cameraError: st.cameraError,
+      chooseOpen: !!st.choose,
+      chooseTitle: st.choose ? st.choose.bookingCode + ' · who is boarding?' : '',
+      choosePassengers: st.choose ? st.choose.passengers.map(p => ({
+        label: p.name + ' · seat ' + p.seatNumber,
+        sub: p.studentId + ' · ' + p.boardingStatus.replace(/_/g, ' ').toLowerCase(),
+        onPick: () => this._doScan(st.choose.bookingCode, p.id),
+      })) : [],
+      cancelChoose: () => this.setState({ choose: null, scan: null, manualToken: '' }),
+      cameraLabel: !st.cameraSupported ? 'No QR decoder in this browser — use code entry'
+        : st.cameraOn ? ('Camera live · ' + (st.engine === 'native' ? 'native decoder' : 'jsQR decoder'))
+        : 'Camera ready',
+      cameraCta: st.cameraOn ? 'Stop the camera' : 'Scan with the camera',
+      toggleCamera: () => {
+        if (st.cameraOn) { this._stopCamera(); this.setState({ cameraOn: false }); }
+        else this._startCamera();
+      },
+      videoRef: el => { this._video = el; if (el && this._stream) { el.srcObject = this._stream; el.play(); } },
+      manualToken: st.manualToken,
+      onManualToken: e => this.setState({ manualToken: e.target.value }),
+      scanManual: () => {
+        const v = st.manualToken.trim();
+        if (!v) { this.bad(new Error('Enter a boarding code, booking ID or pass token')); return; }
+        this._doScan(v);
+      },
+      manifestQuery: st.manifestQuery,
+      onManifestQuery: e => this.setState({ manifestQuery: e.target.value }),
+      emptyManifest: filteredManifest.length === 0,
+      boardList: filteredManifest.map(x => {
+        const actions = [];
+        if (x.boardingStatus === 'NOT_BOARDED' && allow('boarding.manual')) {
+          actions.push({
+            label: 'Board manually', bd: 'rgba(14,16,20,.2)', fg: '#0E1014',
+            onPick: () => this.ask('Manual boarding',
+              'Boarding ' + x.name + ' (seat ' + x.seatNumber + ') without a scan. Your name, the reason and the time are written to the audit log.',
+              'Board ' + x.name.split(' ')[0], 'e.g. QR unreadable, student ID verified at the door',
+              (reason) => { const r = DLT.boarding.manual(x.passengerId, reason); this.ok(r.name + ' boarded manually at ' + DLT.fmt.time(r.at) + '. Audit logged.'); }),
+          });
+        }
+        if (x.boardingStatus === 'NOT_BOARDED' && allow('boarding.deny')) {
+          actions.push({
+            label: 'Deny', bd: 'rgba(163,58,34,.4)', fg: '#8A2F1C',
+            onPick: () => this.ask('Deny boarding',
+              'This is a distinct status from cancellation and no-show, and it voids the pass. No refund follows automatically.',
+              'Deny boarding', 'e.g. No student ID presented at the door',
+              (reason) => { const r = DLT.boarding.deny(x.passengerId, reason); this.ok('Boarding denied for ' + r.name + '. Recorded with your reason.'); }),
+          });
+        }
+        if (x.boardingStatus === 'POTENTIAL_NO_SHOW' && allow('boarding.noshow')) {
+          actions.push({
+            label: 'Confirm no-show', bd: 'rgba(184,115,10,.4)', fg: '#8A5A0E',
+            onPick: () => this.ask('Confirm no-show',
+              x.name + ' did not board. Confirming makes the status final. No refund is issued automatically.',
+              'Confirm no-show', 'e.g. Called twice at the gate, did not travel',
+              (reason) => { const r = DLT.boarding.confirmNoShow(x.passengerId, reason); this.ok(r.name + ' confirmed as a no-show.'); }),
+          });
+        }
+        return {
+          name: x.name,
+          sub: x.studentId + (x.phone ? ' · ' + x.phone : '') + ' · ' + x.bookingCode,
+          seat: x.seatNumber, typeShort: x.seatType === 'Window' ? 'W' : 'A',
+          state: x.boardingStatus.replace(/_/g, ' '),
+          fg: x.boardingStatus === 'BOARDED' ? '#0E4B34'
+            : x.boardingStatus === 'DENIED_BOARDING' ? '#8A2F1C'
+            : x.boardingStatus === 'NO_SHOW' || x.boardingStatus === 'POTENTIAL_NO_SHOW' ? '#8A5A0E' : '#8A5A0E',
+          actions,
+          showTime: !!x.boardedAt,
+          at: x.boardedAt ? DLT.fmt.time(x.boardedAt) : '',
+        };
+      }),
+
+      /* payments */
+      payFilters: ['All', 'Successful', 'Pending', 'Failed', 'Duplicate', 'Discrepancy', 'Refunded', 'Manual/external'].map(f => ({
+        label: f, on: st.payFilter === f,
+        count: f === 'All' ? '' : (payCounts[f] ? '· ' + payCounts[f] : ''),
+        bg: st.payFilter === f ? '#0E1014' : '#FFFFFF',
+        fg: st.payFilter === f ? '#F7F5F0' : '#3D423C',
+        bd: st.payFilter === f ? '#0E1014' : 'rgba(14,16,20,.18)',
+        onPick: () => this.setState({ payFilter: f }),
+      })),
+      payRows: payRows.map(r => {
+        const actions = [{
+          label: 'Reconcile',
+          onPick: () => {
+            try {
+              const res = DLT.admin.reconcilePayment(r.id);
+              this.ok('Reconciled ' + r.code + ': payment ' + res.status + (res.bookingStatus ? ', booking ' + res.bookingStatus.replace(/_/g, ' ') : '') + '.');
+            } catch (e) { this.bad(e); }
+          },
+        }];
+        if (r.status === 'DISCREPANCY') {
+          actions.push({
+            label: 'Resolve',
+            onPick: () => this.ask('Resolve the amount mismatch',
+              'Received ₹' + r.amount + ' against ₹' + (r.expectedAmount || '?') + ' due on ' + r.code +
+              '. Accepting confirms the booking at the amount paid; refunding returns the money and releases the seats.',
+              'Accept and confirm', 'e.g. Student paid the balance in cash at the gate',
+              (reason) => { const res = DLT.admin.resolveDiscrepancy(r.id, 'accept', reason); this.ok('Resolved — payment ' + res.status + '.'); }),
+          });
+          actions.push({
+            label: 'Refund it',
+            onPick: () => this.ask('Refund the mismatched payment',
+              'This returns ₹' + r.amount + ' to the student and releases the seats on ' + r.code + '.',
+              'Raise the refund', 'e.g. Student could not pay the balance',
+              (reason) => { DLT.admin.resolveDiscrepancy(r.id, 'refund', reason); this.ok('Refund raised and seats released.'); }),
+          });
+        }
+        if (r.status === 'DUPLICATE') {
+          actions.push({
+            label: 'Refund extra',
+            onPick: () => this.ask('Refund the duplicate charge',
+              '₹' + r.amount + ' was taken a second time on ' + r.code + '. The booking is unaffected.',
+              'Refund the extra charge', 'e.g. Duplicate charge confirmed against the acquirer',
+              (reason) => { DLT.admin.refundExtra(r.id, reason); this.ok('Duplicate refund raised.'); }),
+          });
+        }
+        return {
+          code: r.bookingCode, student: r.student, amount: '₹' + r.amount,
+          ref: r.providerReference || '— manual',
+          status: r.status + (r.refundStatus ? ' · ' + r.refundStatus.replace('REFUND_', '') : ''),
+          fg: r.status === 'SUCCESS' ? '#0E4B34'
+            : r.status === 'FAILED' || r.status === 'EXPIRED' ? '#8A2F1C'
+            : r.status === 'REFUNDED' ? '#4A4F49' : '#8A5A0E',
+          actions,
+        };
+      }),
+
+      /* waitlist */
+      wlTripId: wlTripId || '',
+      wlTripOptions: wlTrips.map(t => ({
+        id: t.id, label: DLT.fmt.when(t.departureAt) + ' · ' + t.waitlistCount + ' waiting',
+      })),
+      onWlTrip: e => this.setState({ wlTripId: e.target.value }),
+      wlRows, emptyWaitlist: wlRows.length === 0,
+
+      /* students, feedback, requests */
+      students,
+      reviews, noReviews: reviews.length === 0,
+      requests, noRequests: requests.length === 0,
+
+      /* reports */
+      repTripId: st.repTripId, repFrom: st.repFrom, repTo: st.repTo,
+      onRepTrip: e => this.setState({ repTripId: e.target.value, preview: null }),
+      onRepFrom: e => this.setState({ repFrom: e.target.value, preview: null }),
+      onRepTo: e => this.setState({ repTo: e.target.value, preview: null }),
+      repTripOptions: allTrips.map(t => ({ id: t.id, label: DLT.fmt.when(t.departureAt) })),
+      reportButtons,
+      hasPreview: !!st.preview,
+      previewTitle: st.preview ? st.preview.label : '',
+      previewCount: st.preview ? st.preview.rows.length : 0,
+      previewCols: st.preview && st.preview.rows.length ? Object.keys(st.preview.rows[0]) : [],
+      previewRows: st.preview ? st.preview.rows.slice(0, 12).map(r => ({ cells: Object.values(r).map(v => String(v)) })) : [],
+      exportPreview: () => {
+        try {
+          const r = DLT.admin.exportCsv(st.preview.kind, repFilter);
+          this.ok('Downloaded ' + r.name + ' — ' + r.rows + ' rows. The export is audit logged.');
+        } catch (e) { this.bad(e); }
+      },
+      postTrip: !!post,
+      postTripWhen: post ? post.when : '',
+      postTripRows: post ? [
+        { k: 'Route', v: post.route }, { k: 'Status', v: post.status },
+        { k: 'Departed', v: post.departedAt }, { k: 'Capacity', v: post.capacity },
+        { k: 'Booked', v: post.booked }, { k: 'Boarded', v: post.boarded },
+        { k: 'No-show', v: post.noShow }, { k: 'Denied', v: post.denied },
+        { k: 'Revenue', v: '₹' + post.revenue }, { k: 'Refunded', v: '₹' + post.refunded },
+        { k: 'Vehicle', v: post.vehicle }, { k: 'Rating', v: post.rating },
+      ] : [],
+
+      /* audit */
+      auditQuery: st.auditQuery,
+      onAuditQuery: e => this.setState({ auditQuery: e.target.value }),
+      auditRows,
+      exportAudit: () => {
+        try {
+          const rows = DLT.admin.audit({ limit: 500 }).map(a => ({
+            When: DLT.fmt.dateTime(a.at), Actor: a.actor, Role: a.actorRole,
+            Action: a.action, Entity: a.entity, From: a.oldValue || '',
+            To: a.newValue || '', Reason: a.reason || '',
+          }));
+          const cols = Object.keys(rows[0]);
+          const csv = [cols.join(',')].concat(rows.map(r => cols.map(c => {
+            const s = String(r[c] == null ? '' : r[c]);
+            return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+          }).join(','))).join('\r\n');
+          const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'dlt-audit-' + new Date().toISOString().slice(0, 10) + '.csv';
+          a.click();
+          this.ok('Audit log exported (' + rows.length + ' entries).');
+        } catch (e) { this.bad(e); }
+      },
+
+      /* the shared reason prompt */
+      reasonPromptOpen: !!p,
+      reasonTitle: p ? p.title : '', reasonBlurb: p ? p.blurb : '',
+      reasonCta: p ? p.cta : '', reasonPlaceholder: p ? p.placeholder : '',
+      reasonValue: st.reasonValue,
+      onReasonValue: e => this.setState({ reasonValue: e.target.value }),
+      confirmReason: this.confirmReason,
+      cancelReasonPrompt: () => this.setState({ prompt: null, reasonValue: '' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "name": "dlt-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.6.0" },
+  "scripts": {
+    "migrate": "node scripts/migrate.mjs",
+    "seed:dev": "node scripts/seed-dev.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types 'test/**/*.test.ts'",
+    "test:db": "npm run migrate && npm run test",
+    "verify": "npm run typecheck && npm run test:db",
+    "dev": "node --experimental-strip-types --watch src/app.ts",
+    "start": "node --experimental-strip-types src/app.ts"
+  },
+  "dependencies": {
+    "argon2": "^0.41.1",
+    "cookie-parser": "^1.4.6",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "pg": "^8.13.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.7",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400;100,500;100,600;100,700;125,600;125,700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #F7F5F0; color: #0E1014;
+    font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased; text-wrap: pretty; }
+  a { color: #0E4B34; text-decoration: none; }
+  a:hover { color: #0E1014; }
+  input, button, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid #0E4B34; outline-offset: 2px; }
+  @keyframes dltRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
+  }
+  @media (max-width: 880px) {
+    [data-m="cols"] { grid-template-columns: minmax(0,1fr) !important; }
+  }
+</style>
+<script src="./dlt-store.js"></script>
+</helmet>
+
+<header style="height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(18px,4vw,44px);border-bottom:1px solid rgba(14,16,20,.10)">
+  <a href="./DLT Homepage.dc.html" style="display:flex;align-items:baseline;gap:9px;color:#0E1014">
+    <span style="font-stretch:125%;font-weight:700;font-size:19px;letter-spacing:.02em">DLT</span>
+    <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">{{ kicker }}</span>
+  </a>
+  <nav style="display:flex;align-items:center;gap:clamp(14px,2.4vw,26px);font-size:13.5px;font-weight:500">
+    <a href="./DLT Homepage.dc.html#help" style="color:#3D423C">Help</a>
+    <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+      <a href="./DLT Dashboard.dc.html" style="color:#3D423C">My trips</a>
+      <button type="button" onClick="{{ signOut }}" style="background:none;border:1px solid rgba(14,16,20,.2);padding:9px 14px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Sign out</button>
+    </sc-if>
+  </nav>
+</header>
+
+<main style="padding:clamp(26px,5vh,54px) clamp(18px,4vw,44px) 80px">
+
+<sc-if value="{{ message }}" hint-placeholder-val="{{ false }}">
+  <div role="status" style="max-width:920px;margin:0 auto 20px;border:1px solid rgba(14,75,52,.3);border-left:3px solid #0E4B34;background:#EEF3EE;padding:14px 16px;font-size:13.5px;line-height:1.6;color:#25322B;animation:dltRise .25s ease">{{ message }}</div>
+</sc-if>
+<sc-if value="{{ error }}" hint-placeholder-val="{{ false }}">
+  <div role="alert" style="max-width:920px;margin:0 auto 20px;border:1px solid rgba(163,58,34,.32);border-left:3px solid #A33A22;background:#FFF9F7;padding:14px 16px;font-size:13.5px;line-height:1.6;color:#8A2F1C;animation:dltRise .25s ease">{{ error }}</div>
+</sc-if>
+
+<!-- SIGNED OUT: sign in / sign up / reset -->
+<sc-if value="{{ signedOut }}" hint-placeholder-val="{{ true }}">
+<div data-m="cols" style="max-width:920px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:clamp(24px,4vw,48px);align-items:start">
+  <section aria-labelledby="auth-h" style="border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(22px,4vw,34px)">
+    <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">{{ formKicker }}</div>
+    <h1 id="auth-h" style="margin:10px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.8vw,34px);line-height:1.05;letter-spacing:-.02em">{{ formTitle }}</h1>
+    <p style="margin:11px 0 0;max-width:48ch;font-size:13.5px;line-height:1.6;color:#3D423C">{{ formBlurb }}</p>
+
+    <div style="margin:24px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 16px">
+      <sc-if value="{{ isSignUp }}" hint-placeholder-val="{{ false }}">
+        <label style="display:block">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Full name</span>
+          <input type="text" value="{{ name }}" onChange="{{ onName }}" autocomplete="name" placeholder="As on your student ID" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+        <label style="display:block">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Phone</span>
+          <input type="tel" value="{{ phone }}" onChange="{{ onPhone }}" autocomplete="tel" placeholder="10-digit mobile" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+        <label style="display:block">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Student ID</span>
+          <input type="text" value="{{ studentId }}" onChange="{{ onStudentId }}" placeholder="As printed on your card" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+      </sc-if>
+      <label style="display:block">
+        <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Email</span>
+        <input type="email" value="{{ email }}" onChange="{{ onEmail }}" autocomplete="email" placeholder="you@woxsen.edu.in" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+      </label>
+      <sc-if value="{{ needsPassword }}" hint-placeholder-val="{{ true }}">
+        <label style="display:block">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Password</span>
+          <input type="password" value="{{ password }}" onChange="{{ onPassword }}" autocomplete="{{ pwAutocomplete }}" placeholder="{{ pwPlaceholder }}" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+      </sc-if>
+      <sc-if value="{{ isReset }}" hint-placeholder-val="{{ false }}">
+        <label style="display:block">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reset code</span>
+          <input type="text" value="{{ resetToken }}" onChange="{{ onResetToken }}" placeholder="From the reset link" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
+        </label>
+      </sc-if>
+    </div>
+
+    <div style="margin:22px 0 0;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+      <button type="button" onClick="{{ submit }}" disabled="{{ busy }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:14px 22px;border-radius:2px;font-size:14px;font-weight:600;cursor:pointer;min-height:48px">{{ cta }}</button>
+      <button type="button" onClick="{{ toggleMode }}" style="background:none;border:0;padding:12px 4px;font-size:13px;font-weight:600;color:#0E4B34;cursor:pointer;min-height:44px;border-bottom:1px solid rgba(14,75,52,.4)">{{ switchLabel }}</button>
+      <sc-if value="{{ showForgot }}" hint-placeholder-val="{{ true }}">
+        <button type="button" onClick="{{ goForgot }}" style="background:none;border:0;padding:12px 4px;font-size:13px;font-weight:500;color:#4A4F49;cursor:pointer;min-height:44px">Forgot password</button>
+      </sc-if>
+    </div>
+    <p style="margin:18px 0 0;font-size:12px;line-height:1.6;color:#5F6560">Sessions last 14 days. Repeated failed attempts are rate limited. Passwords are stored as a hash, never in the clear.</p>
+  </section>
+
+  <aside style="display:flex;flex-direction:column;gap:14px">
+    <div style="border:1px solid rgba(14,16,20,.14);background:#FFFFFF;padding:18px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Reference accounts</div>
+      <p style="margin:9px 0 0;font-size:12.5px;line-height:1.55;color:#4A4F49">Seeded for review. Password <strong style="font-weight:600">{{ demoPassword }}</strong> for all of them.</p>
+      <div style="margin:13px 0 0;display:flex;flex-direction:column;gap:8px">
+        <sc-for list="{{ demos }}" as="d" hint-placeholder-count="4">
+          <button type="button" onClick="{{ d.onUse }}" style="text-align:left;border:1px solid rgba(14,16,20,.16);background:#FCFBF8;padding:11px 12px;border-radius:2px;cursor:pointer;min-height:44px">
+            <span style="display:block;font-size:12.5px;font-weight:600">{{ d.email }}</span>
+            <span style="display:block;margin-top:3px;font-size:11.5px;color:#5F6560">{{ d.role }}</span>
+          </button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="border:1px solid rgba(14,16,20,.14);padding:18px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Eligibility</div>
+      <p style="margin:9px 0 0;font-size:12.5px;line-height:1.6;color:#4A4F49">DLT is open to enrolled students with a valid student ID. Automatic university verification is not part of this release, so IDs are checked at the door.</p>
+      <a href="./DLT Policies.dc.html#eligibility" style="display:inline-block;margin-top:10px;font-size:12.5px;font-weight:600;border-bottom:1px solid rgba(14,75,52,.4)">Student eligibility rules</a>
+    </div>
+  </aside>
+</div>
+</sc-if>
+
+<!-- SIGNED IN: profile -->
+<sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:920px;margin:0 auto">
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px">
+    <div>
+      <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">{{ roleLabel }} · joined {{ joined }}</div>
+      <h1 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3vw,36px);line-height:1.04;letter-spacing:-.02em">{{ name }}</h1>
+    </div>
+    <a href="./DLT Dashboard.dc.html" style="display:flex;align-items:center;background:#0E1014;color:#F7F5F0;padding:13px 20px;border-radius:2px;font-size:13.5px;font-weight:600;min-height:44px;box-sizing:border-box">My trips</a>
+  </div>
+
+  <section aria-labelledby="p1" style="margin:26px 0 0;border:1px solid rgba(14,16,20,.14);background:#FFFFFF;padding:clamp(20px,3vw,28px)">
+    <h2 id="p1" style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.01em">Your details</h2>
+    <p style="margin:8px 0 0;max-width:56ch;font-size:13px;line-height:1.6;color:#3D423C">Name, phone and emergency contact are yours to change. Your student ID is identity information — a change goes to operations for review rather than taking effect straight away.</p>
+    <div style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 16px">
+      <label style="display:block">
+        <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Full name</span>
+        <input type="text" value="{{ fName }}" onChange="{{ onFName }}" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+      </label>
+      <label style="display:block">
+        <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Phone</span>
+        <input type="tel" value="{{ fPhone }}" onChange="{{ onFPhone }}" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
+      </label>
+      <div>
+        <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Email</span>
+        <div style="padding:12px 0;font-size:14px;font-weight:600">{{ email }} <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:{{ verifiedFg }}">· {{ verifiedLabel }}</span></div>
+      </div>
+      <label style="display:block">
+        <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Student ID (protected)</span>
+        <input type="text" value="{{ fStudentId }}" onChange="{{ onFStudentId }}" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(184,115,10,.4);border-radius:2px;background:#FFFDF6;font-size:14px;font-variant-numeric:tabular-nums" />
+      </label>
+    </div>
+
+    <div style="margin:22px 0 0;padding-top:18px;border-top:1px solid rgba(14,16,20,.12)">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Emergency contact</div>
+      <p style="margin:8px 0 0;max-width:56ch;font-size:12.5px;line-height:1.6;color:#4A4F49">Held for emergencies only. Boarding staff never see it, and any admin who views it must give a reason that is written to the audit log.</p>
+      <div style="margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+        <label style="display:block">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Name</span>
+          <input type="text" value="{{ ecName }}" onChange="{{ onEcName }}" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+        <label style="display:block">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Phone</span>
+          <input type="tel" value="{{ ecPhone }}" onChange="{{ onEcPhone }}" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
+        </label>
+        <label style="display:block">
+          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Relationship</span>
+          <input type="text" value="{{ ecRelation }}" onChange="{{ onEcRelation }}" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        </label>
+      </div>
+    </div>
+
+    <div style="margin:22px 0 0;display:flex;flex-wrap:wrap;gap:10px">
+      <button type="button" onClick="{{ saveProfile }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:13px 20px;border-radius:2px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px">Save changes</button>
+      <button type="button" onClick="{{ revert }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:12px 19px;border-radius:2px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px">Discard</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="p2" style="margin:20px 0 0;border:1px solid rgba(14,16,20,.14);padding:clamp(20px,3vw,28px)">
+    <h2 id="p2" style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.01em">Booking history</h2>
+    <dl style="margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0 20px;font-variant-numeric:tabular-nums">
+      <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+        <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:10px">
+          <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">{{ s.k }}</dt>
+          <dd style="margin:0;font-size:17px;font-weight:600">{{ s.v }}</dd>
+        </div>
+      </sc-for>
+    </dl>
+  </section>
+
+  <section aria-labelledby="p3" style="margin:20px 0 0;border:1px solid rgba(163,58,34,.24);padding:clamp(20px,3vw,28px)">
+    <h2 id="p3" style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.01em">Delete this account</h2>
+    <p style="margin:8px 0 0;max-width:60ch;font-size:13px;line-height:1.6;color:#3D423C">Deletion is a request, not an instant wipe. Operations review it, the account is deactivated, and personal information is removed where the law allows. Payment, booking and boarding records are kept because we are required to keep them.</p>
+    <sc-if value="{{ deletionPending }}" hint-placeholder-val="{{ false }}">
+      <p role="status" style="margin:14px 0 0;font-size:13px;font-weight:600;color:#8A5A0E">A deletion request is already filed and waiting on review.</p>
+    </sc-if>
+    <sc-if value="{{ deletionOpen }}" hint-placeholder-val="{{ true }}">
+      <label style="display:block;margin:16px 0 0;max-width:420px">
+        <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reason (optional)</span>
+        <input type="text" value="{{ delReason }}" onChange="{{ onDelReason }}" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+      </label>
+      <button type="button" onClick="{{ requestDeletion }}" style="margin:16px 0 0;border:1px solid rgba(163,58,34,.4);color:#8A2F1C;background:none;padding:12px 19px;border-radius:2px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px">Request deletion</button>
+    </sc-if>
+  </section>
+</div>
+</sc-if>
+
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 1180, &quot;height&quot;: 860 }
+}">
+class Component extends DCLogic {
+  state = {
+    ready: false, mode: 'signin', busy: false, error: null, message: null,
+    name: '', email: '', phone: '', studentId: '', password: '', resetToken: '',
+    fName: '', fPhone: '', fStudentId: '', ecName: '', ecPhone: '', ecRelation: '',
+    delReason: '', tick: 0,
+  };
+
+  async componentDidMount() {
+    await DLT.ready;
+    this._unsub = DLT.subscribe(() => this.setState({ tick: this.state.tick + 1 }));
+    this.setState({ ready: true });
+    this._loadProfile();
+  }
+  componentWillUnmount() { if (this._unsub) this._unsub(); }
+
+  _loadProfile() {
+    const me = DLT.auth.current();
+    if (!me) return;
+    const ec = me.emergencyContact || {};
+    this.setState({
+      fName: me.name || '', fPhone: me.phone || '', fStudentId: me.studentId || '',
+      ecName: ec.name || '', ecPhone: ec.phone || '', ecRelation: ec.relation || '',
+    });
+  }
+
+  submit = async () => {
+    const st = this.state;
+    this.setState({ busy: true, error: null, message: null });
+    try {
+      if (st.mode === 'signup') {
+        await DLT.auth.signUp({ name: st.name, email: st.email, password: st.password,
+          phone: st.phone, studentId: st.studentId });
+        await DLT.auth.signIn(st.email, st.password);
+        this.setState({ busy: false, password: '', message: 'Account created. Verify your email when you get a chance — booking works either way.' });
+        this._loadProfile();
+        this._afterSignIn();
+      } else if (st.mode === 'forgot') {
+        const r = DLT.auth.requestReset(st.email);
+        this.setState({ busy: false, mode: 'reset',
+          message: r.resetToken
+            ? 'Reset code for this sandbox: ' + r.resetToken + ' (a real deployment emails this).'
+            : 'If that address has an account, a reset link is on its way.' });
+      } else if (st.mode === 'reset') {
+        await DLT.auth.resetPassword(st.resetToken, st.password);
+        this.setState({ busy: false, mode: 'signin', password: '', resetToken: '',
+          message: 'Password changed. Sign in with the new one.' });
+      } else {
+        await DLT.auth.signIn(st.email, st.password);
+        this.setState({ busy: false, password: '' });
+        this._loadProfile();
+        this._afterSignIn();
+      }
+    } catch (e) { this.setState({ busy: false, error: e.message || String(e) }); }
+  };
+
+  _afterSignIn() {
+    const me = DLT.auth.current();
+    const next = new URLSearchParams(location.search).get('next');
+    if (me && me.role !== 'STUDENT') { location.href = './DLT Admin.dc.html'; return; }
+    if (next === 'book') { location.href = './DLT Booking.dc.html'; return; }
+    if (next === 'trips') { location.href = './DLT Dashboard.dc.html'; }
+  }
+
+  saveProfile = () => {
+    const st = this.state;
+    try {
+      const ec = (st.ecName || st.ecPhone)
+        ? { name: st.ecName, phone: st.ecPhone, relation: st.ecRelation } : null;
+      const me = DLT.auth.current();
+      const idChanged = st.fStudentId !== (me.studentId || '');
+      DLT.auth.updateProfile({ name: st.fName, phone: st.fPhone, emergencyContact: ec,
+        studentId: idChanged ? st.fStudentId : null });
+      this._loadProfile();
+      this.setState({ error: null, message: idChanged
+        ? 'Saved. Your student ID change has gone to operations for review — the old ID stays active until they approve it.'
+        : 'Saved.' });
+    } catch (e) { this.setState({ error: e.message || String(e) }); }
+  };
+
+  renderVals() {
+    const st = this.state;
+    if (!st.ready) {
+      return { kicker: 'Account', signedIn: false, signedOut: true, formKicker: 'Loading',
+        formTitle: 'One moment', formBlurb: 'Reading your session.', cta: 'Please wait',
+        busy: true, demos: [], demoPassword: '', switchLabel: '', submit: () => {},
+        toggleMode: () => {}, goForgot: () => {}, needsPassword: false, isSignUp: false,
+        isReset: false, showForgot: false, name: '', email: '', phone: '', studentId: '',
+        password: '', resetToken: '', onName: () => {}, onEmail: () => {}, onPhone: () => {},
+        onStudentId: () => {}, onPassword: () => {}, onResetToken: () => {},
+        pwAutocomplete: 'current-password', pwPlaceholder: '' };
+    }
+    const me = DLT.auth.current();
+    const mode = st.mode;
+
+    let bookings = [], reviewCount = 0;
+    if (me && me.role === 'STUDENT') {
+      bookings = DLT.bookings.mine();
+      reviewCount = bookings.filter(b => b.bucket === 'Completed').length;
+    }
+    const spent = bookings.filter(b => b.status === 'CONFIRMED' || b.bucket === 'Completed')
+      .reduce((n, b) => n + b.totalAmount, 0);
+    const refunded = bookings.reduce((n, b) => n + (b.refundedTotal || 0), 0);
+
+    return {
+      kicker: me ? 'Account' : 'Sign in',
+      signedIn: !!me, signedOut: !me,
+      error: st.error, message: st.message,
+      busy: st.busy,
+      signOut: () => { DLT.auth.signOut(); this.setState({ message: 'Signed out.', mode: 'signin' }); },
+
+      /* signed-out form */
+      formKicker: mode === 'signup' ? 'New account' : mode === 'forgot' ? 'Password help' : mode === 'reset' ? 'Set a new password' : 'Student sign in',
+      formTitle: mode === 'signup' ? 'Create your DLT account'
+        : mode === 'forgot' ? 'Reset your password'
+        : mode === 'reset' ? 'Choose a new password' : 'Sign in to DLT',
+      formBlurb: mode === 'signup'
+        ? 'You can browse and pick seats without an account, but a booking has to belong to someone — that is where the passes and any refund go.'
+        : mode === 'forgot' ? 'Enter the email on your account and we will send a reset link.'
+        : mode === 'reset' ? 'Enter the code from the reset link and a new password of at least eight characters.'
+        : 'Students, operations and boarding staff all sign in here; you land on the right screen for your role.',
+      isSignUp: mode === 'signup', isReset: mode === 'reset',
+      needsPassword: mode !== 'forgot',
+      showForgot: mode === 'signin',
+      pwAutocomplete: mode === 'signup' || mode === 'reset' ? 'new-password' : 'current-password',
+      pwPlaceholder: mode === 'signup' || mode === 'reset' ? 'At least 8 characters' : '',
+      cta: st.busy ? 'Working…'
+        : mode === 'signup' ? 'Create account'
+        : mode === 'forgot' ? 'Send reset link'
+        : mode === 'reset' ? 'Set password' : 'Sign in',
+      switchLabel: mode === 'signin' ? 'Create an account instead' : 'Back to sign in',
+      toggleMode: () => this.setState({ mode: mode === 'signin' ? 'signup' : 'signin', error: null, message: null }),
+      goForgot: () => this.setState({ mode: 'forgot', error: null, message: null }),
+      submit: this.submit,
+      name: st.name, email: st.email, phone: st.phone, studentId: st.studentId,
+      password: st.password, resetToken: st.resetToken,
+      onName: e => this.setState({ name: e.target.value }),
+      onEmail: e => this.setState({ email: e.target.value }),
+      onPhone: e => this.setState({ phone: e.target.value }),
+      onStudentId: e => this.setState({ studentId: e.target.value }),
+      onPassword: e => this.setState({ password: e.target.value }),
+      onResetToken: e => this.setState({ resetToken: e.target.value }),
+      demoPassword: DLT.auth.demoPassword,
+      demos: DLT.auth.demoAccounts.map(d => ({
+        email: d.email, role: d.role,
+        onUse: () => this.setState({ mode: 'signin', email: d.email, password: DLT.auth.demoPassword, error: null }),
+      })),
+
+      /* signed-in profile */
+      roleLabel: me ? DLT.roleLabel(me.role) : '',
+      joined: me ? DLT.fmt.date(me.createdAt) : '',
+      name: me ? me.name : st.name,
+      email: me ? me.email : st.email,
+      verifiedLabel: me && me.emailVerified ? 'verified' : 'not verified',
+      verifiedFg: me && me.emailVerified ? '#0E4B34' : '#8A5A0E',
+      fName: st.fName, fPhone: st.fPhone, fStudentId: st.fStudentId,
+      onFName: e => this.setState({ fName: e.target.value }),
+      onFPhone: e => this.setState({ fPhone: e.target.value }),
+      onFStudentId: e => this.setState({ fStudentId: e.target.value }),
+      ecName: st.ecName, ecPhone: st.ecPhone, ecRelation: st.ecRelation,
+      onEcName: e => this.setState({ ecName: e.target.value }),
+      onEcPhone: e => this.setState({ ecPhone: e.target.value }),
+      onEcRelation: e => this.setState({ ecRelation: e.target.value }),
+      saveProfile: this.saveProfile,
+      revert: () => { this._loadProfile(); this.setState({ message: null, error: null }); },
+      stats: [
+        { k: 'Bookings', v: String(bookings.length) },
+        { k: 'Completed', v: String(reviewCount) },
+        { k: 'Paid', v: '₹' + spent },
+        { k: 'Refunded', v: '₹' + refunded },
+      ],
+      deletionOpen: true, deletionPending: false,
+      delReason: st.delReason,
+      onDelReason: e => this.setState({ delReason: e.target.value }),
+      requestDeletion: () => {
+        try {
+          DLT.auth.requestDeletion(st.delReason);
+          this.setState({ message: 'Deletion request filed. Operations will review it; your bookings stay valid until they do.', error: null });
+        } catch (e) { this.setState({ error: e.message || String(e) }); }
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>

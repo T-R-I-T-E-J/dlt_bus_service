@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+    "three/addons/loaders/GLTFLoader.js": "https://unpkg.com/three@0.184.0/examples/jsm/loaders/GLTFLoader.js"
+  },
+  "integrity": {
+    "https://unpkg.com/three@0.184.0/build/three.module.js": "sha384-8FCZ1eVO6it4+pbec2aDtnTrwjWXZLJRC+MAGCIPDgsYnUrl/E0A2YlF8ioMKI/J",
+    "https://unpkg.com/three@0.184.0/build/three.core.js": "sha384-dw2ooPewaEIrAgl6oFDBmmBWCE9oW9LxRGcfwZ0hLvEprzo202wXl7vCYHRlSnOT"
+  }
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400;100,500;100,600;100,700;125,600;125,700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html { --journey-t: 0; --journey-handoff: 0; scroll-behavior: auto; }
+  body { margin: 0; background: #F7F5F0; color: #0E1014;
+    font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased; text-wrap: pretty; }
+  a { color: #0E4B34; text-decoration: none; }
+  a:hover { color: #0E1014; }
+  input, button, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid #0E4B34; outline-offset: 2px; }
+  @keyframes dltNudge { 0%,100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
+  @keyframes dltSheen { 0% { transform: translateX(-60%); } 100% { transform: translateX(60%); } }
+  @keyframes dltPulse { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
+  @keyframes dltRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+  .dlt-skip { position: absolute; left: -9999px; top: 0; z-index: 60; background: #0E1014;
+    color: #F7F5F0; padding: 12px 18px; font-size: 13px; font-weight: 600; }
+  .dlt-skip:focus { left: 8px; top: 8px; color: #F7F5F0; }
+  @media (max-width: 720px) {
+    [data-m="hide"] { display: none; }
+    [data-m="row"] { grid-template-columns: 1fr auto; row-gap: 12px; }
+    [data-m="time"] { grid-area: 1 / 1; }
+    [data-m="price"] { grid-area: 1 / 2; justify-self: end; }
+    [data-m="route"] { grid-area: 2 / 1 / 3 / -1; }
+    [data-m="seats"] { grid-area: 3 / 1 / 4 / -1; }
+    [data-m="cta"] { grid-area: 4 / 1 / 5 / -1; text-align: center; padding: 14px 20px; }
+    [data-journey-scroll] { height: 360vh; }
+  }
+</style>
+<script type="module" src="./journey.js"></script>
+<script src="./dlt-store.js"></script>
+</helmet>
+
+<a class="dlt-skip" href="#trips">Skip to booking</a>
+
+<header style="position:fixed;top:0;left:0;right:0;z-index:40;height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(18px,4vw,44px);background:rgba(247,245,240,.86);backdrop-filter:blur(14px);border-bottom:1px solid rgba(14,16,20,.10)">
+  <a href="#top" style="display:flex;align-items:baseline;gap:9px;color:#0E1014">
+    <span style="font-stretch:125%;font-weight:700;font-size:19px;letter-spacing:.02em">DLT</span>
+    <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Student shuttle</span>
+  </a>
+  <nav aria-label="Main" style="display:flex;align-items:center;gap:clamp(12px,2.2vw,26px);font-size:13.5px;font-weight:500;white-space:nowrap">
+    <a href="#route" data-m="hide" style="color:#3D423C">Route</a>
+    <a href="#how" data-m="hide" style="color:#3D423C">How it works</a>
+    <a href="#why" data-m="hide" style="color:#3D423C">Why DLT</a>
+    <a href="#help" style="color:#3D423C">Help</a>
+    <sc-if value="{{ signedOut }}" hint-placeholder-val="{{ true }}">
+      <a href="./DLT Account.dc.html" style="color:#3D423C" data-m="hide">Sign in</a>
+    </sc-if>
+    <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+      <a href="./DLT Dashboard.dc.html" style="color:#3D423C" data-m="hide">My trips</a>
+    </sc-if>
+    <a href="./DLT Booking.dc.html" style="background:#0E1014;color:#F7F5F0;padding:12px 17px;border-radius:2px;font-weight:600;font-size:13px;min-height:44px;display:flex;align-items:center;box-sizing:border-box">Book a seat</a>
+  </nav>
+</header>
+
+<div id="top"></div>
+
+<sc-if value="{{ hasNextTrip }}" hint-placeholder-val="{{ false }}">
+  <section aria-label="Your next trip" style="margin-top:64px;padding:14px clamp(18px,4vw,44px);background:#0E1014;color:#F7F5F0;display:flex;flex-wrap:wrap;align-items:center;gap:10px 26px">
+    <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#A9AFA6">Your next trip</span>
+    <span style="font-size:15px;font-weight:600;font-variant-numeric:tabular-nums">{{ nextTripWhen }}</span>
+    <span style="font-size:13px;color:#C3C8BE;font-variant-numeric:tabular-nums">{{ nextTripSeats }}</span>
+    <span style="flex:1"></span>
+    <a href="./DLT Dashboard.dc.html" style="background:#F7F5F0;color:#0E1014;padding:11px 15px;border-radius:2px;font-size:12.5px;font-weight:600;min-height:44px;display:flex;align-items:center;box-sizing:border-box">Boarding pass</a>
+  </section>
+</sc-if>
+
+<sc-if value="{{ motion }}" hint-placeholder-val="{{ true }}">
+<section data-journey-scroll="1" data-screen-label="Journey" aria-label="Woxsen to Miyapur journey, scroll to travel" style="position:relative;height:480vh;background:#F7F5F0">
+  <div style="position:sticky;top:0;height:100vh;overflow:hidden">
+
+    <div style="position:absolute;inset:0;background:linear-gradient(#FFFFFF 0%, #F7F5F0 46%, #EFEDE4 100%)"></div>
+    <div style="position:absolute;inset:0">
+      <x-import component-from-global-scope="dlt-journey" hint-size="100%,100%" style="position:absolute;inset:0"></x-import>
+    </div>
+
+    <sc-if value="{{ sceneLoading }}" hint-placeholder-val="{{ true }}">
+      <div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(#FFFFFF 0%, #F7F5F0 52%, #EAE7DD 100%)">
+        <div style="position:absolute;left:0;right:0;top:62%;height:34%;background:linear-gradient(#E6E3D9, #DEDBD1);-webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent)"></div>
+        <div style="position:absolute;left:0;right:0;top:0;bottom:0;background:linear-gradient(100deg,rgba(255,255,255,0) 38%,rgba(255,255,255,.72) 50%,rgba(255,255,255,0) 62%);animation:dltSheen 1.5s linear infinite"></div>
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:10px;font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">
+          <span style="display:block;width:7px;height:7px;border-radius:50%;background:#0E4B34;animation:dltPulse 1.2s ease-in-out infinite"></span>
+          Preparing the journey
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="position:absolute;inset:0;pointer-events:none;padding:calc(64px + clamp(20px,4vh,40px)) clamp(18px,4vw,44px) clamp(20px,4vh,40px)">
+
+      <div style="--in:clamp(0, calc((0.155 - var(--journey-t, 0)) * 13), 1);opacity:var(--in);position:relative;width:max-content;max-width:100%">
+        <div style="position:absolute;left:-46px;top:-44px;right:-72px;bottom:-46px;background:#F7F5F0;-webkit-mask-image:radial-gradient(closest-side at 46% 50%, #000 0%, rgba(0,0,0,.94) 40%, rgba(0,0,0,.55) 68%, rgba(0,0,0,0) 100%);mask-image:radial-gradient(closest-side at 46% 50%, #000 0%, rgba(0,0,0,.94) 40%, rgba(0,0,0,.55) 68%, rgba(0,0,0,0) 100%)"></div>
+        <div style="position:relative;display:flex;align-items:baseline;gap:12px">
+        <span style="display:block;width:26px;height:2px;background:#0E4B34;transform:translateY(-5px)"></span>
+        <div>
+          <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#3D423C">Launch route · 69 km · approx 2 h</div>
+          <h1 style="margin:8px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3.4vw,46px);line-height:1.03;letter-spacing:-.02em;max-width:15ch">Woxsen to Miyapur, one seat at a time.</h1>
+        </div>
+        </div>
+      </div>
+
+      <div style="position:absolute;left:clamp(18px,4vw,44px);right:clamp(18px,4vw,44px);bottom:clamp(64px,10vh,96px)">
+        <div style="position:relative;height:1px;background:rgba(14,16,20,.18)">
+          <div style="position:absolute;left:0;top:0;height:1px;background:#0E4B34;width:calc(var(--journey-t, 0) * 100%)"></div>
+          <div style="position:absolute;top:-4px;left:calc(var(--journey-t, 0) * 100%);width:9px;height:9px;border-radius:50%;background:#0E4B34;margin-left:-4.5px"></div>
+          <span style="position:absolute;left:20%;top:-5px;width:1px;height:11px;background:rgba(14,16,20,.34)"></span>
+          <span style="position:absolute;left:74%;top:-5px;width:1px;height:11px;background:rgba(14,16,20,.34)"></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:9px;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#5F6560">
+          <span>Depart</span><span style="margin-left:6%">Woxsen {{ departLabel }}</span><span style="margin-right:14%">Miyapur ≈{{ arriveLabel }}</span><span>Book</span>
+        </div>
+      </div>
+
+      <article style="--in:min(clamp(0, calc((var(--journey-t, 0) - 0.20) * 18), 1), clamp(0, calc((0.455 - var(--journey-t, 0)) * 18), 1));opacity:var(--in);transform:translateY(calc((1 - var(--in)) * 22px));position:absolute;right:clamp(18px,4vw,44px);bottom:clamp(112px,19vh,190px);width:min(390px,84vw);background:#FFFFFF;border:1px solid rgba(14,16,20,.12);border-top:2px solid #0E4B34;padding:22px 24px 20px;box-shadow:0 18px 44px -28px rgba(14,16,20,.34)">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:#0E4B34">Stop 01 · Boarding point</div>
+        <h2 style="margin:10px 0 0;font-stretch:125%;font-weight:700;font-size:29px;line-height:1;letter-spacing:-.015em">Woxsen University</h2>
+        <p style="margin:11px 0 0;font-size:13.5px;line-height:1.55;color:#3D423C">Kamkole, Sadasivpet. The coach waits at the main gate loop — be there twenty minutes early and you'll board without hurrying.</p>
+        <dl style="margin:18px 0 0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;font-variant-numeric:tabular-nums">
+          <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:9px">
+            <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Report</dt>
+            <dd style="margin:0;font-size:16px;font-weight:600">{{ reportLabel }}</dd>
+          </div>
+          <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:9px">
+            <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Depart</dt>
+            <dd style="margin:0;font-size:16px;font-weight:600">{{ departLabel }}</dd>
+          </div>
+          <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:9px">
+            <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Pickup</dt>
+            <dd style="margin:0;font-size:16px;font-weight:600">Main gate</dd>
+          </div>
+        </dl>
+      </article>
+
+      <article style="--in:min(clamp(0, calc((var(--journey-t, 0) - 0.70) * 20), 1), clamp(0, calc((0.925 - var(--journey-t, 0)) * 20), 1));opacity:var(--in);transform:translateY(calc((1 - var(--in)) * 22px));position:absolute;right:clamp(18px,4vw,44px);bottom:clamp(112px,19vh,190px);width:min(390px,84vw);background:#0E1014;color:#F7F5F0;border-top:2px solid #0E4B34;padding:22px 24px 20px;box-shadow:0 18px 44px -28px rgba(14,16,20,.42)">
+        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:#5FAE86">Stop 02 · Destination</div>
+        <h2 style="margin:10px 0 0;font-stretch:125%;font-weight:700;font-size:29px;line-height:1;letter-spacing:-.015em">Miyapur</h2>
+        <p style="margin:8px 0 0;font-size:18px;font-weight:600;letter-spacing:-.01em">You've arrived.</p>
+        <p style="margin:9px 0 0;font-size:13.5px;line-height:1.55;color:#C3C8BE">Set down beside Miyapur metro, on the Red Line. <em style="font-style:italic;color:#DCDFD8">DLT — making the journey simpler.</em></p>
+        <dl style="margin:18px 0 0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;font-variant-numeric:tabular-nums">
+          <div style="border-top:1px solid rgba(247,245,240,.22);padding-top:9px">
+            <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#A9AFA6;margin-bottom:4px">Journey</dt>
+            <dd style="margin:0;font-size:16px;font-weight:600">≈2 h</dd>
+          </div>
+          <div style="border-top:1px solid rgba(247,245,240,.22);padding-top:9px">
+            <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#A9AFA6;margin-bottom:4px">Arrives</dt>
+            <dd style="margin:0;font-size:16px;font-weight:600">≈{{ arriveLabel }}</dd>
+          </div>
+          <div style="border-top:1px solid rgba(247,245,240,.22);padding-top:9px">
+            <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#A9AFA6;margin-bottom:4px">Onward</dt>
+            <dd style="margin:0;font-size:16px;font-weight:600">Metro</dd>
+          </div>
+        </dl>
+        <p style="margin:13px 0 0;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:#A9AFA6">Arrival time approximate</p>
+      </article>
+
+      <a href="#trips" style="--in:min(clamp(0, calc((var(--journey-t, 0) - 0.015) * 40), 1), clamp(0, calc((0.86 - var(--journey-t, 0)) * 24), 1));opacity:var(--in);pointer-events:auto;position:absolute;left:50%;transform:translateX(-50%);bottom:clamp(18px,3vh,30px);display:flex;align-items:center;gap:8px;font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:#3D423C;background:rgba(247,245,240,.86);padding:11px 14px;border:1px solid rgba(14,16,20,.16);border-radius:2px;min-height:44px;box-sizing:border-box">
+        Skip the journey
+        <span aria-hidden="true" style="display:inline-block;animation:dltNudge 2.4s ease-in-out infinite">↓</span>
+      </a>
+
+    </div>
+  </div>
+</section>
+</sc-if>
+
+<sc-if value="{{ reduced }}" hint-placeholder-val="{{ false }}">
+<section data-screen-label="Route (static)" style="margin-top:64px;padding:clamp(30px,6vh,64px) clamp(18px,4vw,44px) clamp(24px,4vh,44px)">
+  <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#3D423C">Launch route · 69 km · approx 2 h</div>
+  <h1 style="margin:10px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(28px,4vw,50px);line-height:1.03;letter-spacing:-.02em;max-width:18ch">Woxsen to Miyapur, one seat at a time.</h1>
+
+  <div style="margin:34px 0 0;position:relative;padding:0 0 6px">
+    <div style="position:relative;height:2px;background:rgba(14,16,20,.16)">
+      <span style="position:absolute;left:0;top:-6px;width:14px;height:14px;border-radius:50%;background:#0E4B34"></span>
+      <span style="position:absolute;left:34%;top:-3px;width:8px;height:8px;border-radius:50%;background:#FFFFFF;border:2px solid rgba(14,16,20,.4)"></span>
+      <span style="position:absolute;left:100%;top:-6px;width:14px;height:14px;border-radius:50%;background:#0E1014;margin-left:-14px"></span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:10px;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560">
+      <span>Woxsen main gate</span><span style="margin-left:6%">ORR</span><span>Miyapur metro</span>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-top:26px">
+    <article style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12);border-top:2px solid #0E4B34;padding:22px 24px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:#0E4B34">Stop 01 · Boarding point</div>
+      <h2 style="margin:10px 0 0;font-stretch:125%;font-weight:700;font-size:26px;line-height:1">Woxsen University</h2>
+      <p style="margin:10px 0 0;font-size:13.5px;line-height:1.55;color:#3D423C">Kamkole, Sadasivpet. Board at the main gate loop. Report {{ reportLabel }}, departs {{ departLabel }}.</p>
+    </article>
+    <article style="background:#0E1014;color:#F7F5F0;border-top:2px solid #0E4B34;padding:22px 24px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:#5FAE86">Stop 02 · Destination</div>
+      <h2 style="margin:10px 0 0;font-stretch:125%;font-weight:700;font-size:26px;line-height:1">Miyapur</h2>
+      <p style="margin:10px 0 0;font-size:13.5px;line-height:1.55;color:#C3C8BE">Beside Miyapur metro on the Red Line. Journey ≈2 h, arrival approximate.</p>
+    </article>
+  </div>
+  <p style="margin:18px 0 0;font-size:12.5px;color:#4A4F49">You're seeing the static route because your device asks for reduced motion. Nothing about booking depends on the animated journey.</p>
+</section>
+</sc-if>
+
+<section id="trips" data-screen-label="Next departures" style="position:relative;scroll-margin-top:64px;padding:0 clamp(18px,4vw,44px) clamp(40px,7vh,90px)">
+
+  <div style="height:2px;background:#0E4B34;transform-origin:left center;transform:scaleX(calc(0.06 + var(--journey-handoff, 0) * 0.94))"></div>
+
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px;padding:clamp(26px,5vh,54px) 0 22px">
+    <div>
+      <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Woxsen → Miyapur</div>
+      <h2 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.8vw,36px);line-height:1.05;letter-spacing:-.018em">Next departures</h2>
+    </div>
+    <p style="margin:0;max-width:44ch;font-size:13px;line-height:1.55;color:#4A4F49">₹{{ fare }} per seat, up to five passengers on one booking. Free cancellation until 12 hours before departure.</p>
+  </div>
+
+  <div role="list" style="--h:var(--journey-handoff, 0);opacity:calc(.18 + var(--h) * .82);transform:translateY(calc((1 - var(--h)) * 30px));display:flex;flex-direction:column;gap:0;border-top:1px solid rgba(14,16,20,.16)">
+    <sc-for list="{{ trips }}" as="t" hint-placeholder-count="3">
+      <article role="listitem" data-m="row" style="display:grid;grid-template-columns:minmax(96px,.7fr) minmax(180px,1.5fr) minmax(120px,1fr) minmax(84px,.6fr) auto;align-items:center;gap:clamp(12px,2vw,28px);padding:22px 0;border-bottom:1px solid rgba(14,16,20,.16);opacity:{{ t.dim }}">
+        <div data-m="time">
+          <div style="font-stretch:125%;font-weight:700;font-size:clamp(24px,2.4vw,32px);line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ t.time }}</div>
+          <div style="margin-top:6px;font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ t.date }}</div>
+        </div>
+        <div data-m="route">
+          <div style="font-size:15px;font-weight:600;letter-spacing:-.005em">Woxsen main gate → Miyapur metro</div>
+          <div style="margin-top:5px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">Report {{ t.report }} · arrives ≈{{ t.arrive }}</div>
+        </div>
+        <div data-m="seats" style="display:flex;align-items:center;gap:9px">
+          <sc-if value="{{ t.showBar }}" hint-placeholder-val="{{ true }}">
+            <span aria-hidden="true" style="display:block;width:44px;height:4px;background:rgba(14,16,20,.14)"><span style="display:block;width:{{ t.barWidth }};height:4px;background:{{ t.barColor }}"></span></span>
+          </sc-if>
+          <span style="font-size:12.5px;font-weight:{{ t.availWeight }};color:{{ t.availFg }};font-variant-numeric:tabular-nums">{{ t.avail }}</span>
+        </div>
+        <div data-m="price" style="font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;color:{{ t.priceFg }}">₹{{ t.price }}</div>
+        <a href="{{ t.href }}" data-m="cta" style="background:{{ t.ctaBg }};color:{{ t.ctaFg }};border:1px solid #0E1014;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;white-space:nowrap;min-height:44px;display:flex;align-items:center;justify-content:center;box-sizing:border-box">{{ t.cta }}</a>
+      </article>
+    </sc-for>
+  </div>
+
+  <sc-if value="{{ noTrips }}" hint-placeholder-val="{{ false }}">
+    <div style="border-bottom:1px solid rgba(14,16,20,.16);padding:clamp(28px,5vw,44px) 0">
+      <h3 style="margin:0;font-stretch:125%;font-weight:700;font-size:21px;letter-spacing:-.012em">No trips available right now.</h3>
+      <p style="margin:10px 0 0;max-width:48ch;font-size:13.5px;line-height:1.6;color:#3D423C">Departures open a few days ahead. Leave a contact and we'll message you the moment bookings open for this route.</p>
+      <a href="./DLT Booking.dc.html?notify=1" style="display:inline-flex;align-items:center;margin:18px 0 0;background:#0E1014;color:#F7F5F0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;min-height:44px;box-sizing:border-box">Get notified</a>
+    </div>
+  </sc-if>
+
+  <p style="margin:20px 0 0;font-size:12.5px;color:#4A4F49">{{ tripsNote }}</p>
+</section>
+
+<section id="route" data-screen-label="Route" style="border-top:1px solid rgba(14,16,20,.16);padding:clamp(34px,6vh,72px) clamp(18px,4vw,44px)">
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px">
+    <div>
+      <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">The route</div>
+      <h2 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.8vw,36px);line-height:1.05;letter-spacing:-.018em">Woxsen University → Miyapur</h2>
+    </div>
+    <a href="https://www.google.com/maps/dir/Woxsen+University/Miyapur+Metro+Station" target="_blank" rel="noopener" style="font-size:13px;font-weight:600;border-bottom:1px solid rgba(14,75,52,.4)">Open in maps ↗</a>
+  </div>
+  <dl style="margin:26px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 clamp(16px,2.5vw,32px);font-variant-numeric:tabular-nums">
+    <div style="border-top:1px solid rgba(14,16,20,.16);padding:12px 0 0">
+      <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">Pickup</dt>
+      <dd style="margin:0;font-size:15px;font-weight:600">Woxsen main gate loop</dd>
+    </div>
+    <div style="border-top:1px solid rgba(14,16,20,.16);padding:12px 0 0">
+      <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">Drop</dt>
+      <dd style="margin:0;font-size:15px;font-weight:600">Miyapur metro, Red Line</dd>
+    </div>
+    <div style="border-top:1px solid rgba(14,16,20,.16);padding:12px 0 0">
+      <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">Distance</dt>
+      <dd style="margin:0;font-size:15px;font-weight:600">≈ 69 km</dd>
+    </div>
+    <div style="border-top:1px solid rgba(14,16,20,.16);padding:12px 0 0">
+      <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">Journey</dt>
+      <dd style="margin:0;font-size:15px;font-weight:600">≈ 2 h (approx)</dd>
+    </div>
+    <div style="border-top:1px solid rgba(14,16,20,.16);padding:12px 0 0">
+      <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">Report by</dt>
+      <dd style="margin:0;font-size:15px;font-weight:600">20 min before</dd>
+    </div>
+  </dl>
+  <p style="margin:16px 0 0;font-size:12.5px;color:#4A4F49">Arrival times are approximate — traffic on the ORR decides the last twenty minutes, so we publish a window rather than a promise.</p>
+</section>
+
+<section id="how" data-screen-label="How it works" style="border-top:1px solid rgba(14,16,20,.16);padding:clamp(34px,6vh,72px) clamp(18px,4vw,44px)">
+  <h2 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.8vw,36px);line-height:1.05;letter-spacing:-.018em">How it works</h2>
+  <ol style="margin:26px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:clamp(16px,2.4vw,30px)">
+    <li style="border-top:2px solid #0E4B34;padding-top:13px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#0E4B34">Step 01</div>
+      <h3 style="margin:8px 0 0;font-size:15.5px;font-weight:600">Find your trip</h3>
+      <p style="margin:7px 0 0;font-size:13px;line-height:1.55;color:#3D423C">Pick a departure from the open dates. No account needed to look.</p>
+    </li>
+    <li style="border-top:2px solid rgba(14,16,20,.2);padding-top:13px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Step 02</div>
+      <h3 style="margin:8px 0 0;font-size:15.5px;font-weight:600">Select your seat</h3>
+      <p style="margin:7px 0 0;font-size:13px;line-height:1.55;color:#3D423C">Window or aisle, up to five seats. Your choice is held for 10 minutes.</p>
+    </li>
+    <li style="border-top:2px solid rgba(14,16,20,.2);padding-top:13px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Step 03</div>
+      <h3 style="margin:8px 0 0;font-size:15.5px;font-weight:600">Passenger details</h3>
+      <p style="margin:7px 0 0;font-size:13px;line-height:1.55;color:#3D423C">Name, student ID and phone for every passenger travelling.</p>
+    </li>
+    <li style="border-top:2px solid rgba(14,16,20,.2);padding-top:13px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Step 04</div>
+      <h3 style="margin:8px 0 0;font-size:15.5px;font-weight:600">Pay securely</h3>
+      <p style="margin:7px 0 0;font-size:13px;line-height:1.55;color:#3D423C">One payment covers the whole booking, in INR. We confirm it on our side before issuing your seats.</p>
+    </li>
+    <li style="border-top:2px solid rgba(14,16,20,.2);padding-top:13px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Step 05</div>
+      <h3 style="margin:8px 0 0;font-size:15.5px;font-weight:600">Board</h3>
+      <p style="margin:7px 0 0;font-size:13px;line-height:1.55;color:#3D423C">Show the QR on your pass at the door. Each passenger gets their own.</p>
+    </li>
+  </ol>
+</section>
+
+<section id="why" data-screen-label="Why DLT" style="border-top:1px solid rgba(14,16,20,.16);padding:clamp(34px,6vh,72px) clamp(18px,4vw,44px)">
+  <h2 style="margin:0 0 26px;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.8vw,36px);line-height:1.05;letter-spacing:-.018em">Why DLT</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:clamp(20px,3vw,44px)">
+    <div>
+      <span style="display:block;width:22px;height:2px;background:#0E4B34"></span>
+      <h3 style="margin:14px 0 0;font-size:16px;font-weight:600;letter-spacing:-.01em">One route, done properly</h3>
+      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">A fixed departure, a named pickup point and a seat with your number on it. No haggling, no waiting at the gate.</p>
+    </div>
+    <div>
+      <span style="display:block;width:22px;height:2px;background:#0E4B34"></span>
+      <h3 style="margin:14px 0 0;font-size:16px;font-weight:600;letter-spacing:-.01em">Verified before you board</h3>
+      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">Every passenger carries a secure QR pass checked against the manifest at the door. Your seat cannot be sold twice.</p>
+    </div>
+    <div>
+      <span style="display:block;width:22px;height:2px;background:#0E4B34"></span>
+      <h3 style="margin:14px 0 0;font-size:16px;font-weight:600;letter-spacing:-.01em">Built for students</h3>
+      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">₹{{ fare }} flat, five passengers on one payment, and a full refund if you cancel more than 12 hours out.</p>
+    </div>
+  </div>
+</section>
+
+<section id="about" data-screen-label="About" style="border-top:1px solid rgba(14,16,20,.16);padding:clamp(34px,6vh,72px) clamp(18px,4vw,44px)">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:clamp(24px,4vw,56px);align-items:start">
+    <div>
+      <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">About DLT</div>
+      <h2 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(22px,2.4vw,30px);line-height:1.06;letter-spacing:-.018em">Getting to the city shouldn't be the hardest part of the week</h2>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px;max-width:62ch">
+      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">Woxsen sits an hour and a half outside Hyderabad. Students who need to get to the city have been left with whatever turns up: shared cabs settled by argument at the gate, buses that leave when they are full rather than when they are due, and no way to know in advance whether there will be a seat at all.</p>
+      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">DLT is the opposite of that. One route, published departures, a named pickup point, a numbered seat and a fixed fare of ₹{{ fare }}. You know before you leave your room that you have a seat, which coach it is on, and when it goes.</p>
+      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">We are starting with a single route on purpose. Woxsen to Miyapur, done properly, is worth more than five routes done approximately — and everything here is built so the second route changes nothing about how the first one works.</p>
+    </div>
+  </div>
+</section>
+
+<section id="help" data-screen-label="Help" style="border-top:1px solid rgba(14,16,20,.16);padding:clamp(34px,6vh,72px) clamp(18px,4vw,44px);display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:clamp(24px,4vw,56px)">
+  <div>
+    <h2 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(22px,2.4vw,30px);line-height:1.06;letter-spacing:-.018em">Questions students actually ask</h2>
+
+    <label style="display:block;margin:20px 0 0;max-width:420px">
+      <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Search the FAQ</span>
+      <input type="search" value="{{ faqQuery }}" onChange="{{ onFaqQuery }}" placeholder="cancel, payment, QR, pickup…" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FFFFFF;font-size:14px;min-height:44px" />
+    </label>
+
+    <div style="margin:22px 0 0;display:flex;flex-direction:column;gap:26px">
+      <sc-for list="{{ faqGroups }}" as="g" hint-placeholder-count="6">
+        <div>
+          <h3 style="margin:0;font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#0E4B34">{{ g.category }}</h3>
+          <div style="margin:10px 0 0;display:flex;flex-direction:column;gap:0">
+            <sc-for list="{{ g.items }}" as="q" hint-placeholder-count="2">
+              <details style="border-top:1px solid rgba(14,16,20,.16);padding:13px 0">
+                <summary style="cursor:pointer;font-size:14px;font-weight:600;list-style:none;min-height:24px">{{ q.q }}</summary>
+                <p style="margin:9px 0 0;font-size:13px;line-height:1.6;color:#3D423C">{{ q.a }}</p>
+              </details>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <sc-if value="{{ noFaqMatch }}" hint-placeholder-val="{{ false }}">
+      <p style="margin:18px 0 0;font-size:13px;color:#4A4F49">Nothing in the FAQ matches “{{ faqQuery }}”. Ask us directly and we'll answer.</p>
+    </sc-if>
+  </div>
+
+  <div id="contact">
+    <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Talk to a human</div>
+    <div style="margin:16px 0 0;display:flex;flex-direction:column;gap:10px">
+      <sc-if value="{{ hasSupportContact }}" hint-placeholder-val="{{ false }}">
+        <a href="{{ whatsappHref }}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#0E1014;color:#F7F5F0;padding:15px 18px;border-radius:2px;font-size:14px;font-weight:600;min-height:44px;box-sizing:border-box">WhatsApp support <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;color:#A9AFA6">09:00 – 21:00</span></a>
+      </sc-if>
+      <sc-if value="{{ noSupportContact }}" hint-placeholder-val="{{ true }}">
+        <div style="border:1px solid rgba(184,115,10,.34);background:#FFFDF6;padding:15px 18px">
+          <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#8A5A0E">Support channel pending</div>
+          <p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#3D423C">The WhatsApp and phone numbers for student support are not yet provisioned, so no number is shown here rather than a placeholder that would not connect. Until they are live, use the contact form your university has for DLT.</p>
+        </div>
+      </sc-if>
+      <a href="./DLT Policies.dc.html" style="display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid rgba(14,16,20,.18);padding:15px 18px;border-radius:2px;font-size:14px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Policies &amp; travel rules <span aria-hidden="true" style="color:#5F6560">→</span></a>
+      <a href="./DLT Account.dc.html" style="display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid rgba(14,16,20,.18);padding:15px 18px;border-radius:2px;font-size:14px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Your account <span aria-hidden="true" style="color:#5F6560">→</span></a>
+    </div>
+    <div style="margin:26px 0 0;border-top:1px solid rgba(14,16,20,.16);padding-top:14px;display:grid;gap:11px">
+      <div><h3 style="margin:0;font-size:13.5px;font-weight:600">Cancellation &amp; refunds</h3><p style="margin:5px 0 0;font-size:12.5px;line-height:1.55;color:#4A4F49">Full refund over 12 h before departure. No refund inside 12 h. Refunds return to the original payment method. <a href="./DLT Policies.dc.html#refunds" style="border-bottom:1px solid rgba(14,75,52,.4)">Read the policy</a></p></div>
+      <div><h3 style="margin:0;font-size:13.5px;font-weight:600">Boarding &amp; travel rules</h3><p style="margin:5px 0 0;font-size:12.5px;line-height:1.55;color:#4A4F49">Report 20 minutes before departure with your QR pass and student ID. <a href="./DLT Policies.dc.html#rules" style="border-bottom:1px solid rgba(14,75,52,.4)">Read the rules</a></p></div>
+      <div><h3 style="margin:0;font-size:13.5px;font-weight:600">Privacy &amp; eligibility</h3><p style="margin:5px 0 0;font-size:12.5px;line-height:1.55;color:#4A4F49">Open to enrolled students with a valid student ID. Passes carry a token, never your details. <a href="./DLT Policies.dc.html#privacy" style="border-bottom:1px solid rgba(14,75,52,.4)">Read the notice</a></p></div>
+    </div>
+  </div>
+</section>
+
+<footer style="border-top:1px solid rgba(14,16,20,.16);padding:26px clamp(18px,4vw,44px) 38px;display:flex;flex-wrap:wrap;gap:14px 30px;align-items:center;font-size:12.5px;color:#4A4F49">
+  <span style="font-stretch:125%;font-weight:700;font-size:15px;color:#0E1014;letter-spacing:.02em">DLT</span>
+  <a href="#how">How it works</a>
+  <a href="#why">Why DLT</a>
+  <a href="#about">About</a>
+  <a href="#help">Help &amp; FAQ</a>
+  <a href="#contact">Contact</a>
+  <a href="./DLT Policies.dc.html">Policies</a>
+  <a href="./DLT Booking.dc.html">Book a seat</a>
+  <a href="./DLT Dashboard.dc.html">My trips</a>
+  <span style="flex:1"></span>
+  <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase">Woxsen → Miyapur · INR</span>
+</footer>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;motionMode&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;Auto (respect the device setting)&quot;, &quot;Always show the journey&quot;, &quot;Static route map&quot;],
+    &quot;default&quot;: &quot;Auto (respect the device setting)&quot;,
+    &quot;tsType&quot;: &quot;string&quot;,
+    &quot;section&quot;: &quot;Journey&quot;,
+    &quot;label&quot;: &quot;Motion path&quot;
+  }
+}">
+const FAQ = [
+  ['Booking', [
+    ['Can one booking carry my friends?', 'Up to five passengers on one payment. Everyone gets their own seat, boarding pass and QR, and the person who paid can see the whole booking.'],
+    ['Do I need an account to look?', 'No. You can browse departures and pick seats without signing in. An account is needed before payment, because the booking, the passes and any refund have to belong to someone.'],
+    ['How long are my seats held?', 'Ten minutes from the moment you tap the first seat. The clock is shown in the summary, and the seats go back on sale when it runs out.'],
+  ]],
+  ['Payment & refunds', [
+    ['Can I cancel after paying?', 'Yes. Cancel more than 12 hours before departure for a full refund; inside 12 hours the fare is non-refundable. You can cancel the whole booking or single passengers, and the exact refund is shown before you confirm.'],
+    ['My payment went through but I saw an error.', 'Don\u2019t pay again. We verify every payment on our own side and finish the booking from the verified result — it appears in My Trips with the passes attached. If anything is unresolved, it goes to our team, not back to you.'],
+    ['When does a refund arrive?', 'Refunds are returned to the original payment method. The status shows as refund pending until the acquirer settles it, normally three to five working days.'],
+  ]],
+  ['Boarding & QR', [
+    ['What do I show at the door?', 'The QR on your boarding pass, and your student ID. Each passenger scans their own pass — one scan each.'],
+    ['What if my QR won\u2019t scan?', 'Operations staff can board you by hand after checking your student ID against the manifest. It is recorded with a reason, so nothing goes missing.'],
+    ['Can someone else use my pass?', 'No. A pass is tied to one passenger and one trip, and a second scan of the same pass reads ALREADY BOARDED.'],
+  ]],
+  ['Trips & pickup', [
+    ['Where exactly is the pickup?', 'The main gate loop at Woxsen. Report twenty minutes before departure — the coach does not wait past its departure time.'],
+    ['What if the trip is full?', 'Join the waitlist. If a seat is released you get a 30-minute window to claim and pay for it before it passes to the next student.'],
+    ['What time will I actually arrive?', 'About two hours, and we publish it as a window rather than a promise. Traffic on the ORR decides the last twenty minutes.'],
+  ]],
+  ['Student account', [
+    ['Can I change my student ID?', 'You can request a change, and operations review it. The old ID stays active until they approve, because your bookings and boarding checks depend on it.'],
+    ['What happens if I delete my account?', 'Deletion is reviewed, the account is deactivated and personal information is removed where the law allows. Payment, booking and boarding records are kept, because we are required to keep them.'],
+  ]],
+  ['General', [
+    ['Who can travel with DLT?', 'Enrolled students with a valid student ID. IDs are checked at the door; automatic university verification is not part of this release.'],
+    ['Why only one route?', 'Because one route done properly is worth more than five done approximately. Everything is built so adding the second route changes nothing about the first.'],
+  ]],
+];
+
+class Component extends DCLogic {
+  state = { mqReduced: false, scene: 'loading', ready: false, tick: 0, faqQuery: '' };
+
+  componentDidMount() {
+    this._onClick = (e) => {
+      const a = e.target.closest && e.target.closest('a[href^="#"]');
+      if (!a) return;
+      const id = a.getAttribute('href').slice(1);
+      const el = id && document.getElementById(id);
+      if (!el) return;
+      e.preventDefault();
+      const y = el.getBoundingClientRect().top + scrollY - 64;
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
+    };
+    document.addEventListener('click', this._onClick);
+
+    this._mq = matchMedia('(prefers-reduced-motion: reduce)');
+    this._sync = () => this.setState({ mqReduced: this._mq.matches });
+    this._sync();
+    this._mq.addEventListener('change', this._sync);
+
+    this._onReady = () => { clearTimeout(this._giveUp); this.setState({ scene: 'ready' }); };
+    this._onFailed = () => { clearTimeout(this._giveUp); this.setState({ scene: 'failed' }); };
+    document.addEventListener('journeyready', this._onReady);
+    document.addEventListener('journeyfailed', this._onFailed);
+    this._giveUp = setTimeout(() => {
+      if (this.state.scene === 'loading') this.setState({ scene: 'ready' });
+    }, 12000);
+    this._poll = setInterval(() => {
+      if (document.documentElement.hasAttribute('data-journey-ready')) {
+        clearInterval(this._poll);
+        if (this.state.scene === 'loading') this.setState({ scene: 'ready' });
+      }
+    }, 200);
+
+    if (window.DLT) {
+      DLT.ready.then(() => {
+        this._unsub = DLT.subscribe(() => this.setState({ tick: this.state.tick + 1 }));
+        this.setState({ ready: true });
+      });
+    }
+    this._syncHandoff();
+  }
+  componentDidUpdate() { this._syncHandoff(); }
+
+  _syncHandoff() {
+    const reduced = this._isReduced();
+    if (reduced) document.documentElement.style.setProperty('--journey-handoff', '1');
+    else document.documentElement.style.removeProperty('--journey-handoff');
+  }
+  _isReduced() {
+    const mode = this.props.motionMode || 'Auto (respect the device setting)';
+    return mode === 'Static route map'
+      || this.state.scene === 'failed'
+      || (mode !== 'Always show the journey' && this.state.mqReduced);
+  }
+
+  componentWillUnmount() {
+    document.removeEventListener('click', this._onClick);
+    document.removeEventListener('journeyready', this._onReady);
+    document.removeEventListener('journeyfailed', this._onFailed);
+    clearTimeout(this._giveUp);
+    clearInterval(this._poll);
+    if (this._unsub) this._unsub();
+    this._mq?.removeEventListener('change', this._sync);
+  }
+
+  renderVals() {
+    const reduced = this._isReduced();
+    const st = this.state;
+    const store = st.ready && window.DLT;
+    const me = store ? DLT.auth.current() : null;
+
+    /* the next three open departures, live */
+    const trips = store ? DLT.trips.listPublic(3) : [];
+    const fare = trips.length ? trips[0].price : (store ? DLT.FARE : 259);
+    const first = trips[0] || null;
+
+    /* the signed-in student's next trip, if they have one */
+    let next = null;
+    if (store && me && me.role === 'STUDENT') {
+      next = DLT.bookings.mine('Upcoming').filter(b => b.status === 'CONFIRMED')[0] || null;
+    }
+
+    const q = st.faqQuery.trim().toLowerCase();
+    const faqGroups = FAQ.map(([category, items]) => ({
+      category,
+      items: items.filter(([qq, aa]) => !q || (qq + ' ' + aa).toLowerCase().indexOf(q) >= 0)
+        .map(([qq, aa]) => ({ q: qq, a: aa })),
+    })).filter(g => g.items.length);
+
+    /* Master §34 requires a support number; none has been provisioned, so we
+       show the gap rather than a placeholder that would not connect. */
+    const SUPPORT_WHATSAPP = null;
+
+    return {
+      reduced, motion: !reduced,
+      sceneLoading: !reduced && st.scene === 'loading',
+      signedIn: !!me, signedOut: !me,
+
+      hasNextTrip: !!next,
+      nextTripWhen: next ? DLT.fmt.when(next.trip.departureAt) + ' · Woxsen → Miyapur' : '',
+      nextTripSeats: next
+        ? 'Seat ' + next.passengers.map(p => p.seatNumber).join(', ') + ' · report ' + DLT.fmt.time(next.trip.reportingAt)
+        : '',
+
+      fare,
+      departLabel: first ? DLT.fmt.time(first.departureAt) : '17:30',
+      reportLabel: first ? DLT.fmt.time(first.reportingAt) : '17:10',
+      arriveLabel: first ? DLT.fmt.time(first.arrivalEstimateAt) : '19:30',
+
+      trips: trips.map(t => {
+        const pct = t.capacity ? Math.round(((t.capacity - t.available) / t.capacity) * 100) : 0;
+        const low = t.available > 0 && t.available <= 8;
+        return {
+          time: DLT.fmt.time(t.departureAt), date: DLT.fmt.date(t.departureAt),
+          report: DLT.fmt.time(t.reportingAt), arrive: DLT.fmt.time(t.arrivalEstimateAt),
+          price: t.price, dim: t.soldOut ? 0.72 : 1,
+          showBar: !t.soldOut,
+          barWidth: Math.max(4, 100 - pct) + '%',
+          barColor: low ? '#8A5A0E' : '#0E4B34',
+          avail: t.soldOut ? 'Sold out' : low ? t.available + ' seats left' : 'Seats available',
+          availFg: t.soldOut ? '#0E1014' : low ? '#8A5A0E' : '#3D423C',
+          availWeight: low ? 600 : 500,
+          priceFg: t.soldOut ? '#5F6560' : '#0E1014',
+          cta: t.soldOut ? 'Join waitlist' : 'Select seats',
+          ctaBg: t.soldOut ? 'transparent' : '#0E1014',
+          ctaFg: t.soldOut ? '#0E1014' : '#F7F5F0',
+          /* §10 the chosen departure travels with the click */
+          href: './DLT Booking.dc.html?trip=' + encodeURIComponent(t.id) + (t.soldOut ? '&waitlist=1' : ''),
+        };
+      }),
+      noTrips: store && trips.length === 0,
+      tripsNote: trips.length
+        ? (trips.length === 1 ? 'One departure is open right now.' : 'These ' + trips.length + ' departures are open right now.')
+          + ' More open a few days ahead.'
+        : 'Departures open a few days ahead.',
+
+      faqQuery: st.faqQuery,
+      onFaqQuery: e => this.setState({ faqQuery: e.target.value }),
+      faqGroups, noFaqMatch: faqGroups.length === 0,
+
+      hasSupportContact: !!SUPPORT_WHATSAPP,
+      noSupportContact: !SUPPORT_WHATSAPP,
+      whatsappHref: SUPPORT_WHATSAPP || '#contact',
+    };
+  }
+}
+</script>
+</body>
+</html>

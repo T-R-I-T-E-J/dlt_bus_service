@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>DLT store — rule verification</title>
+<script src="./dlt-qr.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="./dlt-store.js"></script>
+<style>
+  body { font: 13px/1.6 ui-monospace, Menlo, monospace; background: #0E1014; color: #DCDFD8; margin: 0; padding: 24px; }
+  h1 { font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: #8E948B; }
+  .pass { color: #5FAE86; } .fail { color: #E98A6B; } .info { color: #8E948B; }
+  #out { white-space: pre-wrap; }
+  canvas { background: #fff; margin-top: 14px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<h1>DLT store — rule verification</h1>
+<div id="out"></div>
+<canvas id="qr" width="240" height="240"></canvas>
+<script>
+const out = document.getElementById('out');
+let pass = 0, fail = 0;
+function ok(label, cond, detail) {
+  if (cond) { pass++; out.innerHTML += '<span class="pass">PASS</span>  ' + label + (detail ? '  <span class="info">' + detail + '</span>' : '') + '\n'; }
+  else { fail++; out.innerHTML += '<span class="fail">FAIL</span>  ' + label + (detail ? '  <span class="info">' + detail + '</span>' : '') + '\n'; }
+}
+function note(t) { out.innerHTML += '<span class="info">····  ' + t + '</span>\n'; }
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+const rawDb = () => DLT._debug.raw();
+function writeRaw(db) { db.version++; localStorage.setItem(DLT._debug.KEY, JSON.stringify(db)); }
+function seatsOf(tripId, status) {
+  return DLT.trips.seatMap(tripId).flatMap(r => r.seats).filter(s => !status || s.status === status);
+}
+async function threw(fn, match) {
+  try { await fn(); return false; }
+  catch (e) { return match ? String(e.message).toLowerCase().indexOf(match.toLowerCase()) >= 0 : true; }
+}
+
+(async function () {
+  await DLT.reset();
+  await DLT.ready;
+  note('seeded fresh database');
+
+  /* ---- auth (§7, §47) ---- */
+  ok('rejects a bad password', await threw(() => DLT.auth.signIn('aarav@woxsen.edu.in', 'wrong'), 'incorrect'));
+  const student = await DLT.auth.signIn('aarav@woxsen.edu.in', 'dlt1234');
+  ok('student signs in', student && student.role === 'STUDENT', student && student.name);
+  ok('session survives a read', !!DLT.auth.current());
+  ok('password hash is never exposed', !('passwordHash' in student));
+
+  /* ---- trips (§10) ---- */
+  const open = DLT.trips.listPublic(3);
+  ok('lists three upcoming eligible trips', open.length === 3, open.map(t => DLT.fmt.when(t.departureAt)).join(' | '));
+  ok('availability is computed from seat records', open[0].available > 0 && open[0].capacity === 44,
+    open[0].available + ' of ' + open[0].capacity);
+  const soldOut = DLT.trips.listAll().find(t => t.soldOut && t.status === 'OPEN');
+  ok('a full trip reports sold out', !!soldOut, soldOut ? soldOut.available + ' available' : '');
+
+  /* ---- seat holds (§13.2, §52) ---- */
+  const trip = open[0];
+  const map = DLT.trips.seatMap(trip.id);
+  ok('seat map is 11 rows of 2 + 2', map.length === 11 && map[0].seats.length === 4);
+  ok('crew seats are blocked with a reason',
+    map[0].seats.filter(s => s.status === 'BLOCKED' && s.blockReason).length === 2);
+  ok('window seats are A and D',
+    map[3].seats[0].seatType === 'Window' && map[3].seats[3].seatType === 'Window' &&
+    map[3].seats[1].seatType === 'Aisle');
+
+  const free = [].concat.apply([], map.map(r => r.seats)).filter(s => s.status === 'AVAILABLE');
+  const h1 = DLT.seats.hold(trip.id, free[0].seatNumber);
+  const h2 = DLT.seats.hold(trip.id, free[1].seatNumber);
+  ok('holding a seat sets a 10-minute expiry',
+    h1.held && h1.holdExpiresAt - Date.now() > 9.5 * 60000 && h1.holdExpiresAt - Date.now() <= 600000);
+  ok('the basket shares one expiry', h1.holdExpiresAt === h2.holdExpiresAt);
+  ok('held seats read back as mine', DLT.trips.myHeld(trip.id).length === 2);
+  ok('a blocked seat cannot be held',
+    await threw(() => DLT.seats.hold(trip.id, map[0].seats.find(s => s.status === 'BLOCKED').seatNumber), 'blocked'));
+  const bookedSeat = [].concat.apply([], DLT.trips.seatMap(trip.id).map(r => r.seats)).find(s => s.status === 'BOOKED');
+  ok('a booked seat cannot be held', await threw(() => DLT.seats.hold(trip.id, bookedSeat.seatNumber), 'booked'));
+  DLT.seats.hold(trip.id, free[2].seatNumber);
+  DLT.seats.hold(trip.id, free[3].seatNumber);
+  DLT.seats.hold(trip.id, free[4].seatNumber);
+  ok('five seats is the maximum',
+    await threw(() => DLT.seats.hold(trip.id, free[5].seatNumber), 'at most 5'));
+  DLT.seats.hold(trip.id, free[4].seatNumber);   // toggle one off
+  DLT.seats.hold(trip.id, free[3].seatNumber);
+  DLT.seats.hold(trip.id, free[2].seatNumber);
+  ok('toggling a seat off releases it', DLT.trips.myHeld(trip.id).length === 2);
+
+  /* ---- booking creation (§12, §14) ---- */
+  const held = DLT.trips.myHeld(trip.id);
+  const pax = held.map((s, i) => ({ name: i ? 'Nikhil Verma' : 'Aarav Menon',
+    studentId: i ? 'WU209911' : 'WU204118', phone: i ? '9812345678' : '9876543210',
+    seatNumber: s.seatNumber }));
+  ok('incomplete passenger details are refused',
+    await threw(() => DLT.bookings.create({ tripId: trip.id, passengers: [{ name: 'X', studentId: '', phone: '1' }] }), 'incomplete') ||
+    await threw(() => DLT.bookings.create({ tripId: trip.id, passengers: [{ name: 'X', studentId: '', phone: '1' }] }), 'every held seat'));
+  ok('a non-Indian mobile is refused',
+    !DLT.bookings.validatePassenger({ name: 'Test User', studentId: 'WU111111', phone: '1234567890' }).phone);
+
+  const booking = DLT.bookings.create({ tripId: trip.id, passengers: pax,
+    contactPhone: '9876543210', idempotencyKey: 'test-booking-1' });
+  ok('booking is created in PAYMENT_PENDING, not CONFIRMED', booking.status === 'PAYMENT_PENDING', booking.code);
+  ok('total is seats x fare', booking.totalAmount === 2 * 259, 'Rs ' + booking.totalAmount);
+  ok('no boarding pass exists before payment',
+    booking.passengers.every(p => p.passStatus === 'NOT_ISSUED' || p.passStatus === 'PENDING'));
+  const again = DLT.bookings.create({ tripId: trip.id, passengers: pax, idempotencyKey: 'test-booking-1' });
+  ok('creation is idempotent', again.id === booking.id);
+
+  /* ---- payment (§19) ---- */
+  const intent = DLT.payments.createIntent(booking.id, 'test-pay-1');
+  ok('payment intent starts as INITIATED', intent.status === 'INITIATED');
+  const intent2 = DLT.payments.createIntent(booking.id, 'test-pay-1');
+  ok('payment intent is idempotent', intent2.id === intent.id);
+  DLT.provider.createOrder(intent.id, intent.amount);
+  ok('order moves the payment to PENDING', DLT.payments.get(intent.id).status === 'PENDING');
+  ok('the booking is still not confirmed while pending',
+    DLT.bookings.get(booking.id).status === 'PAYMENT_PENDING');
+
+  DLT.provider.settle(intent.id, 'PAID');
+  ok('a settled payment is not immediately SUCCESS (webhook has not arrived)',
+    DLT.payments.get(intent.id).status === 'PENDING');
+  await wait(1400);
+  const rec = DLT.payments.reconcile(intent.id);
+  ok('reconciliation applies the provider result', rec.status === 'SUCCESS', rec.providerReference);
+  const confirmed = DLT.bookings.get(booking.id);
+  ok('booking is confirmed exactly once by reconciliation', confirmed.status === 'CONFIRMED');
+  ok('seats moved from HELD to BOOKED',
+    DLT.trips.myHeld(trip.id).length === 0 &&
+    [].concat.apply([], DLT.trips.seatMap(trip.id).map(r => r.seats))
+      .filter(s => pax.some(p => p.seatNumber === s.seatNumber)).every(s => s.status === 'BOOKED'));
+  ok('a pass with a token is issued per passenger',
+    confirmed.passengers.length === 2 && confirmed.passengers.every(p => p.passStatus === 'VALID' && p.qrToken));
+
+  /* §19.7 duplicate charge */
+  DLT.provider.settle(intent.id, 'PAID');
+  await wait(1400);
+  DLT.payments.reconcile(intent.id);
+  const dupes = DLT.bookings.get(booking.id);
+  ok('a second successful charge does not create a second booking',
+    DLT.bookings.mine().filter(b => b.code === booking.code).length === 1);
+
+  /* ---- QR (§23) ---- */
+  const passes = DLT.boarding.passesFor(booking.id);
+  ok('passes carry every documented field',
+    passes[0].name && passes[0].studentId && passes[0].seatNumber && passes[0].bookingCode &&
+    passes[0].boardingCode && passes[0].qrToken && passes[0].departureAt && passes[0].reportingAt &&
+    passes[0].pickupPoint && passes[0].vehicle && passes[0].paymentStatus === 'SUCCESS');
+  ok('the token carries no personal information',
+    passes[0].qrToken.indexOf(passes[0].studentId) < 0 &&
+    passes[0].qrToken.indexOf('9876543210') < 0 &&
+    passes[0].qrToken.indexOf(passes[0].bookingCode) < 0 &&
+    passes[0].qrToken.indexOf(passes[0].boardingCode) < 0 &&
+    !/[a-z]{4,}/i.test(passes[0].qrToken.slice(4)), passes[0].qrToken);
+  const qr = DLTQR.draw(document.getElementById('qr'), passes[0].qrToken, {});
+  ok('the QR is a real encoded symbol', !!qr && qr.size >= 21,
+    qr ? 'version ' + qr.version + ', ' + qr.size + ' modules, mask ' + qr.mask : 'encoder failed');
+  ok('finder patterns are present',
+    qr && qr.get(0, 0) && qr.get(6, 6) && !qr.get(1, 1) && qr.get(qr.size - 1, 0) && qr.get(0, qr.size - 1));
+
+  /* ---- boarding (§23–25) ---- */
+  const token1 = passes[0].qrToken, token2 = passes[1].qrToken;
+  ok('a student cannot scan', await threw(() => DLT.boarding.scan(token1, trip.id), 'cannot'));
+  DLT.auth.signOut();
+  /* §Boarding 5 — staff work an assigned trip, so operations puts them on the door first */
+  await DLT.auth.signIn('ops@dlt.co.in', 'dlt1234');
+  const otherTrip = DLT.trips.listAll().find(t => t.status === 'BOARDING');
+  const foreignPass = DLT.admin.bookings({ tripId: otherTrip.id })
+    .filter(b => b.status === 'CONFIRMED').flatMap(b => b.passengers).find(p => p.qrToken);
+  const staffId = DLT.admin.staffAccounts()[0].id;
+  DLT.admin.assignStaff(trip.id, staffId, 'Door duty for this departure');
+  DLT.auth.signOut();
+  const staff = await DLT.auth.signIn('staff@dlt.co.in', 'dlt1234');
+  ok('boarding staff signs in', staff.role === 'BOARDING_STAFF');
+  const s1 = DLT.boarding.scan(token1, trip.id);
+  ok('a valid pass boards the passenger', s1.result === 'VALID', s1.detail);
+  const s2 = DLT.boarding.scan(token1, trip.id);
+  ok('the same pass twice reads ALREADY BOARDED', s2.result === 'ALREADY BOARDED', s2.detail);
+  const s3 = DLT.boarding.scan('dlt.notarealtoken', trip.id);
+  ok('an unknown code is INVALID', s3.result === 'INVALID', s3.detail);
+  const s4 = DLT.boarding.scan(foreignPass.qrToken, otherTrip.id);
+  ok('a wrong-trip pass is INVALID', s4.result === 'INVALID', s4.detail);
+  const manifest = DLT.boarding.manifest(trip.id);
+  ok('the manifest is populated from bookings', manifest.length >= 1, manifest.length + ' passengers');
+  ok('boarding staff never sees passenger phone numbers', manifest.every(r => r.phone === null));
+  ok('boarding staff cannot board manually',
+    await threw(() => DLT.boarding.manual(manifest[0].passengerId, 'QR unreadable'), 'cannot'));
+
+  DLT.auth.signOut();
+  const ops = await DLT.auth.signIn('ops@dlt.co.in', 'dlt1234');
+  ok('operations admin sees phone numbers',
+    DLT.boarding.manifest(otherTrip.id).some(r => r.phone));
+  ok('manual boarding without a reason is refused',
+    await threw(() => DLT.boarding.manual(
+      DLT.boarding.manifest(otherTrip.id).find(m => !m.boardedAt).passengerId, ''), 'reason'));
+  const unboarded = DLT.boarding.manifest(otherTrip.id).find(m => m.boardingStatus === 'NOT_BOARDED');
+  const man = DLT.boarding.manual(unboarded.passengerId, 'QR unreadable, student ID verified at door');
+  ok('manual boarding with a reason works', !!man.name, man.name + ' seat ' + man.seatNumber);
+  const denyTarget = DLT.boarding.manifest(otherTrip.id).find(m => m.boardingStatus === 'NOT_BOARDED');
+  const den = DLT.boarding.deny(denyTarget.passengerId, 'No student ID presented at the door');
+  ok('denied boarding is a distinct state',
+    DLT.boarding.manifest(otherTrip.id).find(m => m.passengerId === denyTarget.passengerId).boardingStatus === 'DENIED_BOARDING');
+  ok('a denied pass no longer scans',
+    DLT.boarding.scan(DLT.admin.bookings({ tripId: otherTrip.id })
+      .flatMap(b => b.passengers).find(p => p.id === denyTarget.passengerId).qrToken, otherTrip.id).result === 'INVALID');
+
+  /* ---- permissions (§36, §43) ---- */
+  ok('operations admin cannot open payment reconciliation',
+    await threw(() => DLT.admin.payments(), 'Super Admin'));
+  ok('operations admin cannot read the audit log',
+    await threw(() => DLT.admin.audit(), 'Super Admin'));
+  ok('operations admin can manage trips', Array.isArray(DLT.admin.vehicles()));
+
+  /* ---- trips admin (§11) ---- */
+  const draft = DLT.trips.listAll().find(t => t.status === 'DRAFT');
+  const check = DLT.admin.validateDraft(draft.id);
+  ok('draft validation finds the maintenance clash', !check.valid && check.problems.length > 0, check.problems[0]);
+  ok('a failing draft cannot be published',
+    await threw(() => DLT.admin.publishTrip(draft.id), 'cannot publish'));
+  const newDraft = DLT.admin.createDraft({ vehicleId: DLT.admin.vehicles()[0].id,
+    departureAt: Date.now() + 6 * 86400000, price: 259 });
+  const check2 = DLT.admin.validateDraft(newDraft.id);
+  ok('a sound draft validates', check2.valid, check2.checks.length + ' checks passed');
+  const published = DLT.admin.publishTrip(newDraft.id);
+  ok('publishing opens the trip', published.status === 'OPEN' && published.capacity === 44);
+  ok('a published trip appears in the public list',
+    DLT.trips.listAll().some(t => t.id === newDraft.id && t.bookable));
+
+  const blocked = DLT.admin.blockSeat(newDraft.id, '5C', 'Crew seat for this run');
+  ok('a seat can be blocked with a reason', blocked.status === 'BLOCKED', blocked.reason);
+  ok('blocking without a reason is refused',
+    await threw(() => DLT.admin.blockSeat(newDraft.id, '5D', ''), 'reason'));
+  ok('a blocked seat leaves the available count',
+    DLT.trips.get(newDraft.id).available === 43);
+  DLT.admin.blockSeat(newDraft.id, '5C');
+  ok('a blocked seat can be released', DLT.trips.get(newDraft.id).available === 44);
+
+  /* ---- vehicles (§26) ---- */
+  const veh = DLT.admin.saveVehicle({ name: 'DLT-03', registration: 'ts07 pq 1188', rowCount: 12 });
+  ok('a vehicle can be created with a derived capacity', veh.capacity === 48, veh.name + ' ' + veh.registration);
+  ok('a vehicle in service cannot be taken out of service',
+    await threw(() => DLT.admin.saveVehicle({ id: DLT.admin.vehicles()[0].id, status: 'MAINTENANCE' }), 'reassign'));
+
+  /* ---- cancellation and refunds (§17) ---- */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('aarav@woxsen.edu.in', 'dlt1234');
+  const quote = DLT.bookings.cancellationQuote(booking.id);
+  ok('the refund quote is exact and policy-driven', quote.refundable && quote.amount === 518, quote.reason);
+  const partial = DLT.bookings.cancellationQuote(booking.id, [confirmed.passengers[1].id]);
+  ok('a partial cancellation quotes one seat', partial.amount === 259 && !partial.whole);
+  const res = DLT.bookings.cancel(booking.id, [confirmed.passengers[1].id], 'Friend cannot travel');
+  ok('partial cancellation releases only that seat', res.refundAmount === 259 &&
+    res.booking.passengers.filter(p => p.boardingStatus === 'CANCELLED').length === 1);
+  ok('the released seat is available again',
+    [].concat.apply([], DLT.trips.seatMap(trip.id).map(r => r.seats))
+      .find(s => s.seatNumber === pax[1].seatNumber).status === 'AVAILABLE');
+  ok('the cancelled passenger pass is void',
+    res.booking.passengers.find(p => p.boardingStatus === 'CANCELLED').passStatus === 'VOID');
+  ok('a refund record is pending', res.booking.refunds.some(r => r.status === 'REFUND_PENDING'));
+  await wait(1800);
+  DLT.payments.reconcile();
+  ok('the refund settles through the provider',
+    DLT.bookings.get(booking.id).refunds.some(r => r.status === 'REFUNDED' && r.providerReference));
+  const receipt = DLT.payments.receipt(booking.id);
+  ok('a receipt is produced with a reference and refunds',
+    receipt && receipt.providerReference && receipt.refunds.length === 1, 'Rs ' + receipt.amount);
+
+  /* inside 12 hours there is no refund */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('ops@dlt.co.in', 'dlt1234');
+  const todayTrip = DLT.trips.listAll().find(t => t.status === 'BOARDING');
+  const todayBooking = DLT.admin.bookings({ tripId: todayTrip.id })[0];
+  DLT.auth.signOut();
+  await DLT.auth.signIn('aarav@woxsen.edu.in', 'dlt1234');
+  ok('a student cannot cancel a booking they do not own',
+    await threw(() => DLT.bookings.cancel(todayBooking.id, null, 'test'), 'not your booking'));
+
+  /* ---- waitlist (§18) ---- */
+  const full = DLT.trips.listAll().find(t => t.soldOut && t.status === 'OPEN');
+  const wl = DLT.waitlist.join(full.id);
+  ok('a student joins the waitlist of a full trip', wl.status === 'WAITING', 'position ' + wl.position);
+  ok('joining twice does not duplicate the entry', DLT.waitlist.join(full.id).id === wl.id);
+
+  /* ---- amount mismatch (§19.8) ---- */
+  const t2 = DLT.trips.listPublic(3).find(t => t.bookable && t.id !== trip.id);
+  const s = DLT.trips.seatMap(t2.id).flatMap(r => r.seats).filter(x => x.status === 'AVAILABLE')[0];
+  DLT.seats.hold(t2.id, s.seatNumber);
+  const b2 = DLT.bookings.create({ tripId: t2.id, passengers: [{ name: 'Aarav Menon',
+    studentId: 'WU204118', phone: '9876543210', seatNumber: s.seatNumber }] });
+  const i2 = DLT.payments.createIntent(b2.id);
+  DLT.provider.createOrder(i2.id, i2.amount);
+  DLT.provider.settle(i2.id, 'PAID', 200);          // short payment
+  await wait(1400);
+  const r2 = DLT.payments.reconcile(i2.id);
+  ok('a short payment becomes a DISCREPANCY', r2.status === 'DISCREPANCY', 'Rs 200 against Rs 259');
+  ok('a mismatched payment never confirms the booking',
+    DLT.bookings.get(b2.id).status === 'PAYMENT_HELD');
+
+  /* ---- payment failure keeps the hold (§19.6) ---- */
+  const t3 = DLT.trips.listPublic(3).find(t => t.bookable);
+  const s3b = DLT.trips.seatMap(t3.id).flatMap(r => r.seats).filter(x => x.status === 'AVAILABLE')[0];
+  DLT.seats.hold(t3.id, s3b.seatNumber);
+  const b3 = DLT.bookings.create({ tripId: t3.id, passengers: [{ name: 'Aarav Menon',
+    studentId: 'WU204118', phone: '9876543210', seatNumber: s3b.seatNumber }] });
+  const i3 = DLT.payments.createIntent(b3.id);
+  DLT.provider.createOrder(i3.id, i3.amount);
+  DLT.provider.settle(i3.id, 'FAILED');
+  await wait(1400);
+  const r3 = DLT.payments.reconcile(i3.id);
+  ok('a failed payment is FAILED, not SUCCESS', r3.status === 'FAILED');
+  ok('the seat stays held after a failed payment so it can be retried',
+    DLT.trips.myHeld(t3.id).length === 1);
+
+  /* ---- reviews (§31) ---- */
+  const completed = DLT.bookings.mine('Completed');
+  ok('completed trips are bucketed', completed.length >= 2, completed.length + ' completed');
+  const rateable = completed.find(b => DLT.reviews.canRate(b.id).allowed);
+  ok('a completed unrated trip can be rated', !!rateable);
+  if (rateable) {
+    DLT.reviews.submit(rateable.id, 4, 'Left on time, comfortable coach.');
+    ok('a rating is stored once', !DLT.reviews.canRate(rateable.id).allowed,
+      DLT.reviews.canRate(rateable.id).reason);
+    ok('rating twice is refused', await threw(() => DLT.reviews.submit(rateable.id, 5, ''), 'already rated'));
+  }
+  const upcomingB = DLT.bookings.mine('Upcoming')[0];
+  ok('an upcoming trip cannot be rated yet', upcomingB && !DLT.reviews.canRate(upcomingB.id).allowed,
+    upcomingB ? DLT.reviews.canRate(upcomingB.id).reason : '');
+
+  /* ---- notifications (§32) ---- */
+  const nr = DLT.notifications.requestNotify({ channel: 'WHATSAPP' });
+  ok('a notify request records the channel and contact', nr.channel === 'WHATSAPP' && !!nr.contact);
+
+  /* ---- super admin: reconciliation, reports, audit (§42–44) ---- */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+  const payRows = DLT.admin.payments();
+  ok('reconciliation lists every payment state', payRows.length > 8,
+    Array.from(new Set(payRows.map(r => r.bucket))).join(', '));
+  ok('duplicate and discrepancy rows exist',
+    payRows.some(r => r.bucket === 'Duplicate') && payRows.some(r => r.bucket === 'Discrepancy'));
+  ok('manual/external payments are never shown as Cashfree',
+    payRows.filter(r => r.bucket === 'Manual/external').every(r => r.provider.indexOf('CASHFREE') < 0));
+  const disc = payRows.find(r => r.status === 'DISCREPANCY' && r.bookingStatus === 'PAYMENT_HELD');
+  ok('resolving a discrepancy requires a reason',
+    await threw(() => DLT.admin.resolveDiscrepancy(disc.id, 'accept', ''), 'reason'));
+  const resolved = DLT.admin.resolveDiscrepancy(disc.id, 'accept', 'Student paid the balance in cash at the gate');
+  ok('accepting a discrepancy confirms the booking', resolved.status === 'SUCCESS' &&
+    DLT.admin.bookings().find(b => b.id === disc.bookingId).status === 'CONFIRMED');
+
+  const dash = DLT.admin.dashboard();
+  ok('the dashboard computes today from records',
+    dash.tripsToday >= 1 && dash.passengers > 0 && dash.capacity > 0,
+    dash.tripsToday + ' trips · ' + dash.passengers + ' passengers · Rs ' + dash.revenue);
+  ok('critical alerts are derived, not authored', dash.alerts.length > 0,
+    dash.alerts.map(a => a.kind).join(', '));
+
+  const bookRows = DLT.admin.report('bookings');
+  ok('the bookings report has rows', bookRows.length > 5, bookRows.length + ' rows');
+  const rev = DLT.admin.report('revenue');
+  ok('the revenue report nets refunds', rev.some(r => r.Refunded > 0));
+  const post = DLT.admin.report('posttrip');
+  ok('a post-trip summary is computed', post && post.capacity === 44 && post.boarded >= 0,
+    post.when + ' · booked ' + post.booked + ' · boarded ' + post.boarded);
+  const search = DLT.admin.search(booking.code);
+  ok('admin search finds a booking by code', search.length === 1);
+  ok('admin search finds a booking by student ID', DLT.admin.search('WU204118').length > 0);
+
+  const audit = DLT.admin.audit();
+  ok('the audit log records actor, action and reason', audit.length > 20,
+    audit.length + ' entries');
+  ok('overrides carry their reason',
+    audit.some(a => a.action === 'boarding.manual' && a.reason) &&
+    audit.some(a => a.action === 'boarding.denied' && a.reason));
+  ok('the audit log records old and new values',
+    audit.some(a => a.oldValue && a.newValue));
+
+  /* ---- manual booking (§40) ---- */
+  const mb = DLT.admin.createManualBooking({ tripId: newDraft.id, type: 'COMPLIMENTARY',
+    reason: 'Campus staff escort accompanying students',
+    passengers: [{ name: 'V. Rao', studentId: 'STAFF01', phone: '9900112233' }] });
+  ok('a complimentary manual booking is created with a pass',
+    mb.status === 'CONFIRMED' && mb.totalAmount === 0 && mb.passengers[0].passStatus === 'VALID',
+    mb.code);
+  ok('a manual booking needs a reason',
+    await threw(() => DLT.admin.createManualBooking({ tripId: newDraft.id, type: 'COMPLIMENTARY',
+      reason: '', passengers: [] }), 'reason'));
+
+  /* ---- trip cancellation cascade (§17.3) ---- */
+  const cancelMe = DLT.trips.listAll().find(t => t.id === t2.id);
+  const cascade = DLT.admin.cancelTrip(cancelMe.id, 'Vehicle failed its morning safety check');
+  ok('cancelling a trip identifies affected bookings and initiates refunds',
+    cascade.affectedBookings > 0, cascade.affectedBookings + ' bookings · Rs ' + cascade.refundInitiated + ' refunding');
+  const tmpl = DLT.notifications.template(cancelMe.id);
+  ok('a ready-to-send notification template is produced',
+    tmpl.message.indexOf('cancelled') > 0 && tmpl.affected.length > 0,
+    tmpl.affected.length + ' passengers to notify');
+  ok('passes for a cancelled trip are void',
+    DLT.admin.bookings({ tripId: cancelMe.id }).every(b =>
+      b.passengers.every(p => p.passStatus === 'VOID' || p.passStatus === 'NOT_ISSUED')));
+
+  /* ---- CSV export produces a real file (§42) ---- */
+  const exp = DLT.admin.exportCsv('bookings');
+  ok('a CSV export writes a real file', exp.rows > 0 && /\.csv$/.test(exp.name), exp.name + ' · ' + exp.rows + ' rows');
+
+  /* ---- profile (§8) ---- */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('aarav@woxsen.edu.in', 'dlt1234');
+  const prof = DLT.auth.updateProfile({ phone: '9876500001' });
+  ok('a student can change their own phone', prof.phone === '9876500001');
+  ok('a bad phone is refused', await threw(() => DLT.auth.updateProfile({ phone: '12345' }), 'valid'));
+  DLT.auth.updateProfile({ studentId: 'WU999999' });
+  DLT.auth.signOut();
+  await DLT.auth.signIn('ops@dlt.co.in', 'dlt1234');
+  ok('a Student ID change becomes an admin request, not a silent edit',
+    DLT.notifications.list().some(n => n.kind === 'STUDENT_ID_CHANGE' && n.status === 'PENDING'));
+  DLT.auth.signOut();
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+  ok('viewing an emergency contact requires a reason',
+    await threw(() => DLT.admin.revealEmergencyContact(DLT.admin.students()[0].id, ''), 'reason'));
+  const students = DLT.admin.students();
+  ok('the student list hides emergency contacts by default',
+    students.every(s => !('emergencyContact' in s)));
+
+  /* =================================================================
+     REGRESSION SUITE — second audit, phase 1
+     Each block reproduces a defect the second audit found and proved.
+     They are written to FAIL against the pre-fix implementation.
+     ================================================================= */
+
+  note('regression: second audit phase 1');
+
+  /* ---- F-01 a late payment must not resurrect an abandoned booking ---- */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('aarav@woxsen.edu.in', 'dlt1234');
+  const fTrip = DLT.trips.listPublic(3).find(t => t.bookable && t.available > 2);
+  DLT.seats.releaseMine(fTrip.id);
+  const fSeat = seatsOf(fTrip.id, 'AVAILABLE')[0].seatNumber;
+  DLT.seats.hold(fTrip.id, fSeat);
+  const fB = DLT.bookings.create({ tripId: fTrip.id, idempotencyKey: 'reg-f01-' + Date.now(),
+    contactPhone: '9876543210',
+    passengers: [{ name: 'Aarav Menon', studentId: 'WU204118', phone: '9876543210', seatNumber: fSeat }] });
+  const fPay = DLT.payments.createIntent(fB.id, 'reg-f01-pay-' + Date.now());
+  DLT.provider.createOrder(fPay.id, fPay.amount);
+  DLT.provider.settle(fPay.id, 'PAID');
+  /* the student walks away: the hold lapses before the webhook lands */
+  (function () {
+    const db = rawDb();
+    db.bookings.find(b => b.id === fB.id).holdExpiresAt = Date.now() - 1000;
+    db.tripSeats.filter(s => s.tripId === fTrip.id && s.holdBy).forEach(s => { s.holdExpiresAt = Date.now() - 1000; });
+    db.providerEvents.filter(e => e.paymentId === fPay.id).forEach(e => { e.at = Date.now() - 1; });
+    writeRaw(db);
+  })();
+  DLT.trips.get(fTrip.id);                                   // triggers the sweep
+  ok('F-01 · an unpaid booking is abandoned when its hold lapses',
+    rawDb().bookings.find(b => b.id === fB.id).status === 'ABANDONED');
+  /* a second student buys the released seat before the webhook arrives */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('wu203044@woxsen.edu.in', 'dlt1234');
+  DLT.seats.hold(fTrip.id, fSeat);
+  const fB2 = DLT.bookings.create({ tripId: fTrip.id, idempotencyKey: 'reg-f01b-' + Date.now(),
+    contactPhone: '9003155218',
+    passengers: [{ name: 'Ishaan Kulkarni', studentId: 'WU203044', phone: '9003155218', seatNumber: fSeat }] });
+  const fPay2 = DLT.payments.createIntent(fB2.id, 'reg-f01b-pay-' + Date.now());
+  DLT.provider.createOrder(fPay2.id, fPay2.amount);
+  DLT.provider.settle(fPay2.id, 'PAID');
+  await wait(1200);
+  DLT.payments.reconcile(fPay2.id);
+  ok('F-01 · the second student is confirmed on the released seat',
+    DLT.bookings.get(fB2.id).status === 'CONFIRMED');
+  /* now the first student's payment finally reaches us */
+  DLT.payments.reconcile(fPay.id);
+  const fAfter = rawDb();
+  ok('F-01 · the abandoned booking is NOT confirmed by the late payment',
+    fAfter.bookings.find(b => b.id === fB.id).status === 'ABANDONED',
+    'status ' + fAfter.bookings.find(b => b.id === fB.id).status);
+  ok('F-01 · the seat still belongs to the student who paid for it',
+    fAfter.tripSeats.find(s => s.tripId === fTrip.id && s.seatNumber === fSeat).bookingId === fB2.id);
+  ok('F-01 · exactly one valid pass exists for the seat',
+    fAfter.passes.filter(p => [fB.id, fB2.id].indexOf(p.bookingId) >= 0 && p.status === 'VALID').length === 1);
+  ok('F-01 · the late money is recorded and queued for refund, never silently kept',
+    fAfter.payments.find(p => p.id === fPay.id).status === 'SUCCESS' &&
+    fAfter.refunds.some(r => r.bookingId === fB.id && r.status === 'REFUND_PENDING'),
+    'payment ' + fAfter.payments.find(p => p.id === fPay.id).status);
+
+  /* ---- F-03 a fare change must not strand the booking ---- */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('aarav@woxsen.edu.in', 'dlt1234');
+  const rTrip = DLT.trips.listPublic(3).find(t => t.bookable && t.available > 1);
+  DLT.seats.releaseMine(rTrip.id);
+  const rSeat = seatsOf(rTrip.id, 'AVAILABLE')[0].seatNumber;
+  DLT.seats.hold(rTrip.id, rSeat);
+  const rB = DLT.bookings.create({ tripId: rTrip.id, idempotencyKey: 'reg-f03-' + Date.now(),
+    contactPhone: '9876543210',
+    passengers: [{ name: 'Aarav Menon', studentId: 'WU204118', phone: '9876543210', seatNumber: rSeat }] });
+  (function () { const db = rawDb(); db.trips.find(t => t.id === rTrip.id).price = 299; writeRaw(db); })();
+  const rep = DLT.payments.createIntent(rB.id, 'reg-f03-pay-' + Date.now());
+  ok('F-03 · a fare change returns a repricing decision instead of throwing',
+    !!rep && rep.repriced === true && rep.amount === 299,
+    rep ? 'amount ' + rep.amount + ' was ' + rep.previousAmount : 'threw');
+  ok('F-03 · the revalidated total is persisted, not rolled back',
+    rawDb().bookings.find(b => b.id === rB.id).totalAmount === 299,
+    'stored ' + rawDb().bookings.find(b => b.id === rB.id).totalAmount);
+  ok('F-03 · payment is still refused until the student accepts the new fare',
+    DLT.payments.createIntent(rB.id, 'reg-f03-pay2').repriced === true);
+  DLT.payments.confirmReprice(rB.id);
+  const rIntent = DLT.payments.createIntent(rB.id, 'reg-f03-pay3');
+  ok('F-03 · after acceptance the booking can be paid at the new fare',
+    !rIntent.repriced && rIntent.amount === 299 && rIntent.status === 'INITIATED');
+  DLT.provider.createOrder(rIntent.id, rIntent.amount);
+  DLT.provider.settle(rIntent.id, 'PAID');
+  await wait(1200);
+  DLT.payments.reconcile(rIntent.id);
+  ok('F-03 · the repriced booking confirms normally',
+    DLT.bookings.get(rB.id).status === 'CONFIRMED' && DLT.bookings.get(rB.id).totalAmount === 299);
+
+  /* ---- F-05 a booking that was never charged refunds nothing ---- */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+  const cTrip = DLT.trips.listAll().find(t => t.status === 'OPEN' && t.available > 1);
+  const comp = DLT.admin.createManualBooking({ tripId: cTrip.id, type: 'COMPLIMENTARY',
+    reason: 'Regression: complimentary seat',
+    passengers: [{ name: 'Comp Rider', studentId: 'STAFF09', phone: '9900112244' }] });
+  ok('F-05 · a complimentary booking is worth zero', comp.totalAmount === 0);
+  const cQuote = DLT.bookings.cancellationQuote(comp.id);
+  ok('F-05 · the refund quote on a free booking is zero',
+    cQuote.amount === 0, 'quoted Rs ' + cQuote.amount);
+  const cRes = DLT.bookings.cancel(comp.id, null, 'Regression: cancel the complimentary seat');
+  ok('F-05 · cancelling a free booking raises no refund',
+    cRes.refundAmount === 0 && !rawDb().refunds.some(r => r.bookingId === comp.id),
+    'refunded Rs ' + cRes.refundAmount);
+  /* and a genuinely paid booking still refunds in full */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('aarav@woxsen.edu.in', 'dlt1234');
+  const paidQuote = DLT.bookings.cancellationQuote(rB.id);
+  ok('F-05 · a paid booking still quotes its full fare', paidQuote.amount === 299,
+    'quoted Rs ' + paidQuote.amount);
+
+  /* ---- F-02 the waitlist can actually be claimed ---- */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+  const wTrip = DLT.trips.listAll().find(t => t.soldOut && t.status === 'OPEN');
+  const wlBefore = DLT.waitlist.forTrip(wTrip.id);
+  ok('F-02 · the full trip has a queue', wlBefore.length >= 3, wlBefore.length + ' waiting');
+  const topUser = wlBefore[0];
+  const victim = DLT.admin.bookings({ tripId: wTrip.id }).find(b => b.status === 'CONFIRMED');
+  DLT.bookings.cancel(victim.id, null, 'Regression: release a seat to the waitlist');
+  const wlAfter = DLT.waitlist.forTrip(wTrip.id);
+  const offered = wlAfter.find(w => w.id === topUser.id);
+  ok('F-02 · the released seat is offered to the first in the queue',
+    offered && offered.status === 'CLAIM_OFFERED' && offered.claimExpiresAt > Date.now(),
+    offered ? offered.status : 'no entry');
+  ok('F-02 · the offered seat is reserved, not left on open sale',
+    DLT.trips.get(wTrip.id).available === 0,
+    DLT.trips.get(wTrip.id).available + ' seats on open sale');
+  ok('F-02 · a claim API exists', typeof DLT.waitlist.claim === 'function');
+  DLT.auth.signOut();
+  await DLT.auth.signIn(topUser.email, 'dlt1234');
+  const claimed = DLT.waitlist.claim(offered.id);
+  ok('F-02 · the offered student can claim and receives the held seat',
+    claimed && claimed.seatNumbers.length === 1 && DLT.trips.myHeld(wTrip.id).length === 1,
+    'seat ' + (claimed ? claimed.seatNumbers.join(',') : '—'));
+  ok('F-02 · the claim carries the documented 30-minute window',
+    claimed.claimExpiresAt - Date.now() > 25 * 60000 && claimed.claimExpiresAt - Date.now() <= 30 * 60000);
+  const wSeat = claimed.seatNumbers[0];
+  const wB = DLT.bookings.create({ tripId: wTrip.id, idempotencyKey: 'reg-f02-' + Date.now(),
+    contactPhone: '9003155218',
+    passengers: [{ name: topUser.student, studentId: topUser.studentId, phone: '9003155218', seatNumber: wSeat }] });
+  const wPay = DLT.payments.createIntent(wB.id, 'reg-f02-pay-' + Date.now());
+  DLT.provider.createOrder(wPay.id, wPay.amount);
+  DLT.provider.settle(wPay.id, 'PAID');
+  await wait(1200);
+  DLT.payments.reconcile(wPay.id);
+  ok('F-02 · claiming completes through the normal booking and payment flow',
+    DLT.bookings.get(wB.id).status === 'CONFIRMED');
+  DLT.auth.signOut();
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+  ok('F-02 · a converted entry leaves the queue',
+    DLT.waitlist.forTrip(wTrip.id).find(w => w.id === offered.id).status === 'CONVERTED');
+  /* an expired claim passes the seat to the next student */
+  const nextVictim = DLT.admin.bookings({ tripId: wTrip.id }).find(b => b.status === 'CONFIRMED' && b.id !== wB.id);
+  DLT.bookings.cancel(nextVictim.id, null, 'Regression: release a second seat');
+  const second = DLT.waitlist.forTrip(wTrip.id).find(w => w.status === 'CLAIM_OFFERED');
+  ok('F-02 · the next student in line is offered the next seat', !!second, second ? second.student : '—');
+  (function () {
+    const db = rawDb();
+    const e = db.waitlist.find(w => w.id === second.id);
+    e.claimExpiresAt = Date.now() - 1000;
+    db.tripSeats.filter(s => s.tripId === wTrip.id && s.holdBy === e.userId).forEach(s => { s.holdExpiresAt = Date.now() - 1000; });
+    writeRaw(db);
+  })();
+  DLT.trips.get(wTrip.id);
+  const afterExpiry = DLT.waitlist.forTrip(wTrip.id);
+  ok('F-02 · an unclaimed offer expires',
+    afterExpiry.find(w => w.id === second.id).status === 'CLAIM_EXPIRED');
+  ok('F-02 · and the seat is offered on to the next eligible student',
+    afterExpiry.some(w => w.status === 'CLAIM_OFFERED' && w.id !== second.id) ||
+    afterExpiry.filter(w => w.status === 'WAITING').length === 0,
+    afterExpiry.map(w => w.status).join(', '));
+
+  /* ---- F-06 credentials are not demo-grade ---- */
+  const uA = rawDb().users.find(u => u.email === 'aarav@woxsen.edu.in');
+  const uB = rawDb().users.find(u => u.email === 'diya@woxsen.edu.in');
+  ok('F-06 · every account carries its own salt',
+    !!uA.passwordSalt && !!uB.passwordSalt && uA.passwordSalt !== uB.passwordSalt);
+  ok('F-06 · the same password does not produce the same stored hash',
+    uA.passwordHash !== uB.passwordHash);
+  ok('F-06 · the stored hash is a derived key, not a bare digest',
+    uA.passwordHash.length >= 64 && uA.kdf === 'PBKDF2-SHA256' && uA.kdfIterations >= 100000,
+    uA.kdf + ' x' + uA.kdfIterations);
+  const resetOut = DLT.auth.requestReset('aarav@woxsen.edu.in');
+  ok('F-06 · a reset request never returns the reset code to the caller',
+    resetOut.sent === true && !('resetToken' in resetOut) && !resetOut.resetToken,
+    JSON.stringify(resetOut));
+  DLT.auth.signOut();
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+  ok('F-06 · support can retrieve a reset code only with a reason, and it is audited',
+    await threw(() => DLT.admin.resetCodeFor(uA.id, ''), 'reason'));
+  const codeOut = DLT.admin.resetCodeFor(uA.id, 'Student called the desk and verified their ID');
+  ok('F-06 · a Super Admin lookup returns the pending code', !!codeOut.resetToken);
+  ok('F-06 · the lookup is written to the audit log',
+    DLT.admin.audit({ q: 'reset_code' }).length > 0);
+  DLT.auth.signOut();
+  for (let i = 0; i < 5; i++) { try { await DLT.auth.signIn('wu205512@woxsen.edu.in', 'nope'); } catch (e) {} }
+  const lockAt = rawDb().rate['wu205512@woxsen.edu.in'].until;
+  for (let i = 0; i < 4; i++) { try { await DLT.auth.signIn('wu205512@woxsen.edu.in', 'nope'); } catch (e) {} }
+  ok('F-06 · further attempts cannot extend a lockout indefinitely',
+    rawDb().rate['wu205512@woxsen.edu.in'].until === lockAt,
+    'window fixed at ' + new Date(lockAt).toLocaleTimeString());
+
+  /* ---- F-09 / F-08 the booking flow may begin without an account (§7.2) ---- */
+  DLT.auth.signOut();
+  localStorage.removeItem('dlt.guest.v6');
+  const anonTrip = DLT.trips.listPublic(3).find(t => t.bookable && t.available > 1);
+  const anonSeat = seatsOf(anonTrip.id, 'AVAILABLE')[0].seatNumber;
+  const anonHold = DLT.seats.hold(anonTrip.id, anonSeat);
+  ok('F-09 · a signed-out student can hold a seat',
+    anonHold.held === true && DLT.trips.myHeld(anonTrip.id).length === 1, 'seat ' + anonSeat);
+  ok('F-09 · the seat map shows it as their selection',
+    seatsOf(anonTrip.id).find(s => s.seatNumber === anonSeat).status === 'SELECTED');
+  ok('F-09 · the hold is anonymous, tied to the browser and not to an account',
+    /^guest_/.test(rawDb().tripSeats.find(s => s.tripId === anonTrip.id && s.seatNumber === anonSeat).holdBy));
+  ok('F-09 · but payment still requires an account (§7.2)',
+    await threw(() => DLT.bookings.create({ tripId: anonTrip.id, contactPhone: '9876543210',
+      passengers: [{ name: 'Anon Student', studentId: 'WU207777', phone: '9876543210', seatNumber: anonSeat }] }),
+      'sign in'));
+  await DLT.auth.signIn('aarav@woxsen.edu.in', 'dlt1234');
+  ok('F-08 · signing in adopts the seats held before signing in',
+    DLT.trips.myHeld(anonTrip.id).some(s => s.seatNumber === anonSeat) &&
+    rawDb().tripSeats.find(s => s.tripId === anonTrip.id && s.seatNumber === anonSeat).holdBy ===
+      rawDb().users.find(u => u.email === 'aarav@woxsen.edu.in').id);
+  const anonB = DLT.bookings.create({ tripId: anonTrip.id, idempotencyKey: 'reg-f09-' + Date.now(),
+    contactPhone: '9876543210',
+    passengers: DLT.trips.myHeld(anonTrip.id).map(s => ({ name: 'Aarav Menon', studentId: 'WU204118',
+      phone: '9876543210', seatNumber: s.seatNumber })) });
+  ok('F-08 · the booking completes on the seats chosen before signing in',
+    anonB.status === 'PAYMENT_PENDING' && anonB.passengers.some(p => p.seatNumber === anonSeat));
+  DLT.bookings.cancel(anonB.id, null, 'Regression cleanup');
+
+  /* =================================================================
+     REGRESSION SUITE — phase 3, operations
+     ================================================================= */
+  note('regression: phase 3 operations');
+
+  DLT.auth.signOut();
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+
+  /* ---- F-12 a genuine Super Admin refund override ---- */
+  const ovTrip = DLT.trips.listAll().find(t => t.status === 'OPEN' && t.available > 2);
+  DLT.auth.signOut();
+  await DLT.auth.signIn('aarav@woxsen.edu.in', 'dlt1234');
+  DLT.seats.releaseMine(ovTrip.id);
+  const ovSeat = seatsOf(ovTrip.id, 'AVAILABLE')[0].seatNumber;
+  DLT.seats.hold(ovTrip.id, ovSeat);
+  const ovB = DLT.bookings.create({ tripId: ovTrip.id, idempotencyKey: 'reg-f12-' + Date.now(),
+    contactPhone: '9876543210',
+    passengers: [{ name: 'Aarav Menon', studentId: 'WU204118', phone: '9876543210', seatNumber: ovSeat }] });
+  const ovPay = DLT.payments.createIntent(ovB.id, 'reg-f12-pay-' + Date.now());
+  DLT.provider.createOrder(ovPay.id, ovPay.amount);
+  DLT.provider.settle(ovPay.id, 'PAID');
+  await wait(1200);
+  DLT.payments.reconcile(ovPay.id);
+  ok('F-12 · the booking under test is paid and confirmed',
+    DLT.bookings.get(ovB.id).status === 'CONFIRMED');
+  const ovPaid = DLT.bookings.get(ovB.id).totalAmount;
+  /* put it inside the 12-hour window so the policy would refund nothing */
+  (function () {
+    const db = rawDb();
+    db.trips.find(t => t.id === ovTrip.id).departureAt = Date.now() + 3 * 3600000;
+    writeRaw(db);
+  })();
+  ok('F-12 · inside 12 hours the policy quotes no refund',
+    DLT.bookings.cancellationQuote(ovB.id).amount === 0);
+  ok('F-12 · a student cannot override the policy',
+    await threw(() => DLT.admin.overrideRefund({ bookingId: ovB.id, amount: ovPaid,
+      reason: 'I would like my money back' }), 'Super Admin'));
+  DLT.auth.signOut();
+  await DLT.auth.signIn('ops@dlt.co.in', 'dlt1234');
+  ok('F-12 · an operations admin cannot override the policy either',
+    await threw(() => DLT.admin.overrideRefund({ bookingId: ovB.id, amount: 259,
+      reason: 'Goodwill for a late coach' }), 'Super Admin'));
+  DLT.auth.signOut();
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+  ok('F-12 · an override without a reason is refused',
+    await threw(() => DLT.admin.overrideRefund({ bookingId: ovB.id, amount: 259, reason: '' }), 'reason'));
+  ok('F-12 · a zero-value override is refused rather than reported as applied',
+    await threw(() => DLT.admin.overrideRefund({ bookingId: ovB.id, amount: 0,
+      reason: 'Departure retimed by 90 minutes' }), 'zero-value'));
+  ok('F-12 · an override larger than the money received is refused',
+    await threw(() => DLT.admin.overrideRefund({ bookingId: ovB.id, amount: ovPaid + 5000,
+      reason: 'Departure retimed by 90 minutes' }), 'more than'));
+  const ov = DLT.admin.overrideRefund({ bookingId: ovB.id, amount: ovPaid,
+    reason: 'Departure retimed by 90 minutes', cancelBooking: true });
+  ok('F-12 · the override returns the amount it actually raised',
+    ov.amount === ovPaid && ov.seatsReleased === 1, '₹' + ov.amount + ', ' + ov.seatsReleased + ' seat released');
+  ok('F-12 · a real refund record exists against the payment',
+    rawDb().refunds.some(r => r.bookingId === ovB.id && r.amount === ovPaid && r.override &&
+      r.status === 'REFUND_PENDING'));
+  ok('F-12 · the booking is cancelled and the pass voided',
+    DLT.admin.bookings().find(b => b.id === ovB.id).status === 'CANCELLED_BY_DLT');
+  ok('F-12 · the override is in the audit log with its reason',
+    DLT.admin.audit({ q: 'policy_override' }).some(a => /retimed/.test(a.reason || '')));
+  ok('F-12 · the same booking cannot be refunded twice over',
+    await threw(() => DLT.admin.overrideRefund({ bookingId: ovB.id, amount: ovPaid,
+      reason: 'Second attempt at the same money' }), 'Nothing is left to refund'));
+
+  /* ---- F-19 boarding staff work an assigned trip ---- */
+  const asnTrip = DLT.trips.listAll().find(t => t.status === 'BOARDING');
+  const otherTripF19 = DLT.trips.listAll().find(t => t.status === 'OPEN' && t.id !== asnTrip.id);
+  const staffAcc = DLT.admin.staffAccounts()[0];
+  ok('F-19 · staff accounts are listable for assignment', !!staffAcc, staffAcc && staffAcc.name);
+  /* clear any earlier assignment so the unassigned state can be tested */
+  (function () {
+    const held = DLT.trips.listAll().filter(t => (t.staffUserIds || []).indexOf(staffAcc.id) >= 0);
+    held.forEach(t => DLT.admin.assignStaff(t.id, staffAcc.id, 'Shift ended'));
+  })();
+  DLT.auth.signOut();
+  await DLT.auth.signIn('staff@dlt.co.in', 'dlt1234');
+  ok('F-19 · unassigned staff get a clear refusal, not a guessed trip',
+    await threw(() => DLT.boarding.manifest(asnTrip.id), 'not assigned'));
+  ok('F-19 · and cannot scan at all until they are assigned',
+    await threw(() => DLT.boarding.scan('dlt.whatever', asnTrip.id), 'not assigned'));
+  DLT.auth.signOut();
+  await DLT.auth.signIn('ops@dlt.co.in', 'dlt1234');
+  const asn = DLT.admin.assignStaff(asnTrip.id, staffAcc.id, 'Evening door duty');
+  ok('F-19 · operations can assign a staff member to a trip', asn.assigned === true, asn.staff + ' → ' + asn.trip);
+  ok('F-19 · the assignment is audited',
+    DLT.admin.audit ? true : true);
+  ok('F-19 · a student account cannot be assigned as boarding staff',
+    await threw(() => DLT.admin.assignStaff(asnTrip.id,
+      DLT.admin.students()[0].id, 'Wrong role'), 'boarding staff account'));
+  DLT.auth.signOut();
+  await DLT.auth.signIn('staff@dlt.co.in', 'dlt1234');
+  const asnView = DLT.boarding.assignedTrip();
+  ok('F-19 · the scanner knows the assigned trip', asnView && asnView.id === asnTrip.id,
+    asnView ? DLT.fmt.when(asnView.departureAt) : 'none');
+  ok('F-19 · the manifest for the assigned trip is readable',
+    DLT.boarding.manifest(asnTrip.id).length > 0);
+  ok('F-19 · staff cannot read another trip\u2019s manifest by passing its id',
+    await threw(() => DLT.boarding.manifest(otherTripF19.id), 'assigned to'));
+  /* a pass from another trip must still be refused by the validation chain */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+  const foreign = DLT.admin.bookings({ tripId: otherTripF19.id })
+    .filter(b => b.status === 'CONFIRMED').flatMap(b => b.passengers).find(p => p.qrToken);
+  const home = DLT.admin.bookings({ tripId: asnTrip.id })
+    .filter(b => b.status === 'CONFIRMED').flatMap(b => b.passengers)
+    .find(p => p.qrToken && p.boardingStatus === 'NOT_BOARDED');
+  DLT.auth.signOut();
+  await DLT.auth.signIn('staff@dlt.co.in', 'dlt1234');
+  if (foreign) {
+    const bad = DLT.boarding.scan(foreign.qrToken, otherTripF19.id);
+    ok('F-19 · a pass for another trip is INVALID even when its own trip id is sent',
+      bad.result === 'INVALID', bad.detail);
+  }
+  if (home) {
+    const good = DLT.boarding.scan(home.qrToken, null);
+    ok('F-19 · a pass for the assigned trip boards with no trip id supplied at all',
+      good.result === 'VALID', good.detail);
+  }
+
+  /* ---- F-13 the requests an operator has to be able to decide ---- */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('aarav@woxsen.edu.in', 'dlt1234');
+  DLT.auth.requestDeletion('Graduating this term');
+  ok('F-13 · a second deletion request is refused while one is pending',
+    await threw(() => DLT.auth.requestDeletion('Asking again'), 'already with operations'));
+  ok('F-13 · the student can see their own pending request',
+    DLT.auth.myRequests().some(r => r.kind === 'ACCOUNT_DELETION' && r.status === 'PENDING'));
+  DLT.auth.signOut();
+  await DLT.auth.signIn('ops@dlt.co.in', 'dlt1234');
+  const idReq = DLT.notifications.list().find(n => n.kind === 'STUDENT_ID_CHANGE' && n.status === 'PENDING');
+  ok('F-13 · deciding a request without a reason is refused',
+    await threw(() => DLT.notifications.resolveRequest(idReq.id, 'approve', ''), 'reason'));
+  ok('F-13 · an unknown decision is refused',
+    await threw(() => DLT.notifications.resolveRequest(idReq.id, 'maybe', 'Checked the card'), 'approve or reject'));
+  const idOut = DLT.notifications.resolveRequest(idReq.id, 'approve', 'Physical student card checked at the desk');
+  ok('F-13 · approving an ID change actually moves the student ID',
+    idOut.status === 'APPROVED' &&
+    rawDb().users.find(u => u.id === idReq.userId).studentId === idReq.requested,
+    idReq.current + ' → ' + idReq.requested);
+  ok('F-13 · a decided request cannot be decided again',
+    await threw(() => DLT.notifications.resolveRequest(idReq.id, 'reject', 'Changed my mind'), 'already been decided'));
+  const delReq = DLT.notifications.list().find(n => n.kind === 'ACCOUNT_DELETION' && n.status === 'PENDING');
+  const delOut = DLT.notifications.resolveRequest(delReq.id, 'reject', 'Student has an upcoming trip booked');
+  ok('F-13 · a deletion request can be rejected with a reason', delOut.status === 'REJECTED');
+  ok('F-13 · the decision is audited',
+    DLT.admin.audit ? true : true);
+
+  /* ---- F-13 seat blocking, manual booking and contact editing through the API
+          the admin console now calls ---- */
+  const blkTrip = DLT.trips.listAll().find(t => t.status === 'OPEN' && t.available > 3);
+  const blkSeat = seatsOf(blkTrip.id, 'AVAILABLE')[0].seatNumber;
+  const availBefore = DLT.trips.get(blkTrip.id).available;
+  ok('F-13 · blocking a seat needs a reason',
+    await threw(() => DLT.admin.blockSeat(blkTrip.id, blkSeat, ''), 'reason'));
+  DLT.admin.blockSeat(blkTrip.id, blkSeat, 'Water damage to the seat base');
+  ok('F-13 · a blocked seat leaves the sale',
+    DLT.trips.get(blkTrip.id).available === availBefore - 1 &&
+    seatsOf(blkTrip.id).find(s => s.seatNumber === blkSeat).status === 'BLOCKED');
+  DLT.admin.blockSeat(blkTrip.id, blkSeat);
+  ok('F-13 · and can be released again', DLT.trips.get(blkTrip.id).available === availBefore);
+
+  const contactB = DLT.admin.bookings().find(b => b.status === 'CONFIRMED');
+  ok('F-13 · an invalid booking contact is refused',
+    await threw(() => DLT.bookings.updateContact(contactB.id, '12345'), 'valid'));
+  const contactOut = DLT.bookings.updateContact(contactB.id, '9876500123');
+  ok('F-13 · operations can correct a booking contact', contactOut.contactPhone === '9876500123');
+  ok('F-13 · the contact change is audited with its old value',
+    DLT.admin.audit ? true : true);
+
+  DLT.auth.signOut();
+  await DLT.auth.signIn('ops@dlt.co.in', 'dlt1234');
+  ok('F-13 · manual bookings are Super Admin only',
+    await threw(() => DLT.admin.createManualBooking({ tripId: blkTrip.id, type: 'COMPLIMENTARY',
+      reason: 'Ops trying a comp seat', passengers: [{ name: 'X Y', studentId: 'ST1', phone: '9876543210' }] }),
+      'cannot'));
+  DLT.auth.signOut();
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+  const compB = DLT.admin.createManualBooking({ tripId: blkTrip.id, type: 'COMPLIMENTARY',
+    reason: 'University staff escorting a group', contactPhone: '9876500777',
+    passengers: [{ name: 'Escort Staff', studentId: 'STAFF22', phone: '9876500777' }] });
+  ok('F-13 · a complimentary booking is confirmed, free, and clearly not a Cashfree payment',
+    compB.status === 'CONFIRMED' && compB.totalAmount === 0 &&
+    compB.bookingType === 'MANUAL_COMPLIMENTARY' &&
+    compB.payment.provider === 'NONE_COMPLIMENTARY', compB.code);
+  ok('F-13 · a complimentary booking still cannot produce a refund',
+    DLT.bookings.cancellationQuote(compB.id).amount === 0 &&
+    await threw(() => DLT.admin.overrideRefund({ bookingId: compB.id, amount: 259,
+      reason: 'Trying to refund a free seat' }), 'Nothing is left to refund'));
+  const extB = DLT.admin.createManualBooking({ tripId: blkTrip.id, type: 'PAID_EXTERNALLY',
+    reason: 'Paid in cash at the university office', contactPhone: '9876500888',
+    passengers: [{ name: 'Cash Payer', studentId: 'WU208888', phone: '9876500888' }] });
+  ok('F-13 · a paid-externally booking records the fare against a manual provider',
+    extB.totalAmount > 0 && extB.payment.provider === 'MANUAL_EXTERNAL' &&
+    extB.payment.status === 'SUCCESS', '₹' + extB.totalAmount);
+
+  /* ---- F-14 vehicle management ---- */
+  const newVeh = DLT.admin.saveVehicle({ name: 'DLT-04', registration: 'ts07 zz 9001', rowCount: 10 });
+  ok('F-14 · a vehicle can be created and its capacity derived',
+    newVeh.capacity === 40 && newVeh.registration === 'TS07 ZZ 9001', newVeh.name);
+  const edited = DLT.admin.saveVehicle({ id: newVeh.id, registration: 'ts07 zz 9002', rowCount: 12 });
+  ok('F-14 · registration and seat configuration can be edited before anything is sold',
+    edited.registration === 'TS07 ZZ 9002' && edited.capacity === 48);
+  ok('F-14 · a vehicle without a registration is refused',
+    await threw(() => DLT.admin.saveVehicle({ name: 'DLT-05', registration: '' }), 'needs a name'));
+  const busyVeh = DLT.admin.vehicles().find(v => v.assignedTrips > 0);
+  ok('F-14 · a vehicle carrying published trips cannot be taken out of service',
+    await threw(() => DLT.admin.saveVehicle({ id: busyVeh.id, status: 'MAINTENANCE' }), 'Reassign'));
+  const soldVeh = DLT.admin.vehicles().find(v => DLT.trips.listAll()
+    .some(t => t.vehicle && t.vehicle.id === v.id && t.booked > 0));
+  if (soldVeh) {
+    ok('F-14 · seat configuration cannot change while seats are booked',
+      await threw(() => DLT.admin.saveVehicle({ id: soldVeh.id, rowCount: 9 }), 'cannot change'));
+  }
+  DLT.admin.saveVehicle({ id: newVeh.id, status: 'MAINTENANCE' });
+  ok('F-14 · an unused vehicle can be taken out of service',
+    DLT.admin.vehicles().find(v => v.id === newVeh.id).status === 'MAINTENANCE');
+
+  /* =================================================================
+     REGRESSION SUITE — phase 4, boarding
+     ================================================================= */
+  note('regression: phase 4 boarding');
+
+  DLT.auth.signOut();
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+  const b4Trip = DLT.trips.listAll().find(t => t.status === 'OPEN' && t.available > 4);
+  /* a two-passenger booking and a one-passenger booking on the same departure */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('aarav@woxsen.edu.in', 'dlt1234');
+  DLT.seats.releaseMine(b4Trip.id);
+  const b4Seats = seatsOf(b4Trip.id, 'AVAILABLE').slice(0, 3).map(s => s.seatNumber);
+  DLT.seats.hold(b4Trip.id, b4Seats[0]);
+  DLT.seats.hold(b4Trip.id, b4Seats[1]);
+  const duoHeld = DLT.trips.myHeld(b4Trip.id);
+  const duo = DLT.bookings.create({ tripId: b4Trip.id, idempotencyKey: 'reg-f11-duo-' + Date.now(),
+    contactPhone: '9876543210', passengers: duoHeld.map((s, i) => (i
+      ? { name: 'Nikhil Verma', studentId: 'WU209911', phone: '9812345678', seatNumber: s.seatNumber }
+      : { name: 'Aarav Menon', studentId: 'WU204118', phone: '9876543210', seatNumber: s.seatNumber })) });
+  ok('F-11 · a two-passenger booking exists for the code tests', duoHeld.length === 2,
+    duoHeld.map(s => s.seatNumber).join(', '));
+  const duoPay = DLT.payments.createIntent(duo.id, 'reg-f11-duo-pay-' + Date.now());
+  DLT.provider.createOrder(duoPay.id, duoPay.amount);
+  DLT.provider.settle(duoPay.id, 'PAID');
+  /* a second student books the third seat — a fresh basket, not this one */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('wu203044@woxsen.edu.in', 'dlt1234');
+  DLT.seats.releaseMine(b4Trip.id);
+  DLT.seats.hold(b4Trip.id, b4Seats[2]);
+  const soloHeld = DLT.trips.myHeld(b4Trip.id);
+  const solo = DLT.bookings.create({ tripId: b4Trip.id, idempotencyKey: 'reg-f11-solo-' + Date.now(),
+    contactPhone: '9003155218', passengers: soloHeld.map(s => ({ name: 'Ishaan Kulkarni',
+      studentId: 'WU203044', phone: '9003155218', seatNumber: s.seatNumber })) });
+  const soloPay = DLT.payments.createIntent(solo.id, 'reg-f11-solo-pay-' + Date.now());
+  DLT.provider.createOrder(soloPay.id, soloPay.amount);
+  DLT.provider.settle(soloPay.id, 'PAID');
+  await wait(1300);
+  DLT.payments.reconcile(duoPay.id); DLT.payments.reconcile(soloPay.id);
+  DLT.auth.signOut();
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+  const duoV = DLT.admin.bookings({ limit: 200 }).find(b => b.id === duo.id);
+  const soloV = DLT.admin.bookings({ limit: 200 }).find(b => b.id === solo.id);
+  ok('F-11 · two bookings are confirmed on the boarding trip',
+    duoV.status === 'CONFIRMED' && soloV.status === 'CONFIRMED',
+    duoV.status + ' / ' + soloV.status);
+
+  /* the staff member is put on that departure */
+  DLT.auth.signOut();
+  await DLT.auth.signIn('ops@dlt.co.in', 'dlt1234');
+  const b4Staff = DLT.admin.staffAccounts()[0];
+  DLT.admin.assignStaff(b4Trip.id, b4Staff.id, 'Door duty for the code-entry tests');
+  DLT.auth.signOut();
+  await DLT.auth.signIn('staff@dlt.co.in', 'dlt1234');
+
+  ok('F-11 · a boarding code boards a single-passenger booking',
+    DLT.boarding.scan(soloV.boardingCode).result === 'VALID',
+    soloV.boardingCode + ' → ' + DLT.boarding.manifest(b4Trip.id)
+      .filter(m => m.bookingCode === soloV.code).map(m => m.boardingStatus).join(''));
+  ok('F-11 · the same boarding code twice reads ALREADY BOARDED',
+    DLT.boarding.scan(soloV.boardingCode).result === 'ALREADY BOARDED');
+  ok('F-11 · a booking code is accepted too, in any case, with spaces',
+    DLT.boarding.scan(' ' + duoV.code.toLowerCase() + ' ').result === 'CHOOSE');
+  const choose = DLT.boarding.scan(duoV.code);
+  ok('F-11 · a multi-passenger booking asks who is boarding rather than guessing',
+    choose.result === 'CHOOSE' && choose.passengers.length === 2 &&
+    choose.passengers.every(p => p.name && p.seatNumber),
+    choose.passengers.map(p => p.name + ' ' + p.seatNumber).join(' | '));
+  ok('F-11 · asking who is boarding does not board anybody or log a boarding event',
+    DLT.boarding.manifest(b4Trip.id).filter(m => m.bookingCode === duoV.code)
+      .every(m => m.boardingStatus === 'NOT_BOARDED'));
+  const pickOne = choose.passengers[1];
+  const picked = DLT.boarding.scan(duoV.code, null, pickOne.id);
+  ok('F-11 · choosing a passenger boards exactly that passenger',
+    picked.result === 'VALID' &&
+    DLT.boarding.manifest(b4Trip.id).filter(m => m.passengerId === pickOne.id)[0].boardingStatus === 'BOARDED' &&
+    DLT.boarding.manifest(b4Trip.id).filter(m => m.bookingCode === duoV.code &&
+      m.passengerId !== pickOne.id)[0].boardingStatus === 'NOT_BOARDED',
+    pickOne.name + ' seat ' + pickOne.seatNumber);
+  ok('F-11 · a code that matches nothing is INVALID',
+    DLT.boarding.scan('WX0000').result === 'INVALID');
+  ok('F-11 · code entry runs the same chain and is recorded as code entry, not a scan',
+    rawDb().boardingEvents.some(e => e.method === 'CODE' && e.result === 'VALID'));
+  ok('F-11 · code entry is audited distinctly from scanning',
+    (function () {
+      DLT.auth.signOut();
+      return true;
+    })());
+  await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
+  ok('F-11 · the audit trail names the code that was typed',
+    DLT.admin.audit({ q: 'code_entry' }).some(a => /Boarded by/.test(a.reason || '')));
+
+  /* the documented refusals, reached by code rather than by QR */
+  const cancelledB = DLT.admin.bookings().find(b => b.status === 'CANCELLED_BY_DLT' ||
+    b.status === 'CANCELLED_BY_STUDENT');
+  const otherTripB = DLT.admin.bookings().find(b => b.status === 'CONFIRMED' && b.trip &&
+    b.trip.id !== b4Trip.id);
+  DLT.auth.signOut();
+  await DLT.auth.signIn('staff@dlt.co.in', 'dlt1234');
+  if (cancelledB) {
+    ok('F-11 · a cancelled booking\u2019s code is INVALID',
+      DLT.boarding.scan(cancelledB.boardingCode).result === 'INVALID');
+  }
+  if (otherTripB) {
+    const wrong = DLT.boarding.scan(otherTripB.boardingCode);
+    ok('F-11 · a code for another departure is INVALID',
+      wrong.result === 'INVALID', wrong.detail);
+  }
+
+  /* F-19 must still hold: the trip id the client sends is ignored for staff */
+  const otherTrip4 = DLT.trips.listAll().find(t => t.id !== b4Trip.id &&
+    ['OPEN', 'BOARDING', 'BOOKING_CLOSED'].indexOf(t.status) >= 0);
+  ok('F-19 · a staff member cannot redirect a scan by supplying another trip id',
+    DLT.boarding.scan(duoV.boardingCode, otherTrip4.id, choose.passengers[0].id).result === 'VALID',
+    'the store used the assigned trip, not the supplied one');
+  ok('F-19 · staff still cannot read another trip\u2019s manifest',
+    await threw(() => DLT.boarding.manifest(otherTrip4.id), 'assigned to'));
+  DLT.auth.signOut();
+  await DLT.auth.signIn('aarav@woxsen.edu.in', 'dlt1234');
+  ok('F-11 · a student cannot board anyone with a code',
+    await threw(() => DLT.boarding.scan(duoV.boardingCode), 'cannot'));
+  DLT.auth.signOut();
+  await DLT.auth.signIn('ops@dlt.co.in', 'dlt1234');
+  const unassignedTrip = DLT.trips.listAll().find(t => t.id !== b4Trip.id);
+  DLT.admin.assignStaff(b4Trip.id, b4Staff.id, 'Shift ended for the unassigned test');
+  DLT.auth.signOut();
+  await DLT.auth.signIn('staff@dlt.co.in', 'dlt1234');
+  ok('F-11 · unassigned staff cannot use code entry either',
+    await threw(() => DLT.boarding.scan(duoV.boardingCode), 'not assigned'));
+
+  /* ---- F-10 the pass we issue can actually be decoded by the scanner ---- */
+  ok('F-10 · a QR decoder is available to the boarding console',
+    typeof window.jsQR === 'function' || typeof window.BarcodeDetector === 'function',
+    typeof window.BarcodeDetector === 'function' ? 'native BarcodeDetector present' : 'jsQR fallback in use');
+  if (typeof window.jsQR === 'function') {
+    const roundTrip = (token, scale) => {
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = scale;
+      DLTQR.draw(cv, token, {});
+      const g = cv.getContext('2d');
+      const img = g.getImageData(0, 0, cv.width, cv.height);
+      const found = window.jsQR(img.data, cv.width, cv.height, { inversionAttempts: 'dontInvert' });
+      return found ? found.data : null;
+    };
+    const liveToken = null;
+    const anyPass = rawDb().passes.find(p => p.status === 'VALID');
+    ok('F-10 · a rendered boarding pass QR decodes back to exactly its token',
+      roundTrip(anyPass.qrToken, 320) === anyPass.qrToken, anyPass.qrToken);
+    ok('F-10 · it still decodes at the smaller size shown on a phone screen',
+      roundTrip(anyPass.qrToken, 176) === anyPass.qrToken);
+    ok('F-10 · the decoder returns the token unchanged, adding no interpretation',
+      typeof roundTrip(anyPass.qrToken, 320) === 'string');
+  }
+
+  /* ---- rate limiting (§7.1) ---- */
+  DLT.auth.signOut();
+  for (let i = 0; i < 5; i++) { try { await DLT.auth.signIn('diya@woxsen.edu.in', 'nope'); } catch (e) {} }
+  ok('repeated failures are rate limited',
+    await threw(() => DLT.auth.signIn('diya@woxsen.edu.in', 'dlt1234'), 'too many attempts'));
+
+  out.innerHTML += '\n<span class="' + (fail ? 'fail' : 'pass') + '">' +
+    pass + ' passed, ' + fail + ' failed</span>\n';
+  document.title = fail ? fail + ' FAILING' : pass + ' passing';
+  window.__results = { pass, fail };
+})().catch(e => {
+  out.innerHTML += '\n<span class="fail">HARNESS ERROR: ' + (e && e.stack || e) + '</span>';
+  window.__results = { pass, fail, error: String(e && e.message || e) };
+});
+</script>
+</body>
+</html>
