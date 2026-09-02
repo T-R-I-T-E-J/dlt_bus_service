@@ -56,7 +56,7 @@
   }
 </style>
 <script type="module" src="./journey.js"></script>
-<script src="./dlt-store.js"></script>
+<script type="module" src="./dlt-client.js"></script>
 </helmet>
 
 <a class="dlt-skip" href="#trips">Skip to booking</a>
@@ -475,7 +475,14 @@ const FAQ = [
 ];
 
 class Component extends DCLogic {
-  state = { mqReduced: false, scene: 'loading', ready: false, tick: 0, faqQuery: '' };
+  /* Real API, same architecture as Booking/Dashboard/Account: DLT.boot() once,
+   * auth.current() stays synchronous off the cached session, every server
+   * read lands in state.data through _load(), renderVals() is pure. Trips are
+   * PUBLIC — no sign-in is required to see or load them, so _load() never
+   * gates on auth the way Dashboard's does; only the "your next trip" strip
+   * additionally needs a signed-in student. */
+  state = { mqReduced: false, scene: 'loading', ready: false, faqQuery: '',
+    data: { trips: [], tripsLoaded: false, nextBooking: null } };
 
   componentDidMount() {
     this._onClick = (e) => {
@@ -510,15 +517,42 @@ class Component extends DCLogic {
       }
     }, 200);
 
-    if (window.DLT) {
-      DLT.ready.then(() => {
-        this._unsub = DLT.subscribe(() => this.setState({ tick: this.state.tick + 1 }));
-        this.setState({ ready: true });
-      });
-    }
+    this._boot();
     this._syncHandoff();
   }
   componentDidUpdate() { this._syncHandoff(); }
+
+  async _boot() {
+    /* An outage must not block the page — the hero, the 3D journey and the
+       FAQ are all static; only the live trip strip and "your next trip"
+       depend on the network, and each degrades to its own loading/empty
+       state rather than the whole page waiting. */
+    try { await DLT.boot(); } catch (e) { /* offline: renders signed-out, no trips yet */ }
+    this.setState({ ready: true }, () => this._load());
+  }
+
+  /* Every server read for this screen, in one place. Trips are PUBLIC; the
+     "next trip" strip additionally needs a signed-in student. */
+  async _load() {
+    const data = Object.assign({}, this.state.data);
+    try {
+      data.trips = await DLT.trips.listPublic(3);
+      data.tripsLoaded = true;
+    } catch (e) { data.trips = []; data.tripsLoaded = true; }
+
+    const me = DLT.auth.current();
+    if (me && me.role === 'STUDENT') {
+      try {
+        const mine = await DLT.bookings.mine();
+        const upcoming = mine.filter(b => b.status === 'CONFIRMED'
+          && b.trip && ['COMPLETED', 'DEPARTED'].indexOf(b.trip.status) < 0);
+        data.nextBooking = upcoming[0] || null;
+      } catch (e) { data.nextBooking = null; }
+    } else {
+      data.nextBooking = null;
+    }
+    this.setState({ data });
+  }
 
   _syncHandoff() {
     const reduced = this._isReduced();
@@ -545,19 +579,18 @@ class Component extends DCLogic {
   renderVals() {
     const reduced = this._isReduced();
     const st = this.state;
-    const store = st.ready && window.DLT;
-    const me = store ? DLT.auth.current() : null;
+    const me = st.ready ? DLT.auth.current() : null;
 
-    /* the next three open departures, live */
-    const trips = store ? DLT.trips.listPublic(3) : [];
-    const fare = trips.length ? trips[0].price : (store ? DLT.FARE : 259);
+    /* the next three open departures, live — pure read of state.data, filled
+       only by _load(). No request and no fare arithmetic here: while trips
+       are loading, fare and the schedule labels render '—' (DLT.fmt.time's
+       own convention for "no value yet"), never a fabricated number. */
+    const trips = st.data.trips;
+    const fare = trips.length ? String(trips[0].price) : '—';
     const first = trips[0] || null;
 
     /* the signed-in student's next trip, if they have one */
-    let next = null;
-    if (store && me && me.role === 'STUDENT') {
-      next = DLT.bookings.mine('Upcoming').filter(b => b.status === 'CONFIRMED')[0] || null;
-    }
+    const next = st.data.nextBooking;
 
     const q = st.faqQuery.trim().toLowerCase();
     const faqGroups = FAQ.map(([category, items]) => ({
@@ -582,9 +615,12 @@ class Component extends DCLogic {
         : '',
 
       fare,
-      departLabel: first ? DLT.fmt.time(first.departureAt) : '17:30',
-      reportLabel: first ? DLT.fmt.time(first.reportingAt) : '17:10',
-      arriveLabel: first ? DLT.fmt.time(first.arrivalEstimateAt) : '19:30',
+      /* DLT.fmt.time already renders '—' for a falsy input, so first === null
+         (still loading, or genuinely no open departures) needs no separate
+         fallback literal — and never shows a time the server did not send. */
+      departLabel: DLT.fmt.time(first && first.departureAt),
+      reportLabel: DLT.fmt.time(first && first.reportingAt),
+      arriveLabel: DLT.fmt.time(first && first.arrivalEstimateAt),
 
       trips: trips.map(t => {
         const pct = t.capacity ? Math.round(((t.capacity - t.available) / t.capacity) * 100) : 0;
@@ -607,7 +643,7 @@ class Component extends DCLogic {
           href: './DLT Booking.dc.html?trip=' + encodeURIComponent(t.id) + (t.soldOut ? '&waitlist=1' : ''),
         };
       }),
-      noTrips: store && trips.length === 0,
+      noTrips: st.data.tripsLoaded && trips.length === 0,
       tripsNote: trips.length
         ? (trips.length === 1 ? 'One departure is open right now.' : 'These ' + trips.length + ' departures are open right now.')
           + ' More open a few days ahead.'
