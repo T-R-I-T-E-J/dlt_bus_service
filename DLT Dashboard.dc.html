@@ -36,7 +36,7 @@
   }
 </style>
 <script src="./dlt-qr.js"></script>
-<script src="./dlt-store.js"></script>
+<script type="module" src="./dlt-client.js"></script>
 </helmet>
 
 <header data-m="noprint" style="position:sticky;top:0;z-index:40;height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(18px,4vw,44px);background:rgba(247,245,240,.92);backdrop-filter:blur(14px);border-bottom:1px solid rgba(14,16,20,.10)">
@@ -137,19 +137,6 @@
     <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:{{ quoteFg }}">Cancel · refund preview</div>
     <h3 style="margin:12px 0 0;font-size:19px;font-weight:600;letter-spacing:-.01em">{{ quoteTitle }}</h3>
     <p style="margin:9px 0 0;max-width:56ch;font-size:13px;line-height:1.6;color:#3D423C">{{ quoteReason }}</p>
-    <sc-if value="{{ multiPax }}" hint-placeholder-val="{{ false }}">
-      <div role="group" aria-label="Choose passengers to cancel" style="margin:16px 0 0;display:flex;flex-direction:column;gap:8px">
-        <sc-for list="{{ cancelPax }}" as="p" hint-placeholder-count="2">
-          <label style="display:flex;align-items:center;gap:11px;border:1px solid {{ p.bd }};background:{{ p.bg }};padding:12px 14px;cursor:pointer;min-height:44px">
-            <input type="checkbox" checked="{{ p.on }}" onChange="{{ p.onToggle }}" style="width:17px;height:17px;accent-color:#0E4B34" />
-            <span style="font-size:13.5px;font-weight:600">{{ p.name }}</span>
-            <span style="font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">seat {{ p.seat }}</span>
-            <span style="flex:1"></span>
-            <span style="font-size:13px;font-variant-numeric:tabular-nums">₹{{ p.price }}</span>
-          </label>
-        </sc-for>
-      </div>
-    </sc-if>
     <div style="margin:18px 0 0;display:flex;flex-wrap:wrap;gap:10px">
       <button type="button" onClick="{{ confirmCancel }}" disabled="{{ cancelDisabled }}" style="background:{{ cancelBg }};color:{{ cancelFg }};border:0;padding:13px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">{{ cancelCta }}</button>
       <button type="button" onClick="{{ closeCancel }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:12px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Keep my booking</button>
@@ -213,26 +200,6 @@
       </div>
     </sc-if>
 
-    <!-- RATING -->
-    <sc-if value="{{ rateOpen }}" hint-placeholder-val="{{ false }}">
-      <div style="margin:18px 0 0;border:1px solid rgba(14,16,20,.16);background:#FFFFFF;padding:20px 22px;animation:dltRise .28s ease">
-        <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Rate your trip · {{ rateTripLabel }}</div>
-        <div role="radiogroup" aria-label="Rating out of five" style="margin:14px 0 0;display:flex;align-items:center;gap:6px">
-          <sc-for list="{{ stars }}" as="s" hint-placeholder-count="5">
-            <button type="button" role="radio" aria-checked="{{ s.on }}" onClick="{{ s.onPick }}" aria-label="{{ s.aria }}" style="background:none;border:0;padding:6px;font-size:26px;line-height:1;color:{{ s.fg }};cursor:pointer;min-height:44px;min-width:44px">★</button>
-          </sc-for>
-          <span style="margin-left:8px;font-size:13px;color:#4A4F49">{{ rateLabel }}</span>
-        </div>
-        <label style="display:block;margin-top:14px">
-          <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Anything operations should know? (optional)</span>
-          <textarea rows="2" value="{{ rateText }}" onChange="{{ onRateText }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-family:inherit;font-size:13.5px"></textarea>
-        </label>
-        <div style="margin:14px 0 0;display:flex;gap:10px">
-          <button type="button" onClick="{{ submitRating }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:12px 18px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Submit rating</button>
-          <button type="button" onClick="{{ closeRate }}" style="background:none;border:0;padding:12px 6px;font-size:13px;font-weight:600;color:#4A4F49;cursor:pointer;min-height:44px">Not now</button>
-        </div>
-      </div>
-    </sc-if>
   </section>
 
   <!-- QUICK ACTIONS -->
@@ -332,46 +299,164 @@
 <script type="text/x-dc" data-dc-script data-props="{
   &quot;$preview&quot;: { &quot;width&quot;: 1280, &quot;height&quot;: 900 }
 }">
-/* Student account screen. Every figure is read from DLT; the cancel button
-   really cancels, the receipt is generated from payment records, and the QR is a
-   real encoded symbol from the pass token. */
+/* Student account screen, on the real API.
+ *
+ * Architecture matches the Booking migration: the SERVER is authoritative, the
+ * API client is the only boundary, every read lands in state.data through
+ * _load(), and renderVals() is pure — it makes no request and decides nothing.
+ *
+ * What this screen must never do, and no longer does: read a user or a role from
+ * the browser, recompute a fare, decide a booking or payment status, or hold any
+ * booking state the server does not already hold.
+ *
+ * Deferred, and therefore deliberately absent rather than faked:
+ *   · partial passenger cancellation — the server cancels whole bookings only
+ *   · ratings — there is no reviews endpoint
+ *   · pickup point — no column holds one
+ */
 class Component extends DCLogic {
   state = {
-    ready: false, tick: 0, filter: 'Upcoming', paxIndex: 0, passOpen: true,
-    activeBookingId: null, cancelOpen: false, cancelSel: {}, receiptOpen: false,
-    rateBookingId: null, rating: 0, rateText: '', notice: null, error: null,
+    /* session + lifecycle */
+    ready: false, loading: false, offline: false, authRequired: false,
+    /* server state, filled only by _load() */
+    data: { bookings: [], openTrips: [], waitlist: [], waitTrip: null,
+            passes: [], quote: null },
+    /* presentation only */
+    tick: 0, filter: 'Upcoming', paxIndex: 0, passOpen: true,
+    activeBookingId: null, cancelOpen: false, receiptOpen: false,
+    busy: false, notice: null, error: null,
   };
 
   async componentDidMount() {
-    await DLT.ready;
-    this._unsub = DLT.subscribe(() => this.setState({ tick: this.state.tick + 1 }));
-    this._timer = setInterval(() => this.setState({ tick: this.state.tick + 1 }), 5000);
-    const code = new URLSearchParams(location.search).get('booking');
-    let active = null;
-    if (code) {
-      try { const b = DLT.bookings.get(code); active = b ? b.id : null; } catch (e) {}
+    /* One session resolve for the page. auth.current() is synchronous after
+       this, so renderVals never awaits anything. */
+    DLT.setUnauthenticatedHandler(() => this.setState({ authRequired: true }));
+    try {
+      await DLT.boot();
+    } catch (e) {
+      /* An outage is not the same as being signed out. */
+      if (e.isOffline) this.setState({ offline: true });
     }
-    this.setState({ ready: true, activeBookingId: active });
-    this._paint();
-  }
-  componentDidUpdate() { this._paint(); }
-  componentWillUnmount() { if (this._unsub) this._unsub(); clearInterval(this._timer); }
 
-  _passes() {
-    const b = this._activeBooking();
-    if (!b) return [];
-    try { return DLT.boarding.passesFor(b.id); } catch (e) { return []; }
+    /* Deep link ?booking=<uuid>. The id is only a SELECTOR — the server checks
+       ownership on every read, so a stranger's id yields a refusal, never
+       someone else's booking. */
+    const want = new URLSearchParams(location.search).get('booking');
+    if (location.search) history.replaceState(null, '', location.pathname);
+
+    this.setState({ ready: true, activeBookingId: want || null }, () => this._load());
+
+    /* Presentation tick only: redraws the waitlist claim countdown from the
+       server's offerExpiresAt. It sweeps nothing and decides nothing. */
+    this._timer = setInterval(() => this.setState({ tick: this.state.tick + 1 }), 1000);
   }
+
+  componentDidUpdate(prevProps, prevState) {
+    /* The QR is painted from server state, never from a render return value. */
+    this._paint();
+    /* Passes belong to whichever booking is active; reload when that changes. */
+    if (prevState && prevState.activeBookingId !== this.state.activeBookingId) {
+      this._loadPasses();
+    }
+  }
+
+  componentWillUnmount() { clearInterval(this._timer); }
+
+  /* ------------------------------------------------------------ server reads
+   *
+   * Every read for the current view, in one place, called from lifecycle and
+   * from actions — never from render.
+   */
+  async _load(opts) {
+    const quiet = opts && opts.quiet;
+    if (!quiet) this.setState({ loading: true });
+    const data = Object.assign({}, this.state.data);
+    try {
+      if (!DLT.auth.current()) {
+        this.setState({ loading: false, data: Object.assign(data,
+          { bookings: [], waitlist: [], waitTrip: null, passes: [] }) });
+        return;
+      }
+      data.bookings = await DLT.bookings.mine();
+      data.openTrips = await DLT.trips.listPublic(3);
+
+      try {
+        data.waitlist = await DLT.waitlist.mine();
+        const offer = data.waitlist.filter(w => w.status === 'CLAIM_OFFERED')[0]
+          || data.waitlist[0] || null;
+        data.waitTrip = offer ? await DLT.trips.get(offer.tripId) : null;
+      } catch (e) { data.waitlist = []; data.waitTrip = null; }
+
+      this.setState({ data: data, loading: false, offline: false }, () => {
+        this._loadPasses();
+        if (this.state.cancelOpen) this._loadQuote();
+      });
+    } catch (e) {
+      this.setState({ loading: false });
+      this.fail(e);
+    }
+  }
+
+  /** M-1: the passes for the active booking. The ONLY route that returns a
+      qr_token, and the server checks ownership on it. */
+  async _loadPasses() {
+    const b = this._activeBooking();
+    if (!b) return this.setState(s => ({ data: Object.assign({}, s.data, { passes: [] }) }));
+    try {
+      const passes = await DLT.boarding.passesFor(b.id);
+      this.setState(s => ({ data: Object.assign({}, s.data, { passes: passes }) }),
+        () => this._paint());
+    } catch (e) {
+      this.setState(s => ({ data: Object.assign({}, s.data, { passes: [] }) }));
+    }
+  }
+
+  /** The refund preview, quoted by the server. The browser never computes it. */
+  async _loadQuote() {
+    const b = this._activeBooking();
+    if (!b) return;
+    try {
+      const quote = await DLT.bookings.cancellationQuote(b.id);
+      this.setState(s => ({ data: Object.assign({}, s.data, { quote: quote }) }));
+    } catch (e) {
+      this.setState(s => ({ data: Object.assign({}, s.data, { quote: null }) }));
+    }
+  }
+
+  fail(e) {
+    if (!e) return this.setState({ busy: false });
+    if (e.isOffline) return this.setState({ busy: false, offline: true,
+      error: 'You appear to be offline. Nothing was changed.' });
+    if (e.status === 401 || e.code === 'UNAUTHENTICATED')
+      return this.setState({ busy: false, authRequired: true });
+    this.setState({ error: e.message ? e.message : String(e), busy: false });
+  }
+
+  /* ------------------------------------------------------------ derivations
+   *
+   * Presentation groupings only. Every input is server state; nothing here
+   * decides a status, a price or an entitlement.
+   */
+  _bucket(b) {
+    if (['CANCELLED_BY_STUDENT', 'CANCELLED_BY_DLT'].indexOf(b.status) >= 0)
+      return (b.refunds || []).some(r => r.status === 'REFUNDED') ? 'Refunded' : 'Cancelled';
+    if (b.status === 'ABANDONED') return 'Cancelled';
+    if (b.trip && ['COMPLETED', 'DEPARTED'].indexOf(b.trip.status) >= 0) return 'Completed';
+    return 'Upcoming';
+  }
+
+  _all() { return this.state.data.bookings || []; }
+
   _activeBooking() {
-    const me = DLT.auth.current();
-    if (!me) return null;
-    const all = DLT.bookings.mine();
+    const all = this._all();
     if (this.state.activeBookingId) {
-      const found = all.find(b => b.id === this.state.activeBookingId);
+      const found = all.filter(b => b.id === this.state.activeBookingId)[0];
       if (found) return found;
     }
-    return all.find(b => b.bucket === 'Upcoming') || all[0] || null;
+    return all.filter(b => this._bucket(b) === 'Upcoming')[0] || all[0] || null;
   }
+
+  _passes() { return this.state.data.passes || []; }
 
   _paint() {
     if (!this._cv || !window.DLTQR) return;
@@ -385,6 +470,8 @@ class Component extends DCLogic {
     const void_ = p.passStatus !== 'VALID';
     DLTQR.draw(this._cv, p.qrToken, { dark: void_ ? '#9DA298' : '#0E1014' });
   }
+
+  /* ------------------------------------------------------------ actions */
 
   savePng = () => {
     const passes = this._passes();
@@ -430,11 +517,13 @@ class Component extends DCLogic {
     g.textAlign = 'left';
     line(740);
 
+    /* No PICKUP row: no column holds a pickup point, and a printed boarding pass
+       is the last place to guess at one. */
     const facts = [
       ['ROUTE', p.route], ['DEPARTS', DLT.fmt.when(p.departureAt)],
-      ['REPORT BY', DLT.fmt.time(p.reportingAt)], ['PICKUP', p.pickupPoint],
-      ['COACH', p.vehicle || '—'], ['BOOKING', p.bookingCode],
-      ['BOARDING CODE', p.boardingCode], ['PAYMENT', p.paymentStatus],
+      ['REPORT BY', DLT.fmt.time(p.reportingAt)], ['COACH', p.vehicle || '—'],
+      ['BOOKING', p.bookingCode], ['BOARDING CODE', p.boardingCode],
+      ['PAYMENT', p.paymentStatus], ['FARE', '₹' + p.fareShare],
     ];
     facts.forEach(([k, v], i) => {
       const x = 44 + (i % 2) * (W / 2 - 22);
@@ -451,84 +540,108 @@ class Component extends DCLogic {
     this.setState({ notice: 'Saved ' + a.download + ' — the full pass, QR included.' });
   };
 
-  confirmCancel = () => {
+  /* Whole-booking cancellation: the only shape the server supports. Partial
+     passenger cancellation is not implemented server-side, so it is not offered
+     here — the UI must not imply an operation the backend cannot perform. */
+  confirmCancel = async () => {
     const b = this._activeBooking();
     if (!b) return;
-    const ids = Object.keys(this.state.cancelSel).filter(k => this.state.cancelSel[k]);
+    this.setState({ busy: true, error: null });
     try {
-      const res = DLT.bookings.cancel(b.id, ids.length ? ids : null, 'Student cancellation');
+      const res = await DLT.bookings.cancel(b.id, 'Student cancellation');
+      await this._load({ quiet: true });
       this.setState({
-        cancelOpen: false, cancelSel: {}, error: null,
+        cancelOpen: false, busy: false, error: null,
         notice: res.refundAmount > 0
           ? 'Cancelled. ₹' + res.refundAmount + ' is refunding to the original payment method — it shows as Refund pending until the acquirer settles it, normally 3 to 5 working days.'
           : 'Cancelled. Inside 12 hours the fare is not refundable, so no refund was raised. The seat has been released.',
       });
-    } catch (e) { this.setState({ error: e.message || String(e) }); }
+    } catch (e) { this.fail(e); }
   };
 
+  openCancel = () => {
+    this.setState({ cancelOpen: true, receiptOpen: false, notice: null, error: null },
+      () => this._loadQuote());
+  };
+
+  /* ------------------------------------------------------------ render
+   *
+   * Pure. Reads state only; issues no request and mutates nothing.
+   */
   renderVals() {
     const st = this.state;
-    if (!st.ready) {
-      return { signedIn: false, signedOut: false, initials: '··', passClosed: true,
-        passOpen: false, passClosedCopy: 'Loading your trips…', canOpenPass: false,
-        openPass: () => {}, filters: [], rows: [], banners: [], upcomingFacts: [],
-        passengers: [], passFacts: [], stars: [], receiptRows: [], cancelPax: [] };
+    const EMPTY = {
+      filters: [], rows: [], banners: [], upcomingFacts: [],
+      passengers: [], passFacts: [], receiptRows: [],
+    };
+
+    if (!st.ready || (st.loading && !(st.data.bookings || []).length)) {
+      return Object.assign({}, EMPTY, {
+        signedIn: false, signedOut: false, initials: '··',
+        passClosed: true, passOpen: false, canOpenPass: false, openPass: () => {},
+        passClosedCopy: 'Loading your trips…',
+        notice: null, error: null,
+      });
     }
+
     const me = DLT.auth.current();
-    if (!me) {
-      return { signedIn: false, signedOut: true, initials: '··', passOpen: false, passClosed: false,
-        filters: [], rows: [], banners: [], upcomingFacts: [], passengers: [], passFacts: [],
-        stars: [], receiptRows: [], cancelPax: [], openPass: () => {}, canOpenPass: false };
-    }
-    if (me.role !== 'STUDENT') {
-      return { signedIn: false, signedOut: true, initials: me.name.slice(0, 2).toUpperCase(),
-        passOpen: false, passClosed: false, filters: [], rows: [], banners: [], upcomingFacts: [],
-        passengers: [], passFacts: [], stars: [], receiptRows: [], cancelPax: [],
-        openPass: () => {}, canOpenPass: false };
+    if (!me || me.role !== 'STUDENT') {
+      /* Signed out, or signed in as staff — this is a student surface. The
+         server would refuse the reads anyway; this is only the copy. */
+      return Object.assign({}, EMPTY, {
+        signedIn: false, signedOut: true,
+        initials: me ? me.name.slice(0, 2).toUpperCase() : '··',
+        passOpen: false, passClosed: false, canOpenPass: false, openPass: () => {},
+        notice: st.notice, error: st.error,
+      });
     }
 
-    const all = DLT.bookings.mine();
+    const all = this._all();
     const counts = { Upcoming: 0, Completed: 0, Cancelled: 0, Refunded: 0 };
-    all.forEach(b => { counts[b.bucket] = (counts[b.bucket] || 0) + 1; });
+    all.forEach(b => { const k = this._bucket(b); counts[k] = (counts[k] || 0) + 1; });
     const active = this._activeBooking();
-    const upcoming = all.find(b => b.bucket === 'Upcoming' &&
-      ['CONFIRMED', 'PAYMENT_PENDING', 'PAYMENT_HELD', 'BOOKING_PROCESSING'].indexOf(b.status) >= 0);
-    const openTrips = DLT.trips.listPublic(3);
+    const upcoming = all.filter(b => this._bucket(b) === 'Upcoming' &&
+      ['CONFIRMED', 'PAYMENT_PENDING', 'PAYMENT_HELD', 'BOOKING_PROCESSING'].indexOf(b.status) >= 0)[0];
+    const openTrips = st.data.openTrips || [];
 
-    /* banners driven by real booking state */
+    /* ---- banners, driven entirely by server booking state ---- */
     const banners = [];
-    const pending = all.find(b => b.status === 'PAYMENT_PENDING' || b.status === 'BOOKING_PROCESSING');
-    const helds = all.find(b => b.status === 'PAYMENT_HELD');
-    const dltCancelled = all.find(b => b.status === 'CANCELLED_BY_DLT' &&
-      b.trip && b.trip.departureAt > Date.now() - 7 * 86400000);
-    const waits = DLT.waitlist.mine();
-    const waitOffer = waits.find(w => ['CLAIM_OFFERED', 'CLAIMED'].indexOf(w.status) >= 0 &&
-      w.claimExpiresAt > Date.now());
+    const waits = st.data.waitlist || [];
+    const wt = st.data.waitTrip;
+    const now = Date.now();
+    const waitOffer = waits.filter(w => w.status === 'CLAIM_OFFERED' &&
+      w.offerExpiresAt && new Date(w.offerExpiresAt).getTime() > now)[0];
     if (waitOffer) {
-      const wt = DLT.trips.get(waitOffer.tripId);
       banners.push({
-        kicker: 'Seat released to you · ' + DLT.fmt.countdown(Math.max(0, waitOffer.claimExpiresAt - Date.now())) + ' left',
-        body: 'Seat ' + (waitOffer.reservedSeat || '') + ' on the ' + (wt ? DLT.fmt.when(wt.departureAt) : 'waitlisted departure') +
+        kicker: 'Seat released to you · ' +
+          DLT.fmt.countdown(Math.max(0, new Date(waitOffer.offerExpiresAt).getTime() - now)) + ' left',
+        body: 'Seat ' + (waitOffer.seatNumber || '') + ' on the ' +
+          (wt ? DLT.fmt.when(wt.departureAt) : 'waitlisted departure') +
           ' is reserved for you. Nobody else can take it while the window is open — claim it and finish the booking to keep it.',
         accent: '#8A5A0E', bg: '#FFFDF6', bd: 'rgba(184,115,10,.34)', pulse: true,
         hasAction: true, actionLabel: 'Claim the seat', actionHref: './DLT Booking.dc.html',
       });
     } else if (waits.length) {
-      const wt = DLT.trips.get(waits[0].tripId);
       banners.push({
         kicker: 'On the waitlist · position ' + waits[0].position,
-        body: 'You are waiting for a seat on the ' + (wt ? DLT.fmt.when(wt.departureAt) : 'full departure') +
+        body: 'You are waiting for a seat on the ' +
+          (wt ? DLT.fmt.when(wt.departureAt) : 'full departure') +
           '. If one is released it is reserved for you and you get 30 minutes to claim it.',
         accent: '#0E4B34', bg: '#EEF3EE', bd: 'rgba(14,75,52,.3)', pulse: false, hasAction: false,
       });
     }
+
+    const pending = all.filter(b => b.status === 'PAYMENT_PENDING' || b.status === 'BOOKING_PROCESSING')[0];
+    const helds = all.filter(b => b.status === 'PAYMENT_HELD')[0];
+    const dltCancelled = all.filter(b => b.status === 'CANCELLED_BY_DLT' && b.trip &&
+      new Date(b.trip.departureAt).getTime() > now - 7 * 86400000)[0];
+
     if (pending) banners.push({
       kicker: pending.status === 'BOOKING_PROCESSING' ? 'Payment received · booking processing' : 'Payment pending · ' + pending.code,
       body: pending.status === 'BOOKING_PROCESSING'
         ? 'Your payment is verified and recorded. Issuing the seats did not complete, so we are retrying — do not pay again.'
-        : 'Don\u2019t pay again. The payment is with the acquirer and we are waiting on their confirmation. The booking and passes appear here automatically the moment it clears.',
-      kickerRaw: 'pending', accent: '#8A5A0E', bg: '#FFFDF6', bd: 'rgba(184,115,10,.34)',
-      pulse: true, hasAction: false,
+        : 'Don’t pay again. The payment is with the acquirer and we are waiting on their confirmation. The booking and passes appear here automatically the moment it clears.',
+      accent: '#8A5A0E', bg: '#FFFDF6', bd: 'rgba(184,115,10,.34)', pulse: true, hasAction: false,
     });
     if (helds) banners.push({
       kicker: 'Payment held for review · ' + helds.code,
@@ -536,41 +649,44 @@ class Component extends DCLogic {
       accent: '#8A5A0E', bg: '#FFFDF6', bd: 'rgba(184,115,10,.34)', pulse: true, hasAction: false,
     });
     if (dltCancelled) {
-      const ref = dltCancelled.refunds[0];
+      const ref = (dltCancelled.refunds || [])[0];
       banners.push({
         kicker: 'Trip cancelled by DLT',
         body: 'The ' + DLT.fmt.when(dltCancelled.trip.departureAt) + ' departure was cancelled'
           + (dltCancelled.trip.cancelledReason ? ' — ' + dltCancelled.trip.cancelledReason : '') + '. '
-          + (ref ? 'Your refund of ₹' + ref.amount + ' is ' + (ref.status === 'REFUNDED' ? 'settled to the original payment method.' : 'on its way back to the original payment method and normally lands in 3 to 5 working days.') : '')
+          + (ref ? 'Your refund of ₹' + ref.amount + ' is ' + (ref.status === 'REFUNDED'
+              ? 'settled to the original payment method.'
+              : 'on its way back to the original payment method and normally lands in 3 to 5 working days.') : '')
           + ' Your passes for this trip no longer scan.',
         accent: '#8A2F1C', bg: '#FFF9F7', bd: 'rgba(163,58,34,.3)', pulse: false, hasAction: true,
         actionLabel: 'Rebook another departure', actionHref: './DLT Booking.dc.html',
       });
     }
 
-    /* rows for the chosen filter */
-    const list = all.filter(b => b.bucket === st.filter);
+    /* ---- rows for the chosen filter ---- */
+    const list = all.filter(b => this._bucket(b) === st.filter);
     const rows = list.map(b => {
-      const canRate = DLT.reviews.canRate(b.id);
-      const refunded = b.refunds.some(r => r.status === 'REFUNDED');
-      const refundPending = b.refunds.some(r => r.status === 'REFUND_PENDING');
-      const status = b.status === 'CONFIRMED' && b.bucket === 'Upcoming' ? 'Confirmed'
+      const bucket = this._bucket(b);
+      const refunds = b.refunds || [];
+      const refunded = refunds.some(r => r.status === 'REFUNDED');
+      const refundPending = refunds.some(r => r.status === 'REFUND_PENDING');
+      const status = b.status === 'CONFIRMED' && bucket === 'Upcoming' ? 'Confirmed'
         : b.status === 'PAYMENT_PENDING' ? 'Payment pending'
         : b.status === 'PAYMENT_HELD' ? 'Payment held'
         : b.status === 'BOOKING_PROCESSING' ? 'Processing'
-        : b.status === 'CANCELLED_BY_DLT' ? (refunded ? 'Refunded ₹' + b.refunds[0].amount : 'Refund pending')
-        : b.status === 'CANCELLED_BY_STUDENT' ? (refunded ? 'Refunded ₹' + b.refunds[0].amount : refundPending ? 'Refund pending' : 'Cancelled')
-        : b.bucket === 'Completed' ? 'Completed' : b.status;
-      const boarded = b.passengers.filter(p => p.boardingStatus === 'BOARDED');
+        : b.status === 'CANCELLED_BY_DLT' ? (refunded ? 'Refunded ₹' + refunds[0].amount : 'Refund pending')
+        : b.status === 'CANCELLED_BY_STUDENT' ? (refunded ? 'Refunded ₹' + refunds[0].amount : refundPending ? 'Refund pending' : 'Cancelled')
+        : bucket === 'Completed' ? 'Completed' : b.status;
+      const boarded = (b.passengers || []).filter(p => p.boardingStatus === 'BOARDED');
       const meta = [
-        'Seats ' + b.passengers.map(p => p.seatNumber).join(', '),
+        'Seats ' + (b.passengers || []).map(p => p.seatNumber).join(', '),
         b.code,
-        boarded.length ? 'boarded ' + DLT.fmt.time(boarded[0].boardedAt)
-          : b.bucket === 'Completed' ? 'not boarded' : null,
+        boarded.length && boarded[0].boardedAt ? 'boarded ' + DLT.fmt.time(boarded[0].boardedAt)
+          : bucket === 'Completed' ? 'not boarded' : null,
       ].filter(Boolean).join(' · ');
-      const action = canRate.allowed ? 'Rate trip'
-        : b.bucket === 'Upcoming' && b.status === 'CONFIRMED' ? 'Boarding pass'
-        : b.bucket === 'Upcoming' ? 'Track payment' : 'View receipt';
+      /* Rating is deferred: there is no reviews endpoint, so no "Rate trip". */
+      const action = bucket === 'Upcoming' && b.status === 'CONFIRMED' ? 'Boarding pass'
+        : bucket === 'Upcoming' ? 'Track payment' : 'View receipt';
       const primary = action === 'Boarding pass';
       return {
         time: DLT.fmt.time(b.trip.departureAt), date: DLT.fmt.date(b.trip.departureAt),
@@ -582,33 +698,38 @@ class Component extends DCLogic {
         actionFg: primary ? '#F7F5F0' : '#0E1014',
         actionBd: primary ? '#0E1014' : 'rgba(14,16,20,.2)',
         onAction: () => {
-          if (action === 'Rate trip') this.setState({ rateBookingId: b.id, rating: 0, rateText: '' });
-          else if (action === 'View receipt') this.setState({ activeBookingId: b.id, receiptOpen: true, paxIndex: 0 });
-          else this.setState({ activeBookingId: b.id, passOpen: true, paxIndex: 0, receiptOpen: false });
+          if (action === 'View receipt') this.setState({ activeBookingId: b.id, receiptOpen: true, cancelOpen: false, paxIndex: 0 });
+          else this.setState({ activeBookingId: b.id, passOpen: true, paxIndex: 0, receiptOpen: false, cancelOpen: false });
         },
       };
     });
 
-    /* passes */
+    /* ---- passes ---- */
     const passes = this._passes();
     const idx = Math.min(st.paxIndex, Math.max(0, passes.length - 1));
     const p = passes[idx] || null;
     const passable = !!active && passes.length > 0;
 
-    /* receipt */
+    /* ---- receipt, composed from the booking the server already returned ----
+       M-2/M-3 put paidAt and the refund ROWS on that response, so there is no
+       separate receipt endpoint and nothing is recomputed here. */
     let receipt = null;
     if (st.receiptOpen && active) {
-      try { receipt = DLT.payments.receipt(active.id); } catch (e) { receipt = null; }
+      const pay = active.payment || null;
+      receipt = {
+        bookingCode: active.code,
+        issuedAt: active.createdAt,
+        seats: (active.passengers || []).map(x => x.seatNumber),
+        unitPrice: active.unitPrice,
+        amount: active.totalAmount,
+        paymentStatus: pay ? pay.status : 'NONE',
+        paidAt: pay ? pay.paidAt : null,
+        providerReference: pay ? pay.reference : null,
+        refunds: active.refunds || [],
+      };
     }
 
-    /* cancellation quote */
-    let quote = null;
-    if (st.cancelOpen && active) {
-      const sel = Object.keys(st.cancelSel).filter(k => st.cancelSel[k]);
-      try { quote = DLT.bookings.cancellationQuote(active.id, sel.length ? sel : null); } catch (e) { quote = null; }
-    }
-
-    const rateBooking = st.rateBookingId ? all.find(b => b.id === st.rateBookingId) : null;
+    const quote = st.cancelOpen && active ? st.data.quote : null;
 
     return {
       signedIn: true, signedOut: false,
@@ -620,63 +741,50 @@ class Component extends DCLogic {
       })(),
       headline: upcoming
         ? (upcoming.status === 'CONFIRMED'
-          ? upcoming.passengers.length + (upcoming.passengers.length === 1 ? ' seat' : ' seats') + ' on the ' +
+          ? (upcoming.passengers || []).length + ((upcoming.passengers || []).length === 1 ? ' seat' : ' seats') + ' on the ' +
             DLT.fmt.relativeDay(upcoming.trip.departureAt) + ' ' + DLT.fmt.time(upcoming.trip.departureAt) + ' departure. Passes are ready.'
           : 'We are confirming a payment. Nothing else for you to do.')
         : openTrips.length ? 'No trips booked. ' + openTrips.length + ' departures are open on your route.'
         : 'No trips booked, and no departures are open right now.',
       notice: st.notice, error: st.error,
+      clearNotice: () => this.setState({ notice: null }),
+      clearError: () => this.setState({ error: null }),
       banners,
 
       hasUpcoming: !!upcoming, noUpcoming: !upcoming,
       emptyBlurb: openTrips.length
-        ? openTrips.length + ' departures are open on Woxsen → Miyapur at ₹' + (openTrips[0].price) + ' a seat. Your details are saved, so booking takes about a minute.'
+        ? openTrips.length + ' departures are open on Woxsen → Miyapur at ₹' + openTrips[0].price + ' a seat. Your details are saved, so booking takes about a minute.'
         : 'No departures are open yet. Ask to be notified and we will message you when bookings open.',
       upcomingCode: upcoming ? upcoming.code : '',
       countdown: upcoming ? DLT.fmt.relativeDay(upcoming.trip.departureAt) : '',
+      /* No Pickup row: the server has no pickup point to give. */
       upcomingFacts: upcoming ? [
         { k: 'Departs', v: DLT.fmt.when(upcoming.trip.departureAt) },
         { k: 'Report by', v: DLT.fmt.time(upcoming.trip.reportingAt) },
-        { k: 'Seats', v: upcoming.passengers.map(x => x.seatNumber).join(', ') },
-        { k: 'Pickup', v: upcoming.trip.pickupPoint },
+        { k: 'Seats', v: (upcoming.passengers || []).map(x => x.seatNumber).join(', ') },
+        { k: 'Booking', v: upcoming.code },
       ] : [],
       passCta: passes.length > 1 ? 'View boarding passes' : 'View boarding pass',
       cancelNote: upcoming ? (function () {
-        const cut = upcoming.trip.departureAt - 12 * 3600000;
+        const cut = new Date(upcoming.trip.departureAt).getTime() - 12 * 3600000;
         return Date.now() < cut
           ? 'Free cancellation until ' + DLT.fmt.dateTime(cut) + '. After that the fare is non-refundable.'
           : 'Inside 12 hours of departure, so the fare is no longer refundable.';
       })() : '',
 
-      openPass: () => this.setState({ passOpen: true, receiptOpen: false }),
-      openCancel: () => this.setState({ cancelOpen: true, cancelSel: {}, notice: null, error: null }),
-      closeCancel: () => this.setState({ cancelOpen: false, cancelSel: {} }),
+      openPass: () => this.setState({ passOpen: true, receiptOpen: false, cancelOpen: false }),
+      openCancel: this.openCancel,
+      closeCancel: () => this.setState({ cancelOpen: false }),
       cancelOpen: st.cancelOpen && !!active,
-      multiPax: !!active && active.passengers.length > 1,
-      cancelPax: active ? active.passengers
-        .filter(x => x.boardingStatus !== 'CANCELLED')
-        .map(x => ({
-          name: x.name, seat: x.seatNumber, price: active.trip.price,
-          on: !!st.cancelSel[x.id],
-          bd: st.cancelSel[x.id] ? 'rgba(14,75,52,.4)' : 'rgba(14,16,20,.16)',
-          bg: st.cancelSel[x.id] ? '#EEF3EE' : '#FCFBF8',
-          onToggle: () => this.setState({
-            cancelSel: Object.assign({}, st.cancelSel, { [x.id]: !st.cancelSel[x.id] }),
-          }),
-        })) : [],
-      quoteTitle: quote ? (quote.amount > 0
-        ? 'You\u2019d get ₹' + quote.amount + ' back'
-        : 'No refund is due') : '',
+      quoteTitle: quote ? (quote.amount > 0 ? 'You’d get ₹' + quote.amount + ' back' : 'No refund is due') : 'Checking the refund…',
       quoteReason: quote
-        ? quote.reason + (quote.whole ? ' Cancelling everyone ends the booking and releases every seat.'
-          : ' Only the passengers you tick are cancelled; the rest of the booking continues.')
-        : '',
+        ? ((quote.reason ? quote.reason + ' ' : '') + 'Cancelling ends the booking and releases every seat on it.')
+        : 'Asking the server what this cancellation would refund.',
       quoteFg: quote && quote.amount > 0 ? '#0E4B34' : '#8A5A0E',
       cancelCta: quote
-        ? (quote.whole ? 'Cancel the booking' : 'Cancel ' + quote.seats + (quote.seats === 1 ? ' passenger' : ' passengers'))
-          + (quote.amount > 0 ? ' · ₹' + quote.amount + ' refund' : ' · no refund')
+        ? 'Cancel the booking' + (quote.amount > 0 ? ' · ₹' + quote.amount + ' refund' : ' · no refund')
         : 'Cancel',
-      cancelDisabled: !quote,
+      cancelDisabled: !quote || st.busy,
       cancelBg: '#0E1014', cancelFg: '#F7F5F0',
       confirmCancel: this.confirmCancel,
 
@@ -694,9 +802,12 @@ class Component extends DCLogic {
         { k: 'Paid at', v: receipt.paidAt ? DLT.fmt.dateTime(receipt.paidAt) : '—', fg: '#0E1014' },
         { k: 'Reference', v: receipt.providerReference || '—', fg: '#0E1014' },
       ].concat(receipt.refunds.map((r, i) => ({
-        k: 'Refund ' + (i + 1), v: '₹' + r.amount + ' · ' + r.status, fg: r.status === 'REFUNDED' ? '#0E4B34' : '#8A5A0E',
+        k: 'Refund ' + (i + 1), v: '₹' + r.amount + ' · ' + r.status,
+        fg: r.status === 'REFUNDED' ? '#0E4B34' : '#8A5A0E',
       }))) : [],
-      receiptNote: receipt ? receipt.note : '',
+      receiptNote: receipt
+        ? 'Your record of what was charged and returned. Money moves through the acquirer; DLT never holds your card.'
+        : '',
 
       filters: ['Upcoming', 'Completed', 'Cancelled', 'Refunded'].map(f => ({
         label: f, on: st.filter === f, count: counts[f] ? '· ' + counts[f] : '',
@@ -709,24 +820,6 @@ class Component extends DCLogic {
       emptyCopy: st.filter === 'Upcoming'
         ? 'No upcoming trips. Bookings open a few days ahead.'
         : 'Nothing here yet — ' + st.filter.toLowerCase() + ' trips appear as they happen.',
-
-      rateOpen: !!rateBooking,
-      rateTripLabel: rateBooking ? DLT.fmt.when(rateBooking.trip.departureAt) : '',
-      stars: [1, 2, 3, 4, 5].map(n => ({
-        aria: n + (n > 1 ? ' stars' : ' star'), on: n === st.rating,
-        fg: n <= st.rating ? '#0E4B34' : '#C9C6BC',
-        onPick: () => this.setState({ rating: n }),
-      })),
-      rateLabel: ['Tap to rate', 'Poor', 'Below par', 'Fine', 'Good', 'Excellent'][st.rating],
-      rateText: st.rateText,
-      onRateText: e => this.setState({ rateText: e.target.value }),
-      submitRating: () => {
-        try {
-          DLT.reviews.submit(st.rateBookingId, st.rating, st.rateText);
-          this.setState({ rateBookingId: null, notice: 'Thanks — ' + st.rating + ' stars logged. Operations sees it with the trip report.', error: null });
-        } catch (e) { this.setState({ error: e.message || String(e) }); }
-      },
-      closeRate: () => this.setState({ rateBookingId: null }),
 
       openTripsLabel: openTrips.length
         ? '₹' + openTrips[0].price + ' · ' + openTrips.length + ' dates open' : 'No dates open',
@@ -759,10 +852,11 @@ class Component extends DCLogic {
           : p.boardingStatus === 'BOARDED' ? 'Already boarded — a second scan is refused'
           : 'Token ' + p.qrToken + ' · one scan')
         : '',
+      /* No Pickup: the server has none to give, so none is shown. */
       passFacts: p ? [
         { k: 'Route', v: p.route, fg: '#0E1014' },
         { k: 'Departs', v: DLT.fmt.when(p.departureAt), fg: '#0E1014' },
-        { k: 'Report by', v: DLT.fmt.time(p.reportingAt) + ' · ' + p.pickupPoint, fg: '#0E1014' },
+        { k: 'Report by', v: DLT.fmt.time(p.reportingAt), fg: '#0E1014' },
         { k: 'Coach', v: p.vehicle || '—', fg: '#0E1014' },
         { k: 'Booking', v: p.bookingCode, fg: '#0E1014' },
         { k: 'Boarding code', v: p.boardingCode, fg: '#0E1014' },
