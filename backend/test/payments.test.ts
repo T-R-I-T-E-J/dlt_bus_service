@@ -184,6 +184,36 @@ describe('booking creation', () => {
       contactPhone: '12345', idempotencyKey: 'k3',
       passengers: [{ seatNumber: '4B', name: 'Alice A', studentId: 'WU0001' }] }), /mobile/);
   });
+
+  /* THE REPRODUCED DEFECT, found under real failure-mode testing simulating a
+   * browser refresh mid-checkout: the client's in-memory idempotency key is
+   * lost on refresh, so a retry carries a DIFFERENT key against seats the
+   * SAME holder still legitimately holds. That is NOT the same-key replay
+   * case above — create_booking_from_holds let a second booking through,
+   * silently overwriting trip_seats.booking_id and orphaning the first.
+   * Reproduced live: two distinct booking codes, one seat. Fixed in
+   * migration 018: a seat already claimed by an existing PAYMENT_PENDING
+   * booking now refuses a second one, by name, rather than orphaning it. */
+  test('THE REPRODUCED DEFECT · a second booking with a NEW key on an already-booked-pending held seat is refused', async () => {
+    await q('SELECT hold_seat($1,$2,$3::uuid,NULL)', [TRIP, '5A', ALICE]);
+    const first = await pay.createBooking({
+      tripId: TRIP, holder: { userId: ALICE }, contactPhone: '9876543210',
+      idempotencyKey: 'refresh-key-A',
+      passengers: [{ seatNumber: '5A', name: 'Alice A', studentId: 'WU0001' }],
+    });
+    assert.equal(first.status, 'PAYMENT_PENDING');
+
+    await assert.rejects(pay.createBooking({
+      tripId: TRIP, holder: { userId: ALICE }, contactPhone: '9876543210',
+      idempotencyKey: 'refresh-key-B',   // a genuinely different key — not a replay
+      passengers: [{ seatNumber: '5A', name: 'Alice A', studentId: 'WU0001' }],
+    }), new RegExp(first.code));
+
+    const s = await seatOf('5A');
+    assert.equal(s.booking_id, first.id, 'the first booking must still own the seat');
+    const { rows } = await q('SELECT count(*)::int n FROM bookings WHERE id <> $1', [first.id]);
+    assert.equal(rows[0].n, 0, 'no orphaned second booking was created');
+  });
 });
 
 /* ================================================================= happy path */

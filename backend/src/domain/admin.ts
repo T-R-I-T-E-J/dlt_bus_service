@@ -488,10 +488,20 @@ export async function moveWaitlistToTop(entryId: string, reason: string, actor: 
     if (!e) throw new AppError('NOT_FOUND', 'Waitlist entry not found');
     if (e.status !== 'WAITING')
       throw new AppError('CONFLICT', `That entry is ${e.status.toLowerCase()}, not waiting`);
+    /* Same race joinWaitlist had (seats.ts): reading min(position) with no
+     * lock lets two concurrent reorders on the same trip compute the same
+     * "top" before either commits. Locking the trip row serialises them —
+     * the same technique used throughout this file for trip mutations. */
+    await c.query('SELECT id FROM trips WHERE id=$1 FOR UPDATE', [e.trip_id]);
     const { rows: [min] } = await c.query(
       'SELECT COALESCE(min(position),1) - 1 AS top FROM waitlist_entries WHERE trip_id=$1', [e.trip_id]);
-    await c.query('UPDATE waitlist_entries SET position=$2, updated_at=now() WHERE id=$1',
-      [entryId, min.top]);
+    try {
+      await c.query('UPDATE waitlist_entries SET position=$2, updated_at=now() WHERE id=$1',
+        [entryId, min.top]);
+    } catch (err: any) {
+      if (err.code === '23505') throw new AppError('CONFLICT', 'Could not reorder the waitlist — try again.');
+      throw err;
+    }
     await audit(c, actor, 'waitlist.reordered', 'waitlist_entry', entryId,
       `position ${e.position}`, `position ${min.top}`, why);
     return { position: min.top };

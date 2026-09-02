@@ -465,6 +465,32 @@ describe('waitlist (F-02)', () => {
     await assert.rejects(q('SELECT hold_seat($1,$2,$3::uuid,NULL)', [TRIP, '2B', BOB]));
   });
 
+  /* CONCURRENCY DEFECT found under real HTTP load-testing (10-20 concurrent
+   * joins on one trip): joinWaitlist's position read (SELECT max(position)+1,
+   * no lock) let two transactions compute and insert the same "next" before
+   * either committed. Reproduced live: 3 of 5 concurrent joins on one trip
+   * landed on position 1. Fixed in domain/seats.ts (a FOR UPDATE lock on the
+   * trip row, serialising joins per trip) with waitlist_position_unique_per_trip
+   * (migration 017) as a backstop. This pins both down so neither can regress
+   * silently — position is a real ordering guarantee students are shown
+   * ("you are #3"), even though offer_seat_to_waitlist's own
+   * ORDER BY (position, created_at) FOR UPDATE SKIP LOCKED meant this was
+   * never a seat-safety defect, only a display/fairness one. */
+  test('THE REPRODUCED DEFECT · many concurrent joins never collide on position', async () => {
+    const n = 12;
+    const ids: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const { rows: [u] } = await q(
+        `INSERT INTO users (email,name,role,phone) VALUES ($1,$2,'STUDENT','9876543210') RETURNING id`,
+        [`wlrace${i}@woxsen.edu.in`, `WL Race ${i}`]);
+      ids.push(u.id);
+    }
+    const entries = await Promise.all(ids.map((userId) => seats.joinWaitlist(TRIP, userId, 1)));
+    const positions = entries.map((e) => e.position).sort((a, b) => a - b);
+    assert.deepEqual(positions, Array.from({ length: n }, (_, i) => i + 1),
+      'every concurrent joiner must land on a distinct, sequential position');
+  });
+
   test('the offered student claims it and gets a normal basket', async () => {
     await fillTrip();
     const e = await wl(ALICE, 1);

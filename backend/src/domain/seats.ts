@@ -336,9 +336,21 @@ export interface WaitlistView {
   seatsWanted: number; offerExpiresAt: string | null; seatNumber: string | null;
 }
 
+/* CONCURRENCY DEFECT found under real load-testing (10-20 concurrent joins on
+ * one trip): the position read below was a plain SELECT with no lock, so two
+ * transactions could both read the same max(position) before either COMMITted
+ * their INSERT — both compute the same "next", both insert it, both commit.
+ * Reproduced live: 3 of 5 concurrent joins on one trip landed on position 1.
+ * `SELECT ... trips ... FOR UPDATE` below serialises joinWaitlist per trip —
+ * the same technique setTripStatus/cancelTrip/publishTrip already use in
+ * domain/admin.ts for exactly this class of problem — so the second
+ * transaction's max(position) read cannot start until the first has
+ * committed. waitlist_position_unique_per_trip (migration 017) is the
+ * backstop matching this file's own stated philosophy elsewhere ("the unique
+ * index is a real backstop") — belt AND suspenders, not either/or. */
 export async function joinWaitlist(tripId: string, userId: string, seatsWanted = 1): Promise<WaitlistView> {
   return tx(async (c) => {
-    const { rows: [t] } = await c.query('SELECT status FROM trips WHERE id = $1', [tripId]);
+    const { rows: [t] } = await c.query('SELECT status FROM trips WHERE id = $1 FOR UPDATE', [tripId]);
     if (!t) throw new AppError('NOT_FOUND', 'That departure does not exist');
     if (t.status !== 'OPEN') throw new AppError('INVALID', 'That departure is not taking bookings');
 
@@ -353,7 +365,10 @@ export async function joinWaitlist(tripId: string, userId: string, seatsWanted =
       return { id: e.id, tripId, status: e.status, position: e.position,
         seatsWanted: e.seats_wanted, offerExpiresAt: null, seatNumber: null };
     } catch (e: any) {
-      if (e.code === '23505') throw new AppError('CONFLICT', 'You are already on the waitlist for this departure');
+      if (e.code === '23505' && e.constraint === 'waitlist_one_active_per_user_per_trip')
+        throw new AppError('CONFLICT', 'You are already on the waitlist for this departure');
+      if (e.code === '23505' && e.constraint === 'waitlist_position_unique_per_trip')
+        throw new AppError('CONFLICT', 'Could not join the waitlist — try again.');
       throw e;
     }
   });
