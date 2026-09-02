@@ -32,7 +32,7 @@
     [data-m="nav"] { flex-direction: row !important; flex-wrap: wrap !important; }
   }
 </style>
-<script src="./dlt-store.js"></script>
+<script type="module" src="./dlt-client.js"></script>
 <!-- QR decoding only. It never decides anything: DLT.boarding.scan remains the
      authority for pass, booking, payment, trip, cancellation, refund and prior
      boarding. Native BarcodeDetector is used where the browser has it (Chromium,
@@ -1080,8 +1080,27 @@
    demands a reason where the specification demands one, and writes the audit
    entry. Nothing here is a message-only stub. */
 class Component extends DCLogic {
+  /* Migrated off dlt-store.js onto the real backend through dlt-client.js,
+   * same architecture as Booking/Dashboard/Account: DLT.boot() once, every
+   * server read lands in state.data through explicit async loaders, and
+   * renderVals() stays pure — it reads state.data, it never calls DLT.
+   *
+   * Where the prototype's console differs from those three: it has twelve
+   * sections, most with their own server data, so there is no single _load().
+   * _loadCore() fetches what many sections share (every trip, the vehicle
+   * list, staff); _loadSection(name) fetches what one section alone needs,
+   * called on mount and whenever the nav changes section; mutating actions
+   * reload whichever section(s) their result affects rather than trusting
+   * client-computed state to still be right. */
   state = {
-    ready: false, tick: 0, section: 'Dashboard', toast: null, toastKind: 'ok',
+    ready: false, section: 'Dashboard', toast: null, toastKind: 'ok',
+    data: {
+      allTrips: null, vehicles: null, staff: null, routes: null,
+      dashboard: null, bookingList: [], booking: null, seatMap: null,
+      manifest: null, scannerTrip: null, payments: null, students: null,
+      reviews: null, requests: null, waitlist: null, auditRows: null,
+    },
+    loading: {}, loadError: null,
     bkTab: 'Overview', bookingId: null, query: '', adminReason: '',
     boardTripId: null, manualToken: '', manifestQuery: '', scan: null, choose: null,
     cameraOn: false, cameraSupported: false, cameraError: null, engine: null,
@@ -1100,22 +1119,202 @@ class Component extends DCLogic {
   };
 
   async componentDidMount() {
-    await DLT.ready;
-    this._unsub = DLT.subscribe(() => this.setState({ tick: this.state.tick + 1 }));
-    this._timer = setInterval(() => this.setState({ tick: this.state.tick + 1 }), 6000);
-    const supported = typeof window.BarcodeDetector === 'function' || typeof window.jsQR === 'function';
+    try { await DLT.boot(); } catch (e) { /* offline: renders signed-out */ }
     const d = new Date(); d.setDate(d.getDate() + 7);
-    this.setState({ ready: true, cameraSupported: supported,
-      ntDate: d.toISOString().slice(0, 10) });
+    const supported = typeof window.BarcodeDetector === 'function' || typeof window.jsQR === 'function';
+    this.setState({ ready: true, cameraSupported: supported, ntDate: d.toISOString().slice(0, 10) });
+
+    const me = DLT.auth.current();
+    if (!me || me.role === 'STUDENT') return;
+    const section = me.role === 'BOARDING_STAFF' && !DLT.can(me.role, 'trip.read') ? 'Boarding' : 'Dashboard';
+    this.setState({ section });
+    await this._loadCore();
+    await this._loadSection(section);
   }
   componentWillUnmount() {
-    if (this._unsub) this._unsub();
-    clearInterval(this._timer);
     this._stopCamera();
+    clearTimeout(this._searchDebounce);
   }
 
   ok = (msg) => this.setState({ toast: msg, toastKind: 'ok' });
   bad = (e) => this.setState({ toast: (e && e.message) || String(e), toastKind: 'bad' });
+  _busy = (key, val) => this.setState({ loading: { ...this.state.loading, [key]: val } });
+  _patch = (patch) => this.setState({ data: { ...this.state.data, ...patch } });
+
+  /* ---- data every section (or several) can need: every trip, vehicles,
+     staff, routes. Loaded once on mount, reloaded after whichever mutating
+     action could change what they show. ---- */
+  async _loadCore() {
+    const me = DLT.auth.current();
+    if (!me) return;
+    await Promise.all([
+      this._reloadTrips(),
+      DLT.can(me.role, 'vehicle.read')
+        ? DLT.admin.vehicles().then((v) => this._patch({ vehicles: v })).catch((e) => this.bad(e))
+        : Promise.resolve(),
+      DLT.can(me.role, 'staff.assign')
+        ? DLT.admin.staff().then((v) => this._patch({ staff: v })).catch((e) => this.bad(e))
+        : Promise.resolve(),
+    ]);
+  }
+  async _reloadTrips() {
+    const me = DLT.auth.current();
+    if (!me || !DLT.can(me.role, 'trip.read')) return;
+    this._busy('trips', true);
+    try {
+      const [trips, routes] = await Promise.all([DLT.admin.listAllTrips(), DLT.admin.routes()]);
+      this._patch({ allTrips: trips, routes });
+    } catch (e) { this.bad(e); } finally { this._busy('trips', false); }
+  }
+
+  /* ---- one section's own data, on mount and on every nav switch ---- */
+  async _loadSection(section) {
+    const me = DLT.auth.current();
+    if (!me) return;
+    const can = (a) => DLT.can(me.role, a);
+    this._busy(section, true);
+    try {
+      if (section === 'Dashboard' && can('trip.read')) {
+        this._patch({ dashboard: await DLT.admin.dashboard() });
+      } else if (section === 'Boarding') {
+        await this._loadBoarding();
+      } else if (section === 'Bookings' && can('booking.read')) {
+        await this._searchBookings(true);
+      } else if (section === 'Payments' && can('payment.admin')) {
+        this._patch({ payments: await DLT.admin.payments() });
+      } else if (section === 'Students' && can('student.read')) {
+        this._patch({ students: await DLT.admin.students() });
+      } else if (section === 'Feedback' && can('feedback.read')) {
+        this._patch({ reviews: await DLT.admin.reviews() });
+      } else if (section === 'Requests' && can('notification.read')) {
+        this._patch({ requests: await DLT.admin.requests() });
+      } else if (section === 'Waitlist' && can('waitlist.read')) {
+        await this._loadWaitlist();
+      } else if (section === 'Audit' && can('audit.read')) {
+        this._patch({ auditRows: (await DLT.admin.audit({ limit: 60 })).entries });
+      }
+    } catch (e) { this.bad(e); } finally { this._busy(section, false); }
+  }
+
+  _go = (section) => {
+    this.setState({ section, toast: null });
+    this._loadSection(section);
+  };
+
+  /* ---- boarding: scanner context / manifest ---- */
+  _tripIdFor(me, st) {
+    if (me.role === 'BOARDING_STAFF') {
+      const t = st.data.scannerTrip;
+      return t && t.assigned ? t.trip.id : null;
+    }
+    if (st.boardTripId) return st.boardTripId;
+    const trips = st.data.allTrips || [];
+    const t = trips.find((t) => t.status === 'BOARDING')
+      || trips.find((t) => t.status === 'BOOKING_CLOSED')
+      || trips.find((t) => t.status === 'OPEN');
+    return t ? t.id : null;
+  }
+  async _loadBoarding() {
+    const me = DLT.auth.current();
+    let scannerTrip = this.state.data.scannerTrip;
+    if (me.role === 'BOARDING_STAFF' && !scannerTrip) {
+      scannerTrip = await DLT.boarding.context();
+      this._patch({ scannerTrip });
+    }
+    const tripId = this._tripIdFor(me, { ...this.state, data: { ...this.state.data, scannerTrip } });
+    if (!tripId) { this._patch({ manifest: { trip: null, counts: null, passengers: [] } }); return; }
+    const manifest = await DLT.boarding.manifest(tripId);
+    this._patch({ manifest });
+  }
+
+  async _loadWaitlist() {
+    const trips = this.state.data.allTrips || [];
+    const wlTrips = trips.filter((t) => ['OPEN', 'BOOKING_CLOSED'].includes(t.status));
+    const id = this.state.wlTripId || (wlTrips.find((t) => t.waitlistCount) || wlTrips[0] || {}).id || null;
+    if (id && id !== this.state.wlTripId) this.setState({ wlTripId: id });
+    if (!id) { this._patch({ waitlist: [] }); return; }
+    this._patch({ waitlist: await DLT.admin.waitlist(id) });
+  }
+
+  /* ---- bookings: debounced search-as-you-type, then the drill-down ---- */
+  async _searchBookings(force) {
+    const q = this.state.query.trim();
+    clearTimeout(this._searchDebounce);
+    const run = async () => {
+      try {
+        const list = q.length >= 3 ? await DLT.admin.bookings({ q, limit: 20 }) : await DLT.admin.bookings({ limit: 12 });
+        this._patch({ bookingList: list });
+        const id = this.state.bookingId || (list[0] && list[0].id) || null;
+        if (id) await this._loadBooking(id);
+        else this._patch({ booking: null });
+      } catch (e) { this.bad(e); }
+    };
+    if (force) return run();
+    this._searchDebounce = setTimeout(run, 300);
+  }
+  async _loadBooking(id) {
+    try {
+      const booking = await DLT.admin.bookingDetail(id);
+      this._patch({ booking, bookingQuote: null });
+      if (DLT.auth.current().role === 'SUPER_ADMIN') {
+        try { this._patch({ bookingQuote: await DLT.bookings.cancellationQuote(id) }); }
+        catch (e) { /* non-fatal — the override panel just shows ₹0 until it loads */ }
+      }
+    } catch (e) { this.bad(e); }
+  }
+
+  /* ---- vehicles, seats: save/block/unblock, then reload what changed ---- */
+  async _saveVehicle(patch, okMsg) {
+    try {
+      const v = await DLT.admin.saveVehicle(patch);
+      this.setState({ vehicleFormOpen: false, vfId: null, vfName: '', vfReg: '', vfRows: 11, vfStatus: 'AVAILABLE' });
+      this.ok(okMsg || (v.name + ' saved · ' + v.registration + ' · ' + v.capacity + ' seats · ' + v.status.toLowerCase() + '. Audit logged.'));
+      await this._loadCore();
+    } catch (e) { this.bad(e); }
+  }
+  async _loadSeatMap(tripId) {
+    try { const r = await DLT.trips.seatMap(tripId); this._patch({ seatMap: r.rows }); }
+    catch (e) { this.bad(e); }
+  }
+  async _blockSeat(tripId, seat, reason) {
+    try {
+      const r = await DLT.admin.blockSeat(tripId, seat, reason);
+      this.ok('Seat ' + r.seatNumber + ' blocked — ' + r.reason + '. Audit logged.');
+      await this._loadSeatMap(tripId); await this._reloadTrips();
+    } catch (e) { this.bad(e); }
+  }
+  async _unblockSeat(tripId, seat) {
+    try {
+      const r = await DLT.admin.unblockSeat(tripId, seat);
+      this.ok('Seat ' + r.seatNumber + ' released back on sale. Audit logged.');
+      await this._loadSeatMap(tripId); await this._reloadTrips();
+    } catch (e) { this.bad(e); }
+  }
+
+  /* ---- reports: fetched on demand, per button, never for a live badge —
+     the prototype recomputed every kind's row count on every render (F-21's
+     own complaint about doing this client-side); this fetches one kind, once,
+     when its button is actually clicked. ---- */
+  async _runReport(kind, label, filter) {
+    try {
+      const raw = await DLT.admin.report(kind, filter);
+      const rows = Array.isArray(raw) ? raw : ((raw && raw.rows) || []);
+      this.setState({ preview: { kind, label, rows }, toast: null });
+    } catch (e) { this.bad(e); }
+  }
+
+  /* ---- the reason prompt every audited action goes through ---- */
+  ask(title, blurb, cta, placeholder, run) {
+    this.setState({ prompt: { title, blurb, cta, placeholder, run }, reasonValue: '' });
+  }
+  confirmReason = async () => {
+    const p = this.state.prompt;
+    if (!p) return;
+    try {
+      await p.run(this.state.reasonValue);
+      this.setState({ prompt: null, reasonValue: '' });
+    } catch (e) { this.bad(e); }
+  };
 
   /* ---- camera scanning. Two decoders, one validation chain ---- */
   _decoder() {
@@ -1183,99 +1382,76 @@ class Component extends DCLogic {
     this._stream = null;
   }
 
-  _doScan(code, passengerId) {
+  /* §Boarding 5 — staff are scoped server-side to their assigned trip
+     regardless of what this sends; boarding.scan discards tripId for them.
+     This is only for the console's own display and for ops/super, who may
+     scope a desk scan explicitly. */
+  async _doScan(code, passengerId) {
+    const me = DLT.auth.current();
+    const tripId = this._tripIdFor(me, this.state);
     try {
-      const res = DLT.boarding.scan(code, this._tripId(), passengerId);
+      const res = await DLT.boarding.scan({ code, tripId, passengerId });
       if (res.result === 'CHOOSE') {
         this.setState({ scan: res, choose: res, manualToken: code });
         return;
       }
       this.setState({ scan: res, choose: null, manualToken: '' });
+      await this._loadBoarding();
     } catch (e) { this.bad(e); }
   }
-
-  _tripId() {
-    /* §Boarding 5 — staff are scoped to the trip operations assigned them; the
-       store enforces it, and the console must not pretend otherwise. */
-    const me = DLT.auth.current();
-    if (me && me.role === 'BOARDING_STAFF') {
-      const t = DLT.boarding.assignedTrip();
-      return t ? t.id : null;
-    }
-    if (this.state.boardTripId) return this.state.boardTripId;
-    const trips = DLT.trips.listAll();
-    const t = trips.find(t => t.status === 'BOARDING')
-      || trips.find(t => t.status === 'BOOKING_CLOSED')
-      || trips.find(t => t.status === 'OPEN');
-    return t ? t.id : null;
-  }
-
-  /* ---- the reason prompt every audited action goes through ---- */
-  ask(title, blurb, cta, placeholder, run) {
-    this.setState({ prompt: { title, blurb, cta, placeholder, run }, reasonValue: '' });
-  }
-  confirmReason = () => {
-    const p = this.state.prompt;
-    if (!p) return;
-    try {
-      p.run(this.state.reasonValue);
-      this.setState({ prompt: null, reasonValue: '' });
-    } catch (e) { this.bad(e); }
-  };
 
   renderVals() {
     const st = this.state;
-    if (!st.ready) {
-      return { signedIn: false, signedOut: false, nav: [], roleName: '—', roleScope: 'Loading',
-        metrics: [], alerts: [], activity: [], tripRows: [], bkTabs: [], bkFacts: [],
-        bkPassengers: [], payFacts: [], bkTrail: [], boardList: [], payRows: [],
-        payFilters: [], auditRows: [], vehicles: [], students: [], reviews: [],
-        requests: [], wlRows: [], reportButtons: [], postTripRows: [], validLines: [],
-        previewRows: [], previewCols: [], vehicleOptions: [], boardTripOptions: [],
-        wlTripOptions: [], repTripOptions: [], results: [] };
-    }
+    const EMPTY = { signedIn: false, signedOut: false, nav: [], roleName: '—', roleScope: 'Loading',
+      metrics: [], alerts: [], activity: [], tripRows: [], bkTabs: [], bkFacts: [],
+      bkPassengers: [], payFacts: [], bkTrail: [], boardList: [], payRows: [],
+      payFilters: [], auditRows: [], vehicles: [], students: [], reviews: [],
+      requests: [], wlRows: [], reportButtons: [], postTripRows: [], validLines: [],
+      previewRows: [], previewCols: [], vehicleOptions: [], boardTripOptions: [],
+      wlTripOptions: [], repTripOptions: [], results: [] };
+    if (!st.ready) return EMPTY;
 
     const me = DLT.auth.current();
     if (!me || me.role === 'STUDENT') {
-      return { signedIn: false, signedOut: true, nav: [], roleName: me ? me.name : '—',
+      return { ...EMPTY, signedOut: true, roleName: me ? me.name : '—',
         roleScope: me ? 'Student account — no operations access' : 'Not signed in',
-        signOut: () => { DLT.auth.signOut(); this.setState({ tick: st.tick + 1 }); },
-        metrics: [], alerts: [], activity: [], tripRows: [], bkTabs: [], bkFacts: [],
-        bkPassengers: [], payFacts: [], bkTrail: [], boardList: [], payRows: [],
-        payFilters: [], auditRows: [], vehicles: [], students: [], reviews: [],
-        requests: [], wlRows: [], reportButtons: [], postTripRows: [], validLines: [],
-        previewRows: [], previewCols: [], vehicleOptions: [], boardTripOptions: [],
-        wlTripOptions: [], repTripOptions: [], results: [] };
+        signOut: () => { DLT.auth.signOut().then(() => this.setState({})); } };
     }
 
     const isSuper = me.role === 'SUPER_ADMIN';
     const isStaff = me.role === 'BOARDING_STAFF';
     const allow = (a) => DLT.can(me.role, a);
+    const d = st.data;
+    const allTrips = d.allTrips || [];
+    const vehiclesRaw = d.vehicles || [];
+    const staffAccounts = d.staff || [];
+    const routes = d.routes || [];
 
-    /* navigation reflects real permissions */
+    /* navigation reflects real, server-verified permissions (DLT.can, backed
+       by role_permissions via /auth/me — never a client-side table). Payments
+       stays payment.admin, Super Admin only, matching the section's own
+       stated policy; Audit is audit.read, which role_permissions actually
+       grants to OPS_ADMIN too — narrower than the prototype's client-only
+       Super-gate on both, and the real permission wins (see the report). */
     const sections = [
       ['Dashboard', 'trip.read'], ['Trips', 'trip.read'], ['Vehicles', 'vehicle.read'],
       ['Bookings', 'booking.read'], ['Boarding', 'boarding.read'], ['Waitlist', 'waitlist.read'],
       ['Students', 'student.read'], ['Feedback', 'feedback.read'], ['Requests', 'notification.read'],
-      ['Payments', '*'], ['Reports', 'report.read'], ['Audit', '*'],
+      ['Payments', 'payment.admin'], ['Reports', 'report.read'], ['Audit', 'audit.read'],
     ].filter(([, perm]) => allow(perm));
     const section = sections.some(([s]) => s === st.section) ? st.section
-      : (isStaff ? 'Boarding' : 'Dashboard');
+      : (sections[0] ? sections[0][0] : 'Dashboard');
 
-    let dash = null;
-    try { dash = DLT.admin.dashboard(); } catch (e) { dash = null; }
-    const allTrips = DLT.trips.listAll();
+    const dash = d.dashboard;
     const badge = {};
     if (dash) {
       badge.Boarding = dash.boarded + '/' + dash.passengers;
-      const pend = (function () { try { return DLT.admin.payments('Pending').length + DLT.admin.payments('Discrepancy').length + DLT.admin.payments('Duplicate').length; } catch (e) { return 0; } })();
-      if (pend) badge.Payments = String(pend);
       const drafts = allTrips.filter(t => t.status === 'DRAFT').length;
       if (drafts) badge.Trips = drafts + ' draft';
-      try {
-        const open = DLT.notifications.list().filter(n => n.status === 'PENDING').length;
-        if (open) badge.Requests = String(open);
-      } catch (e) {}
+    }
+    if (d.requests) {
+      const open = d.requests.filter(r => r.status === 'PENDING').length;
+      if (open) badge.Requests = String(open);
     }
 
     const nav = sections.map(([s]) => ({
@@ -1284,14 +1460,14 @@ class Component extends DCLogic {
       fg: section === s ? '#F7F5F0' : '#C3C8BE',
       weight: section === s ? 600 : 500,
       badge: badge[s] || '', badgeFg: s === 'Payments' ? '#DFA85C' : '#A9AFA6',
-      onPick: () => this.setState({ section: s, toast: null }),
+      onPick: () => this._go(s),
     }));
 
     /* ---------- boarding ---------- */
-    const tripId = this._tripId();
-    const boardTrip = tripId ? DLT.trips.get(tripId) : null;
-    let manifest = [];
-    try { manifest = tripId ? DLT.boarding.manifest(tripId) : []; } catch (e) { manifest = []; }
+    const tripId = this._tripIdFor(me, st);
+    const manifestData = d.manifest || { trip: null, counts: null, passengers: [] };
+    const boardTripInfo = manifestData.trip;
+    const manifest = manifestData.passengers || [];
     const q = st.manifestQuery.trim().toLowerCase();
     const filteredManifest = manifest.filter(p => !q ||
       (p.name + ' ' + p.studentId + ' ' + p.seatNumber).toLowerCase().indexOf(q) >= 0);
@@ -1303,252 +1479,212 @@ class Component extends DCLogic {
       : ['#8A2A18', '#FFF1ED'];
 
     /* ---------- bookings ---------- */
-    let bookingList = [];
-    if (allow('booking.read')) {
-      try { bookingList = st.query.trim().length >= 3 ? DLT.admin.search(st.query) : DLT.admin.bookings({ limit: 12 }); }
-      catch (e) { bookingList = []; }
-    }
-    const booking = bookingList.find(b => b.id === st.bookingId) || bookingList[0] || null;
-    let trail = [];
-    if (booking && isSuper) {
-      try {
-        trail = DLT.admin.audit({ limit: 200 })
-          .filter(a => a.entity && a.entity.indexOf(booking.id.slice(0, 12)) >= 0)
-          .slice(0, 12);
-      } catch (e) {}
-    }
+    const bookingList = d.bookingList || [];
+    const booking = d.booking || null;
 
-    /* ---------- payments ---------- */
+    /* ---------- payments (Super Admin only — see domain/admin.ts's
+       listPaymentsForReconciliation for why there is no Discrepancy bucket
+       or accept/refund choice: the webhook processor already refunds an
+       amount mismatch or a duplicate payment automatically, in full) ---- */
     let payRows = [], payCounts = {};
-    if (isSuper) {
-      try {
-        const all = DLT.admin.payments();
-        all.forEach(r => { payCounts[r.bucket] = (payCounts[r.bucket] || 0) + 1; });
-        payRows = all.filter(r => st.payFilter === 'All' || r.bucket === st.payFilter);
-      } catch (e) {}
+    const bucketOf = (r) => {
+      if (r.status === 'SUCCESS') return (r.refunds || []).some(x => x.status !== 'REFUND_FAILED') ? 'Refunded' : 'Successful';
+      if (r.status === 'PENDING' || r.status === 'CREATED') return 'Pending';
+      if (r.status === 'FAILED' || r.status === 'CANCELLED') return 'Failed';
+      if (r.status === 'DUPLICATE') return 'Duplicate';
+      if (r.status === 'NOT_APPLICABLE') return 'Manual/external';
+      return r.status;
+    };
+    if (isSuper && d.payments) {
+      d.payments.forEach(r => { const b = bucketOf(r); payCounts[b] = (payCounts[b] || 0) + 1; });
+      payRows = d.payments.filter(r => st.payFilter === 'All' || bucketOf(r) === st.payFilter);
     }
 
     /* ---------- reports ---------- */
     const repFilter = {
       tripId: st.repTripId || null,
-      from: st.repFrom ? new Date(st.repFrom + 'T00:00:00').getTime() : null,
-      to: st.repTo ? new Date(st.repTo + 'T23:59:59').getTime() : null,
+      from: st.repFrom ? new Date(st.repFrom + 'T00:00:00').toISOString() : null,
+      to: st.repTo ? new Date(st.repTo + 'T23:59:59').toISOString() : null,
     };
-    const reportKinds = [
-      ['bookings', 'Bookings'], ['revenue', 'Revenue'], ['passengers', 'Passengers'],
-      ['occupancy', 'Occupancy'], ['manifest', 'Manifest'], ['boarding', 'Boarding'],
-      ['noshow', 'No-shows'],
-    ].concat(isSuper ? [['payments', 'Payments'], ['refunds', 'Refunds']] : []);
-    const reportButtons = reportKinds.map(([kind, label]) => {
-      let rows = 0;
-      try { rows = (DLT.admin.report(kind, repFilter) || []).length; } catch (e) { rows = 0; }
+    /* occupancy/manifest/payments/posttrip (dlt-store.js kinds) have no
+       server-side counterpart — see the report. 'trips' (real) covers most
+       of what 'occupancy' meant, and doubles as the post-trip summary below
+       when exactly one departure is selected and previewed. */
+    const REPORT_KINDS = [
+      ['bookings', 'Bookings'], ['revenue', 'Revenue'], ['trips', 'Trips'],
+      ['passengers', 'Passengers'], ['boarding', 'Boarding'], ['noshow', 'No-shows'],
+      ['waitlist', 'Waitlist'],
+    ].concat(isSuper ? [['refunds', 'Refunds']] : []);
+    const reportButtons = REPORT_KINDS.map(([kind, label]) => {
       const on = st.preview && st.preview.kind === kind;
       return {
-        label, rows: rows ? '· ' + rows : '· 0',
+        label, rows: on ? '· ' + st.preview.rows.length : '',
         bg: on ? '#0E1014' : 'transparent', fg: on ? '#F7F5F0' : '#0E1014',
         bd: on ? '#0E1014' : 'rgba(14,16,20,.2)',
-        onPick: () => {
-          try {
-            const data = DLT.admin.report(kind, repFilter) || [];
-            this.setState({ preview: { kind, label, rows: data }, toast: null });
-          } catch (e) { this.bad(e); }
-        },
+        onPick: () => this._runReport(kind, label, repFilter),
       };
     });
-    let post = null;
-    try { post = DLT.admin.report('posttrip', repFilter); } catch (e) {}
+    const post = (st.repTripId && st.preview && st.preview.kind === 'trips' && st.preview.rows.length === 1)
+      ? st.preview.rows[0] : null;
 
-    /* ---------- audit ---------- */
-    let auditRows = [];
-    if (isSuper) {
-      try {
-        auditRows = DLT.admin.audit({ q: st.auditQuery, limit: 60 }).map(a => ({
-          at: DLT.fmt.dateTime(a.at), actor: a.actor + ' · ' + a.actorRole,
-          action: a.text, reason: a.reason || '—',
-        }));
-      } catch (e) {}
-    }
+    /* ---------- audit — server-side filters are entityType/entityId/actorId/
+       action-prefix/date-range (readAudit), not the free substring across
+       actor+action+reason the console's copy describes; filtered client-side
+       over the already-fetched, already-authorized page instead. */
+    const auditRowsAll = (d.auditRows || []).map(a => ({
+      at: DLT.fmt.dateTime(a.occurredAt), actor: (a.actorName || 'system') + ' · ' + (a.actorRole || ''),
+      action: a.action + (a.entityType ? ' · ' + a.entityType : ''), reason: a.reason || '—',
+    }));
+    const auditQ = st.auditQuery.trim().toLowerCase();
+    const auditRows = !auditQ ? auditRowsAll
+      : auditRowsAll.filter(a => (a.actor + ' ' + a.action + ' ' + a.reason).toLowerCase().indexOf(auditQ) >= 0);
 
     /* ---------- vehicles ---------- */
-    let vehicles = [];
-    if (allow('vehicle.read')) {
-      try {
-        vehicles = DLT.admin.vehicles().map(v => ({
-          name: v.name, registration: v.registration, rows: v.rowCount, capacity: v.capacity,
-          status: v.status, assigned: v.assignedTrips,
-          next: v.nextTripAt ? DLT.fmt.date(v.nextTripAt) : '—',
-          statusFg: v.status === 'AVAILABLE' ? '#0E4B34' : v.status === 'MAINTENANCE' ? '#8A5A0E' : '#5F6560',
-          canEdit: allow('vehicle.write'),
-          actions: [{
-            label: 'Edit',
-            onPick: () => this.setState({ vehicleFormOpen: true, vfId: v.id, vfName: v.name,
-              vfReg: v.registration, vfRows: v.rowCount, vfStatus: v.status }),
-          }].concat((v.status === 'AVAILABLE'
-            ? [['Send to maintenance', 'MAINTENANCE'], ['Retire', 'INACTIVE']]
-            : [['Return to service', 'AVAILABLE']]).map(([label, status]) => ({
-            label,
-            onPick: () => {
-              try { DLT.admin.saveVehicle({ id: v.id, status }); this.ok(v.name + ' is now ' + status.toLowerCase() + '.'); }
-              catch (e) { this.bad(e); }
-            },
-          }))),
-        }));
-      } catch (e) {}
-    }
+    const vehicles = vehiclesRaw.map(v => ({
+      name: v.name, registration: v.registration, rows: v.rowCount, capacity: v.capacity,
+      status: v.status, assigned: v.openTrips, next: '—',
+      statusFg: v.status === 'AVAILABLE' ? '#0E4B34' : v.status === 'MAINTENANCE' ? '#8A5A0E' : '#5F6560',
+      canEdit: allow('vehicle.write'),
+      actions: [{
+        label: 'Edit',
+        onPick: () => this.setState({ vehicleFormOpen: true, vfId: v.id, vfName: v.name,
+          vfReg: v.registration, vfRows: v.rowCount, vfStatus: v.status }),
+      }].concat((v.status === 'AVAILABLE'
+        ? [['Send to maintenance', 'MAINTENANCE'], ['Retire', 'INACTIVE']]
+        : [['Return to service', 'AVAILABLE']]).map(([label, status]) => ({
+        label,
+        onPick: () => this._saveVehicle(
+          { id: v.id, name: v.name, registration: v.registration, rowCount: v.rowCount, status },
+          v.name + ' is now ' + status.toLowerCase() + '.'),
+      }))),
+    }));
 
     /* ---------- waitlist ---------- */
-    const wlTrips = allTrips.filter(t => ['OPEN', 'BOOKING_CLOSED'].indexOf(t.status) >= 0);
-    const wlTripId = st.wlTripId || (wlTrips.find(t => t.waitlistCount) || wlTrips[0] || {}).id || null;
-    let wlRows = [];
-    if (allow('waitlist.read') && wlTripId) {
-      try {
-        wlRows = DLT.waitlist.forTrip(wlTripId).map((w, i) => ({
-          pos: w.position, student: w.student, studentId: w.studentId || '—',
-          joined: DLT.fmt.dateTime(w.joinedAt), status: w.status.replace('_', ' '),
-          fg: w.status === 'CLAIM_OFFERED' ? '#8A5A0E' : w.status === 'WAITING' ? '#0E4B34' : '#5F6560',
-          canMove: allow('waitlist.reorder') && w.status === 'WAITING' && i > 0,
-          onMove: () => this.ask('Reorder the waitlist',
-            'Moving ' + w.student + ' to the top changes who is offered the next released seat. The original join time is preserved and this is written to the audit log.',
-            'Move to top', 'e.g. Medical appointment confirmed by the university',
-            (reason) => { DLT.waitlist.reorder(w.id, 1, reason); this.ok(w.student + ' moved to the top of the waitlist.'); }),
-        }));
-      } catch (e) {}
-    }
+    const wlTrips = allTrips.filter(t => ['OPEN', 'BOOKING_CLOSED'].includes(t.status));
+    const wlRows = (d.waitlist || []).map((w, i) => ({
+      pos: w.position, student: w.name, studentId: w.studentId || '—',
+      joined: DLT.fmt.dateTime(w.createdAt), status: String(w.status).replace('_', ' '),
+      fg: w.status === 'CLAIM_OFFERED' ? '#8A5A0E' : w.status === 'WAITING' ? '#0E4B34' : '#5F6560',
+      canMove: allow('waitlist.reorder') && w.status === 'WAITING' && i > 0,
+      onMove: () => this.ask('Reorder the waitlist',
+        'Moving ' + w.name + ' to the top changes who is offered the next released seat. The original join time is preserved and this is written to the audit log.',
+        'Move to top', 'e.g. Medical appointment confirmed by the university',
+        async (reason) => {
+          await DLT.admin.moveWaitlistToTop(w.id, reason);
+          this.ok(w.name + ' moved to the top of the waitlist.');
+          await this._loadWaitlist();
+        }),
+    }));
 
     /* ---------- students, feedback, requests ---------- */
-    let students = [];
-    if (allow('student.read')) {
-      try {
-        students = DLT.admin.students().map(s => ({
-          name: s.name, email: s.email, studentId: s.studentId || '—', phone: s.phone || '—',
-          bookings: s.bookings, verified: s.emailVerified ? 'Verified' : 'Unverified',
-          verifiedFg: s.emailVerified ? '#0E4B34' : '#8A5A0E',
-          canReveal: isSuper && s.emergencyContactAvailable,
-          onReveal: () => this.ask('Reveal an emergency contact',
-            'This is protected personal information. Your name, the reason and the time are written to the audit log.',
-            'Reveal contact', 'e.g. Passenger taken ill on the 17:30 departure',
-            (reason) => {
-              const c = DLT.admin.revealEmergencyContact(s.id, reason);
-              this.ok(c ? s.name + ' — emergency contact: ' + c.name + ' (' + c.relation + ') ' + c.phone
-                : s.name + ' has no emergency contact on file.');
-            }),
-        }));
-      } catch (e) {}
-    }
-    let reviews = [];
-    if (allow('feedback.read')) {
-      try {
-        reviews = DLT.reviews.list().map(r => ({
-          stars: '★★★★★'.slice(0, r.rating) + '☆☆☆☆☆'.slice(0, 5 - r.rating),
-          student: r.student, trip: r.trip || '—', feedback: r.feedback || '',
-          status: r.status, statusFg: r.status === 'HIDDEN' ? '#8A2F1C' : r.status === 'RESOLVED' ? '#5F6560' : '#0E4B34',
-          actions: (r.status === 'HIDDEN'
-            ? [['Unhide', 'show']] : [['Hide from public', 'hide'], ['Mark resolved', 'resolve']])
-            .map(([label, action]) => ({
-              label,
-              onPick: () => {
-                try { DLT.reviews.moderate(r.id, action); this.ok('Review ' + action + 'd. The change is audit logged.'); }
-                catch (e) { this.bad(e); }
-              },
-            })),
-        }));
-      } catch (e) {}
-    }
-    let requests = [];
-    if (allow('notification.read')) {
-      try {
-        requests = DLT.notifications.list().map(r => ({
-          id: r.id, rawKind: r.kind,
-          kind: r.kind.replace(/_/g, ' '),
-          who: (r.student || 'Not signed in') + (r.studentId ? ' · ' + r.studentId : ''),
-          detail: r.kind === 'GET_NOTIFIED' ? (r.channel || '') + ' · ' + (r.contact || '')
-            : r.kind === 'STUDENT_ID_CHANGE' ? (r.current || '—') + ' → ' + r.requested
-            : (r.reason || '—'),
-          status: r.status, fg: r.status === 'PENDING' ? '#8A5A0E' : '#0E4B34',
-          canAct: r.status === 'PENDING' && r.kind === 'GET_NOTIFIED',
-          canDecide: r.status === 'PENDING' &&
-            ['STUDENT_ID_CHANGE', 'ACCOUNT_DELETION'].indexOf(r.kind) >= 0 && allow('notification.resolve'),
-          onApprove: () => this.ask(
-            r.kind === 'ACCOUNT_DELETION' ? 'Approve account deletion' : 'Approve the student ID change',
-            r.kind === 'ACCOUNT_DELETION'
-              ? 'The account is deactivated and the personal details are anonymised. Bookings, payments, refunds and boarding records are kept, as the retention policy requires. This cannot be undone.'
-              : 'This moves the protected Student ID on the account to the requested value. Boarding checks use it, so only approve it against a physical card.',
-            'Approve', 'e.g. Physical student card checked at the desk',
-            (reason) => {
-              const out = DLT.notifications.resolveRequest(r.id, 'approve', reason);
-              this.ok(out.kind.replace(/_/g, ' ').toLowerCase() + ' approved for ' + out.student + '. Audit logged.');
-            }),
-          onReject: () => this.ask('Reject this request',
-            'The student keeps their current details and sees the request as rejected. The reason is permanent.',
-            'Reject', 'e.g. ID card did not match the account',
-            (reason) => {
-              const out = DLT.notifications.resolveRequest(r.id, 'reject', reason);
-              this.ok('Request rejected for ' + out.student + '. Audit logged.');
-            }),
-          onAct: () => {
-            try { DLT.notifications.markNotified(r.id); this.ok('Marked notified.'); }
-            catch (e) { this.bad(e); }
+    const students = (d.students || []).map(s => ({
+      name: s.name, email: s.email, studentId: s.studentId || '—', phone: s.phone || '—',
+      bookings: s.bookings, verified: s.emailVerified ? 'Verified' : 'Unverified',
+      verifiedFg: s.emailVerified ? '#0E4B34' : '#8A5A0E',
+      canReveal: isSuper && s.emergencyContactAvailable,
+      onReveal: () => this.ask('Reveal an emergency contact',
+        'This is protected personal information. Your name, the reason and the time are written to the audit log.',
+        'Reveal contact', 'e.g. Passenger taken ill on the 17:30 departure',
+        async (reason) => {
+          const c = await DLT.admin.revealEmergencyContact(s.id, reason);
+          this.ok(c ? s.name + ' — emergency contact: ' + c.name + (c.relation ? ' (' + c.relation + ')' : '') + ' ' + c.phone
+            : s.name + ' has no emergency contact on file.');
+        }),
+    }));
+    const reviews = (d.reviews || []).map(r => ({
+      stars: '★★★★★'.slice(0, r.rating) + '☆☆☆☆☆'.slice(0, 5 - r.rating),
+      student: r.student, trip: r.trip || '—', feedback: r.feedback || '',
+      status: r.status, statusFg: r.status === 'HIDDEN' ? '#8A2F1C' : r.status === 'RESOLVED' ? '#5F6560' : '#0E4B34',
+      actions: (r.status === 'HIDDEN'
+        ? [['Unhide', 'unhide']] : [['Hide from public', 'hide'], ['Mark resolved', 'resolve']])
+        .map(([label, action]) => ({
+          label,
+          onPick: async () => {
+            try {
+              await DLT.admin.moderateReview(r.id, action);
+              this.ok('Review ' + label.toLowerCase() + 'd. The change is audit logged.');
+              this._patch({ reviews: await DLT.admin.reviews() });
+            } catch (e) { this.bad(e); }
           },
-        }));
-      } catch (e) {}
-    }
+        })),
+    }));
+    /* GET_NOTIFIED has no "mark notified" backend action — decideRequest only
+       implements approve/reject, and only for STUDENT_ID_CHANGE and
+       ACCOUNT_DELETION's real effects (an ID write, an anonymisation). See
+       the report: canAct/onAct are kept in shape for the markup but do
+       nothing, rather than misrepresenting a notify-me request as approved. */
+    const requests = (d.requests || []).map(r => ({
+      id: r.id, rawKind: r.kind, kind: r.kind.replace(/_/g, ' '),
+      who: (r.userName || 'Not signed in') + (!r.userName && r.email ? ' · ' + r.email : ''),
+      detail: r.kind === 'GET_NOTIFIED' ? (r.email || '—')
+        : r.kind === 'STUDENT_ID_CHANGE' ? (r.currentValue || '—') + ' → ' + r.requestedValue
+        : (r.reason || '—'),
+      status: r.status, fg: r.status === 'PENDING' ? '#8A5A0E' : '#0E4B34',
+      canAct: false,
+      canDecide: r.status === 'PENDING' &&
+        ['STUDENT_ID_CHANGE', 'ACCOUNT_DELETION'].includes(r.kind) && allow('notification.resolve'),
+      onApprove: () => this.ask(
+        r.kind === 'ACCOUNT_DELETION' ? 'Approve account deletion' : 'Approve the student ID change',
+        r.kind === 'ACCOUNT_DELETION'
+          ? 'The account is deactivated and the personal details are anonymised. Bookings, payments, refunds and boarding records are kept, as the retention policy requires. This cannot be undone.'
+          : 'This moves the protected Student ID on the account to the requested value. Boarding checks use it, so only approve it against a physical card.',
+        'Approve', 'e.g. Physical student card checked at the desk',
+        async (reason) => {
+          const out = await DLT.admin.decideRequest(r.id, 'approve', reason);
+          this.ok(out.kind.replace(/_/g, ' ').toLowerCase() + ' approved. Audit logged.');
+          this._patch({ requests: await DLT.admin.requests() });
+        }),
+      onReject: () => this.ask('Reject this request',
+        'The student keeps their current details and sees the request as rejected. The reason is permanent.',
+        'Reject', 'e.g. ID card did not match the account',
+        async (reason) => {
+          await DLT.admin.decideRequest(r.id, 'reject', reason);
+          this.ok('Request rejected. Audit logged.');
+          this._patch({ requests: await DLT.admin.requests() });
+        }),
+      onAct: () => {},
+    }));
 
     const p = st.prompt;
 
     /* ---------- trip seat map, staff, manual-booking and override inputs ---------- */
     const seatTrip = st.seatTripId ? allTrips.find(t => t.id === st.seatTripId) || null : null;
     const adminSeats = [];
-    if (seatTrip) {
-      DLT.trips.seatMap(seatTrip.id).forEach(r => {
-        r.seats.forEach((s, i) => {
-          if (i === 2) adminSeats.push({ isSeat: false, isLabel: true, id: String(r.row).padStart(2, '0') });
-          const paint = {
-            AVAILABLE: ['#FFFFFF', '#0E1014', 'rgba(14,16,20,.32)', 'pointer'],
-            SELECTED: ['#F6EBD5', '#8A5A0E', 'rgba(184,115,10,.4)', 'not-allowed'],
-            HELD: ['#F6EBD5', '#8A5A0E', 'rgba(184,115,10,.4)', 'not-allowed'],
-            BOOKED: ['#DFDCD3', '#6F746C', 'rgba(14,16,20,.14)', 'not-allowed'],
-            BLOCKED: ['#E7E4DB', '#8A2F1C', 'rgba(163,58,34,.45)', 'pointer'],
-          }[s.status] || ['#FFFFFF', '#0E1014', 'rgba(14,16,20,.3)', 'pointer'];
-          const blockable = s.status === 'AVAILABLE', releasable = s.status === 'BLOCKED';
-          adminSeats.push({
-            isSeat: true, isLabel: false, id: s.seatNumber,
-            bg: paint[0], fg: paint[1], bd: paint[2], cursor: paint[3],
-            disabled: !blockable && !releasable,
-            title: 'Seat ' + s.seatNumber + ' · ' + s.status.toLowerCase() +
-              (s.blockReason ? ' — ' + s.blockReason : '') +
-              (blockable ? ' · tap to block' : releasable ? ' · tap to release' : ''),
-            onPick: () => {
-              if (releasable) {
-                try {
-                  const r = DLT.admin.blockSeat(seatTrip.id, s.seatNumber);
-                  this.ok('Seat ' + r.seatNumber + ' released back on sale. Audit logged.');
-                } catch (e) { this.bad(e); }
-                return;
-              }
-              this.ask('Block seat ' + s.seatNumber,
-                'Taking seat ' + s.seatNumber + ' off sale on ' + DLT.fmt.when(seatTrip.departureAt) +
-                '. It stays out of the count until an operator releases it, and the reason is written to the audit log.',
-                'Block the seat', 'e.g. Crew seat, or water damage to the seat base',
-                (reason) => {
-                  const r = DLT.admin.blockSeat(seatTrip.id, s.seatNumber, reason);
-                  this.ok('Seat ' + r.seatNumber + ' blocked — ' + r.reason + '. Audit logged.');
-                });
-            },
-          });
+    (d.seatMap || []).forEach(r => {
+      r.seats.forEach((s, i) => {
+        if (i === 2) adminSeats.push({ isSeat: false, isLabel: true, id: String(r.row).padStart(2, '0') });
+        const paint = {
+          AVAILABLE: ['#FFFFFF', '#0E1014', 'rgba(14,16,20,.32)', 'pointer'],
+          HELD: ['#F6EBD5', '#8A5A0E', 'rgba(184,115,10,.4)', 'not-allowed'],
+          BOOKED: ['#DFDCD3', '#6F746C', 'rgba(14,16,20,.14)', 'not-allowed'],
+          BLOCKED: ['#E7E4DB', '#8A2F1C', 'rgba(163,58,34,.45)', 'pointer'],
+        }[s.status] || ['#FFFFFF', '#0E1014', 'rgba(14,16,20,.3)', 'pointer'];
+        const blockable = s.status === 'AVAILABLE', releasable = s.status === 'BLOCKED';
+        adminSeats.push({
+          isSeat: true, isLabel: false, id: s.seatNumber,
+          bg: paint[0], fg: paint[1], bd: paint[2], cursor: paint[3],
+          disabled: !blockable && !releasable,
+          title: 'Seat ' + s.seatNumber + ' · ' + s.status.toLowerCase() +
+            (s.blockReason ? ' — ' + s.blockReason : '') +
+            (blockable ? ' · tap to block' : releasable ? ' · tap to release' : ''),
+          onPick: () => {
+            if (releasable) { this._unblockSeat(seatTrip.id, s.seatNumber); return; }
+            this.ask('Block seat ' + s.seatNumber,
+              'Taking seat ' + s.seatNumber + ' off sale on ' + DLT.fmt.when(seatTrip.departureAt) +
+              '. It stays out of the count until an operator releases it, and the reason is written to the audit log.',
+              'Block the seat', 'e.g. Crew seat, or water damage to the seat base',
+              (reason) => this._blockSeat(seatTrip.id, s.seatNumber, reason));
+          },
         });
       });
-    }
-    let staffAccounts = [];
-    if (allow('staff.assign')) {
-      try { staffAccounts = DLT.admin.staffAccounts(); } catch (e) { staffAccounts = []; }
-    }
-    const mbTrips = allTrips.filter(t => ['OPEN', 'BOOKING_CLOSED', 'BOARDING'].indexOf(t.status) >= 0 && t.available > 0);
-    let policyQuote = 0, overrideCap = 0;
+    });
+    const mbTrips = allTrips.filter(t => ['OPEN', 'BOOKING_CLOSED', 'BOARDING'].includes(t.status) && t.available > 0);
+    const policyQuote = (d.bookingQuote && d.bookingQuote.amount) || 0;
+    let overrideCap = 0;
     if (booking && isSuper) {
-      try { policyQuote = DLT.bookings.cancellationQuote(booking.id).amount; } catch (e) { policyQuote = 0; }
-      const paid = (booking.payment && ['SUCCESS', 'DUPLICATE'].indexOf(booking.payment.status) >= 0)
+      const paid = (booking.payment && ['SUCCESS', 'DUPLICATE'].includes(booking.payment.status))
         ? booking.payment.amount : 0;
-      const out = booking.refunds.filter(r => r.status !== 'REFUND_FAILED').reduce((n, r) => n + r.amount, 0);
+      const out = (booking.refunds || []).filter(r => r.status !== 'REFUND_FAILED').reduce((n, r) => n + r.amount, 0);
       overrideCap = Math.max(0, paid - out);
     }
 
@@ -1558,7 +1694,7 @@ class Component extends DCLogic {
       roleScope: isStaff ? 'Assigned trip only, no financial access'
         : isSuper ? 'Full access including reconciliation and audit'
         : 'Operations, no financial overrides',
-      signOut: () => { DLT.auth.signOut(); location.href = './DLT Account.dc.html'; },
+      signOut: () => { DLT.auth.signOut().then(() => { location.href = './DLT Account.dc.html'; }); },
       nav, isSuper,
       toast: st.toast, clearToast: () => this.setState({ toast: null }),
       toastAccent: st.toastKind === 'bad' ? '#A33A22' : '#0E4B34',
@@ -1571,8 +1707,8 @@ class Component extends DCLogic {
       atStudents: section === 'Students', atFeedback: section === 'Feedback',
       atRequests: section === 'Requests', atPayments: section === 'Payments',
       atReports: section === 'Reports', atAudit: section === 'Audit',
-      goTrips: () => this.setState({ section: 'Trips' }),
-      goBoarding: () => this.setState({ section: 'Boarding' }),
+      goTrips: () => this._go('Trips'),
+      goBoarding: () => this._go('Boarding'),
 
       /* trips · seat map, seat blocking (§13.4) and staff assignment (§Boarding 5) */
       seatPanelOpen: !!seatTrip,
@@ -1595,18 +1731,29 @@ class Component extends DCLogic {
       staffPick: st.staffPick || (staffAccounts[0] ? staffAccounts[0].id : ''),
       onStaffPick: e => this.setState({ staffPick: e.target.value }),
       staffOptions: staffAccounts.map(s => ({ id: s.id,
-        label: s.name + (s.assignedTo ? ' · on ' + s.assignedTo : ' · unassigned') })),
+        label: s.name + (s.assignments && s.assignments.length
+          ? ' · on ' + DLT.fmt.when(s.assignments[0].departureAt) : ' · unassigned') })),
       assignCta: (function () {
         const id = st.staffPick || (staffAccounts[0] ? staffAccounts[0].id : '');
         return seatTrip && seatTrip.staffUserIds.indexOf(id) >= 0 ? 'Take off this trip' : 'Assign to this trip';
       })(),
-      assignStaff: () => {
+      /* Fixes a real bug in the prototype: the "Take off this trip" label
+         never actually called unassignStaff — every click called assignStaff,
+         which is a no-op ON CONFLICT when already assigned. Both directions
+         now call the real endpoint that matches the label shown. */
+      assignStaff: async () => {
         const id = st.staffPick || (staffAccounts[0] ? staffAccounts[0].id : '');
         if (!id) { this.bad(new Error('No boarding staff accounts exist')); return; }
         try {
-          const r = DLT.admin.assignStaff(seatTrip.id, id, 'Door duty set from the trip seat map');
-          this.ok(r.assigned ? r.staff + ' is on the door for ' + r.trip + '. Their scanner is scoped to it.'
-            : r.staff + ' taken off ' + r.trip + '.');
+          if (seatTrip.staffUserIds.indexOf(id) >= 0) {
+            await DLT.admin.unassignStaff(seatTrip.id, id);
+            this.ok('Taken off ' + DLT.fmt.when(seatTrip.departureAt) + '.');
+          } else {
+            const r = await DLT.admin.assignStaff(seatTrip.id, id, 'Door duty set from the trip seat map');
+            this.ok(r.assigned ? r.staff + ' is on the door for ' + DLT.fmt.when(seatTrip.departureAt) +
+              '. Their scanner is scoped to it.' : 'Assigned.');
+          }
+          await this._reloadTrips();
         } catch (e) { this.bad(e); }
       },
 
@@ -1625,26 +1772,32 @@ class Component extends DCLogic {
       onVfStatus: e => this.setState({ vfStatus: e.target.value }),
       toggleVehicleForm: () => this.setState({ vehicleFormOpen: !st.vehicleFormOpen,
         vfId: null, vfName: '', vfReg: '', vfRows: 11, vfStatus: 'AVAILABLE' }),
-      saveVehicle: () => {
-        try {
-          const patch = { name: st.vfName, registration: st.vfReg, rowCount: Number(st.vfRows), status: st.vfStatus };
-          if (st.vfId) patch.id = st.vfId;
-          const v = DLT.admin.saveVehicle(patch);
-          this.setState({ vehicleFormOpen: false, vfId: null, vfName: '', vfReg: '', vfRows: 11, vfStatus: 'AVAILABLE' });
-          this.ok(v.name + ' saved · ' + v.registration + ' · ' + v.capacity + ' seats · ' + v.status.toLowerCase() + '. Audit logged.');
-        } catch (e) { this.bad(e); }
-      },
+      saveVehicle: () => this._saveVehicle({
+        id: st.vfId || undefined, name: st.vfName, registration: st.vfReg,
+        rowCount: Number(st.vfRows), status: st.vfStatus,
+      }),
 
-      /* booking · contact (§14.3) and the real policy override (§17) */
+      /* booking · contact (§14.3) and the real policy override (§17)
+         updateContact requires a reason server-side (needReason) — the
+         prototype's "Save contact" saved directly with none. Routed through
+         the same reason prompt every other audited action here uses,
+         instead of inventing a placeholder reason. */
       bkContact: st.bkContact == null ? (booking ? (booking.contactPhone || '') : '') : st.bkContact,
       onBkContact: e => this.setState({ bkContact: e.target.value }),
       saveBkContact: () => {
-        try {
-          const v = st.bkContact == null ? (booking ? booking.contactPhone : '') : st.bkContact;
-          const r = DLT.bookings.updateContact(booking.id, v);
-          this.setState({ bkContact: null });
-          this.ok('Booking contact for ' + r.code + ' is now ' + r.contactPhone + '. This booking only, and audit logged.');
-        } catch (e) { this.bad(e); }
+        const v = st.bkContact == null ? (booking ? booking.contactPhone : '') : st.bkContact;
+        if (!v || !/^[6-9]\d{9}$/.test(String(v).replace(/\s/g, ''))) {
+          this.bad(new Error('Enter a valid Indian mobile number')); return;
+        }
+        this.ask('Update the booking contact',
+          'Changing the contact number on ' + booking.code + '. This booking only, and the reason is written to the audit log.',
+          'Save contact', 'e.g. Student provided a new number at the desk',
+          async (reason) => {
+            const r = await DLT.admin.updateContact(booking.id, v, reason);
+            this.setState({ bkContact: null });
+            this.ok('Booking contact for ' + r.code + ' is now ' + r.contactPhone + '. Audit logged.');
+            await this._loadBooking(booking.id);
+          });
       },
       overrideOpen: st.overrideOpen && !!booking,
       overrideBlurb: booking
@@ -1658,14 +1811,15 @@ class Component extends DCLogic {
       ovConfirmCta: Number(st.ovAmount) > 0 ? 'Refund ₹' + Math.round(Number(st.ovAmount)) : 'Enter an amount',
       openOverride: () => this.setState({ overrideOpen: true, ovAmount: String(overrideCap || ''), ovReason: '', ovCancel: true }),
       closeOverride: () => this.setState({ overrideOpen: false }),
-      confirmOverride: () => {
+      confirmOverride: async () => {
         try {
-          const r = DLT.admin.overrideRefund({ bookingId: booking.id, amount: st.ovAmount,
+          const r = await DLT.admin.overrideRefund({ bookingId: booking.id, amount: st.ovAmount,
             reason: st.ovReason, cancelBooking: st.ovCancel });
           this.setState({ overrideOpen: false, ovAmount: '', ovReason: '' });
           this.ok('₹' + r.amount + ' refund created on ' + booking.code + '.' +
             (r.seatsReleased ? ' ' + r.seatsReleased + ' seat(s) released and passes voided.' : '') +
             (r.remainingRefundable ? ' ₹' + r.remainingRefundable + ' still refundable.' : ''));
+          await this._loadBooking(booking.id);
         } catch (e) { this.bad(e); }
       },
 
@@ -1686,18 +1840,33 @@ class Component extends DCLogic {
       onMbEmail: e => this.setState({ mbEmail: e.target.value }),
       onMbReason: e => this.setState({ mbReason: e.target.value }),
       mbCta: st.mbType === 'COMPLIMENTARY' ? 'Create the complimentary booking' : 'Create the external booking',
-      createManual: () => {
+      /* createManualBooking's real contract needs a seatNumber per passenger
+         and has no studentEmail field — neither exists in this form (see the
+         report). The first AVAILABLE seat on the chosen departure is picked
+         here; the server still validates and locks it atomically, so this
+         adds no authority the server doesn't already enforce. mbEmail is
+         collected but never sent — nothing server-side accepts it. */
+      createManual: async () => {
         try {
-          const b = DLT.admin.createManualBooking({
-            tripId: st.mbTrip || (mbTrips[0] ? mbTrips[0].id : null),
-            type: st.mbType, reason: st.mbReason, contactPhone: st.mbPhone,
-            studentEmail: st.mbEmail || null,
-            passengers: [{ name: st.mbName, studentId: st.mbSid, phone: st.mbPhone }],
+          const tripId = st.mbTrip || (mbTrips[0] ? mbTrips[0].id : null);
+          if (!tripId) throw new Error('No open departure available for a manual booking');
+          const map = await DLT.trips.seatMap(tripId);
+          let seatNumber = null;
+          for (const row of map.rows) {
+            const free = row.seats.find(s => s.status === 'AVAILABLE');
+            if (free) { seatNumber = free.seatNumber; break; }
+          }
+          if (!seatNumber) throw new Error('No seat is free on that departure');
+          const b = await DLT.admin.createManualBooking({
+            tripId, type: st.mbType, reason: st.mbReason, contactPhone: st.mbPhone,
+            passengers: [{ name: st.mbName, studentId: st.mbSid, phone: st.mbPhone, seatNumber }],
           });
           this.setState({ manualOpen: false, mbName: '', mbSid: '', mbPhone: '', mbEmail: '', mbReason: '',
-            bookingId: b.id, query: '' });
-          this.ok(b.code + ' created · ' + b.bookingType.replace(/_/g, ' ').toLowerCase() +
+            bookingId: b.id, query: '', section: 'Bookings' });
+          this.ok(b.code + ' created · seat ' + seatNumber + ' · ' + b.kind.replace(/_/g, ' ').toLowerCase() +
             ' · ₹' + b.totalAmount + ' · pass issued. Audit logged.');
+          await this._loadBooking(b.id);
+          await this._reloadTrips();
         } catch (e) { this.bad(e); }
       },
 
@@ -1712,38 +1881,39 @@ class Component extends DCLogic {
       ] : [],
       alerts: dash ? dash.alerts.map(a => ({
         title: a.title, detail: a.detail, cta: a.cta,
-        onOpen: () => this.setState({ section: allow('*') ? a.section : 'Bookings' }),
+        onOpen: () => this._go(sections.some(([s]) => s === a.section) ? a.section : 'Bookings'),
       })) : [],
-      noAlerts: !!dash && dash.alerts.length === 0,
+      noAlerts: !st.loading.Dashboard && !!dash && dash.alerts.length === 0,
       alertTitle: dash && dash.alerts.length ? 'Critical · needs a decision' : 'Critical · all clear',
       alertAccent: dash && dash.alerts.length ? '#A33A22' : '#0E4B34',
       alertBd: dash && dash.alerts.length ? 'rgba(163,58,34,.28)' : 'rgba(14,75,52,.28)',
       activity: dash ? dash.activity.map(a => ({ at: DLT.fmt.time(a.at), text: a.text })) : [],
 
       /* trips */
-      canCreateTrip: allow('trip.create'),
+      canCreateTrip: allow('trip.write'),
       newTripOpen: st.newTripOpen,
       newTripCta: st.newTripOpen ? 'Close' : 'New trip',
       toggleNewTrip: () => this.setState({ newTripOpen: !st.newTripOpen }),
-      ntDate: st.ntDate, ntTime: st.ntTime, ntVehicle: st.ntVehicle || (vehicles.length ? undefined : ''),
+      ntDate: st.ntDate, ntTime: st.ntTime, ntVehicle: st.ntVehicle || (vehiclesRaw[0] ? vehiclesRaw[0].id : ''),
       ntPrice: st.ntPrice,
       onNtDate: e => this.setState({ ntDate: e.target.value }),
       onNtTime: e => this.setState({ ntTime: e.target.value }),
       onNtVehicle: e => this.setState({ ntVehicle: e.target.value }),
       onNtPrice: e => this.setState({ ntPrice: e.target.value }),
-      vehicleOptions: (function () {
-        try { return DLT.admin.vehicles().map(v => ({ id: v.id, label: v.name + ' · ' + v.capacity + ' seats · ' + v.status.toLowerCase() })); }
-        catch (e) { return []; }
-      })(),
-      createDraft: () => {
+      vehicleOptions: vehiclesRaw.map(v => ({ id: v.id, label: v.name + ' · ' + v.capacity + ' seats · ' + v.status.toLowerCase() })),
+      createDraft: async () => {
         try {
-          const vid = st.ntVehicle || (DLT.admin.vehicles()[0] || {}).id;
-          const when = new Date(st.ntDate + 'T' + st.ntTime + ':00').getTime();
-          if (!when) throw new Error('Choose a date and time');
-          const tr = DLT.admin.createDraft({ vehicleId: vid, departureAt: when, price: Number(st.ntPrice) });
-          this.setState({ newTripOpen: false, validationTripId: tr.id,
-            validation: DLT.admin.validateDraft(tr.id) });
-          this.ok('Draft created for ' + DLT.fmt.when(when) + ' with ' + tr.capacity + ' seats mapped. Validate it, then publish.');
+          const vid = st.ntVehicle || (vehiclesRaw[0] || {}).id;
+          if (!vid) throw new Error('Add a vehicle before creating a trip');
+          const rid = (routes[0] || {}).id;
+          if (!rid) throw new Error('No route is configured');
+          const when = new Date(st.ntDate + 'T' + st.ntTime + ':00');
+          if (isNaN(when.getTime())) throw new Error('Choose a date and time');
+          const tr = await DLT.admin.saveTrip({ routeId: rid, vehicleId: vid, departureAt: when.toISOString(), price: Number(st.ntPrice) });
+          const validation = await DLT.admin.validateDraft(tr.id);
+          this.setState({ newTripOpen: false, validationTripId: tr.id, validation });
+          this.ok('Draft created for ' + DLT.fmt.when(when.toISOString()) + '. Validate it, then publish.');
+          await this._reloadTrips();
         } catch (e) { this.bad(e); }
       },
       tripRows: allTrips.map(t => {
@@ -1757,7 +1927,7 @@ class Component extends DCLogic {
           date: DLT.fmt.date(t.departureAt), depart: DLT.fmt.time(t.departureAt),
           vehicle: t.vehicle ? t.vehicle.name + ' · ' + t.vehicle.registration : '—',
           seats: t.booked + '/' + t.capacity,
-          revenue: '₹' + t.revenue,
+          revenue: DLT.fmt.money(t.revenue),
           status: t.status.replace('_', ' ') + (t.soldOut && t.status === 'OPEN' ? ' · full' : ''),
           statusFg: t.status === 'DRAFT' ? '#5F6560' : t.status === 'CANCELLED' ? '#8A2F1C'
             : t.soldOut ? '#8A5A0E' : '#0E4B34',
@@ -1767,27 +1937,39 @@ class Component extends DCLogic {
           actBd: t.status === 'DRAFT' ? '#0E1014' : 'rgba(14,16,20,.2)',
           canCancel: allow('trip.cancel') && ['OPEN', 'BOOKING_CLOSED', 'BOARDING', 'DRAFT'].indexOf(t.status) >= 0,
           canSeats: allow('seat.block') && t.status !== 'CANCELLED',
-          onSeats: () => this.setState({ seatTripId: st.seatTripId === t.id ? null : t.id }),
+          onSeats: () => {
+            const id = st.seatTripId === t.id ? null : t.id;
+            this.setState({ seatTripId: id });
+            if (id) this._loadSeatMap(id);
+          },
           onCancel: () => this.setState({ cancelTripId: t.id, cancelReason: '', toast: null }),
-          onPrimary: () => {
+          onPrimary: async () => {
             try {
               if (t.status === 'DRAFT') {
-                this.setState({ validationTripId: t.id, validation: DLT.admin.validateDraft(t.id), toast: null });
+                const validation = await DLT.admin.validateDraft(t.id);
+                this.setState({ validationTripId: t.id, validation, toast: null });
               } else if (t.status === 'OPEN') {
-                DLT.admin.setTripStatus(t.id, 'BOOKING_CLOSED', 'Closed by operations');
+                await DLT.admin.setTripStatus(t.id, 'BOOKING_CLOSED', 'Closed by operations');
                 this.ok('Booking closed for ' + DLT.fmt.when(t.departureAt) + '. Audit logged.');
+                await this._reloadTrips();
               } else if (t.status === 'BOOKING_CLOSED') {
-                DLT.admin.setTripStatus(t.id, 'BOARDING', 'Boarding opened at the gate');
+                await DLT.admin.setTripStatus(t.id, 'BOARDING', 'Boarding opened at the gate');
                 this.setState({ section: 'Boarding', boardTripId: t.id });
+                await this._reloadTrips();
+                await this._loadBoarding();
               } else if (t.status === 'BOARDING') {
                 this.setState({ section: 'Boarding', boardTripId: t.id });
+                await this._loadBoarding();
               } else if (t.status === 'DEPARTED') {
-                DLT.admin.setTripStatus(t.id, 'COMPLETED', 'Arrival confirmed by operations');
+                await DLT.admin.setTripStatus(t.id, 'COMPLETED', 'Arrival confirmed by operations');
                 this.ok('Trip marked completed.');
+                await this._reloadTrips();
               } else if (t.waitlistCount) {
                 this.setState({ section: 'Waitlist', wlTripId: t.id });
+                await this._loadWaitlist();
               } else {
                 this.setState({ section: 'Bookings', query: '' });
+                await this._searchBookings(true);
               }
             } catch (e) { this.bad(e); }
           },
@@ -1803,11 +1985,14 @@ class Component extends DCLogic {
           .concat(st.validation.checks.map(t => ({ mark: '✓', text: t, fg: '#25322B' })))
         : [],
       canPublish: !!(st.validation && st.validation.valid && allow('trip.publish')),
-      publish: () => {
+      publish: async () => {
         try {
-          const t = DLT.admin.publishTrip(st.validationTripId);
+          const before = allTrips.find(x => x.id === st.validationTripId);
+          const t = await DLT.admin.publishTrip(st.validationTripId);
           this.setState({ validation: null, validationTripId: null });
-          this.ok('Published ' + DLT.fmt.when(t.departureAt) + '. It is now bookable with ' + t.available + ' seats free.');
+          this.ok('Published' + (before ? ' ' + DLT.fmt.when(before.departureAt) : '') +
+            '. It is now bookable with ' + t.seats + ' seats.');
+          await this._reloadTrips();
         } catch (e) { this.bad(e); }
       },
       cancelTripOpen: !!st.cancelTripId,
@@ -1816,14 +2001,29 @@ class Component extends DCLogic {
       cancelReason: st.cancelReason,
       onCancelReason: e => this.setState({ cancelReason: e.target.value }),
       closeCancelTrip: () => this.setState({ cancelTripId: null, cancelReason: '' }),
-      confirmCancelTrip: () => {
+      /* The prototype's "message template" and passenger export used a
+         dedicated dlt-store endpoint; the real one is admin.affectedPassengers
+         (F-22's own fix — scoped to THIS trip). Fetched once here, right
+         after cancelling, and reused for both the on-screen message and the
+         CSV export below — the same real, already-fetched data either way. */
+      confirmCancelTrip: async () => {
         try {
           const id = st.cancelTripId;
-          const res = DLT.admin.cancelTrip(id, st.cancelReason);
+          const before = allTrips.find(t => t.id === id);
+          const res = await DLT.admin.cancelTrip(id, st.cancelReason);
           let tmpl = null;
-          try { tmpl = DLT.notifications.template(id); } catch (e) {}
+          try {
+            const affected = await DLT.admin.affectedPassengers(id);
+            const when = before ? DLT.fmt.when(before.departureAt) : 'your departure';
+            tmpl = { affected, message: 'Hi — your DLT departure on ' + when + ' has been cancelled. ' +
+              (res.refundTotal > 0
+                ? 'A full refund of your fare is on its way back to your original payment method.'
+                : 'No payment is on file for your seat, so no refund is due.') +
+              ' We are sorry for the disruption.' };
+          } catch (e) {}
           this.setState({ cancelTripId: null, cancelReason: '', template: tmpl });
-          this.ok('Trip cancelled. ' + res.affectedBookings + ' booking(s) cancelled, passes voided, seats released and ₹' + res.refundInitiated + ' of refunds raised.');
+          this.ok('Trip cancelled. ' + res.bookingsAffected + ' booking(s) cancelled, passes voided, seats released and ₹' + res.refundTotal + ' of refunds raised.');
+          await this._reloadTrips();
         } catch (e) { this.bad(e); }
       },
       templateOpen: !!st.template,
@@ -1832,13 +2032,24 @@ class Component extends DCLogic {
       copyTemplate: () => {
         const text = st.template.message;
         if (navigator.clipboard) navigator.clipboard.writeText(text).then(
-          () => this.ok('Message copied. Send it from the operations WhatsApp account, then mark students notified.'),
+          () => this.ok('Message copied. Send it from the operations channel, then mark students notified.'),
           () => this.bad(new Error('Could not copy — select the text manually.')));
         else this.bad(new Error('Clipboard unavailable in this browser.'));
       },
       exportAffected: () => {
-        try { const r = DLT.admin.exportCsv('passengers', { tripId: null }); this.ok('Exported ' + r.name + ' (' + r.rows + ' rows).'); }
-        catch (e) { this.bad(e); }
+        if (!st.template || !st.template.affected.length) { this.bad(new Error('Nothing to export')); return; }
+        const rows = st.template.affected;
+        const cols = Object.keys(rows[0]);
+        const csv = [cols.join(',')].concat(rows.map((r) => cols.map((c) => {
+          const s = String(r[c] == null ? '' : r[c]);
+          return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        }).join(','))).join('\r\n');
+        const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'dlt-affected-passengers-' + new Date().toISOString().slice(0, 10) + '.csv';
+        a.click();
+        this.ok('Exported ' + rows.length + ' affected passenger row(s).');
       },
 
       /* vehicles */
@@ -1846,16 +2057,16 @@ class Component extends DCLogic {
 
       /* bookings */
       query: st.query,
-      onQuery: e => this.setState({ query: e.target.value, bookingId: null }),
-      hasResults: st.query.trim().length >= 3 && bookingList.length > 0,
-      noResults: st.query.trim().length >= 3 && bookingList.length === 0,
+      onQuery: e => { this.setState({ query: e.target.value, bookingId: null }); this._searchBookings(false); },
+      hasResults: !st.loading.Bookings && st.query.trim().length >= 3 && bookingList.length > 0,
+      noResults: !st.loading.Bookings && st.query.trim().length >= 3 && bookingList.length === 0,
       results: bookingList.slice(0, 8).map(b => ({
-        label: b.code + ' · ' + (b.owner ? b.owner.name : '—'),
+        label: b.code + ' · ' + (b.ownerName || '—'),
         on: booking && b.id === booking.id,
         bg: booking && b.id === booking.id ? '#0E1014' : '#FFFFFF',
         fg: booking && b.id === booking.id ? '#F7F5F0' : '#0E1014',
         bd: booking && b.id === booking.id ? '#0E1014' : 'rgba(14,16,20,.2)',
-        onPick: () => this.setState({ bookingId: b.id }),
+        onPick: () => { this.setState({ bookingId: b.id }); this._loadBooking(b.id); },
       })),
       hasBooking: !!booking,
       bkCode: booking ? booking.code : '',
@@ -1889,22 +2100,17 @@ class Component extends DCLogic {
       adminCancelLabel: booking ? 'Cancel booking' + (booking.trip &&
         (booking.trip.departureAt - Date.now()) >= 12 * 3600000 ? ' · full refund' : ' · no refund due') : 'Cancel',
       adminCancelNote: 'The refund is calculated from the 12-hour policy at the moment you confirm. A reason is mandatory and is written to the audit log.',
-      adminCancel: () => {
+      adminCancel: async () => {
         try {
           if (!st.adminReason.trim()) throw new Error('Enter a reason before cancelling');
-          const res = DLT.bookings.cancel(booking.id, null, st.adminReason.trim());
+          const res = await DLT.bookings.cancel(booking.id, st.adminReason.trim());
           this.setState({ adminReason: '' });
           this.ok('Booking cancelled. ' + (res.refundAmount > 0
             ? '₹' + res.refundAmount + ' refund raised against the original payment.' : 'No refund was due under the policy.'));
+          await this._loadBooking(booking.id);
+          await this._searchBookings(true);
         } catch (e) { this.bad(e); }
       },
-      adminOverride: () => this.ask('Refund outside policy',
-        'This refunds a booking the 12-hour policy would not refund. Super Admin only, and the reason is permanent.',
-        'Raise the refund', 'e.g. Departure retimed by 90 minutes',
-        (reason) => {
-          const res = DLT.bookings.cancel(booking.id, null, 'Policy override: ' + reason);
-          this.ok('Override applied. ' + (res.refundAmount > 0 ? '₹' + res.refundAmount + ' refund raised.' : 'Seats released.'));
-        }),
       bkPassengers: booking ? booking.passengers.map(x => ({
         name: x.name, sid: x.studentId, phone: x.phone || '—', seat: x.seatNumber,
         state: x.boardingStatus.replace(/_/g, ' '),
@@ -1913,31 +2119,31 @@ class Component extends DCLogic {
         boardMeta: x.boardedAt
           ? (x.boardingMethod === 'MANUAL' ? 'Boarded manually at ' : 'Scanned at ') + DLT.fmt.time(x.boardedAt) +
             ' by ' + x.boardedBy + (x.boardingReason ? ' — ' + x.boardingReason : '')
-          : x.passStatus === 'VALID' ? 'Pass issued · not yet scanned' : 'Pass ' + x.passStatus.toLowerCase(),
+          : x.passStatus === 'VALID' ? 'Pass issued · not yet scanned' : 'Pass ' + String(x.passStatus || 'not issued').toLowerCase(),
       })) : [],
       payFacts: booking && booking.payment ? [
-        { k: 'Amount', v: '₹' + booking.payment.amount, fg: '#0E1014' },
+        { k: 'Amount', v: DLT.fmt.money(booking.payment.amount), fg: '#0E1014' },
         { k: 'Status', v: booking.payment.status, fg: booking.payment.status === 'SUCCESS' ? '#0E4B34' : '#8A5A0E' },
-        { k: 'Provider', v: booking.payment.provider.replace(/_/g, ' '), fg: '#0E1014' },
+        { k: 'Provider', v: String(booking.payment.provider).replace(/_/g, ' '), fg: '#0E1014' },
         { k: 'Reference', v: booking.payment.providerReference || '—', fg: '#0E1014' },
         { k: 'Updated', v: DLT.fmt.dateTime(booking.payment.updatedAt), fg: '#0E1014' },
-        { k: 'Expected', v: booking.payment.expectedAmount ? '₹' + booking.payment.expectedAmount : '—', fg: '#8A5A0E' },
-        { k: 'Refunds', v: booking.refunds.length ? booking.refunds.map(r => '₹' + r.amount + ' ' + r.status).join(', ') : 'None', fg: '#0E1014' },
-        { k: 'Refunded total', v: '₹' + booking.refundedTotal, fg: '#0E1014' },
+        { k: 'Refunds', v: booking.refunds.length ? booking.refunds.map(r => DLT.fmt.money(r.amount) + ' ' + r.status).join(', ') : 'None', fg: '#0E1014' },
+        { k: 'Refunded total', v: DLT.fmt.money(booking.refundedTotal), fg: '#0E1014' },
       ] : [{ k: 'Payment', v: 'No payment record', fg: '#8A5A0E' }],
-      bkTrail: trail.map(a => ({ at: DLT.fmt.dateTime(a.at), text: a.text })),
+      bkTrail: booking ? (booking.auditTrail || []).map(a => ({
+        at: DLT.fmt.dateTime(a.occurredAt), text: a.action + (a.entityType ? ' · ' + a.entityType : '') })) : [],
       noTrail: !isSuper,
 
       /* boarding */
-      boardTripLabel: boardTrip
-        ? 'Trip ' + DLT.fmt.when(boardTrip.departureAt) + ' · ' + (boardTrip.vehicle ? boardTrip.vehicle.name : '') + ' · ' + boardTrip.status.replace('_', ' ')
+      boardTripLabel: boardTripInfo
+        ? 'Trip ' + DLT.fmt.when(boardTripInfo.departureAt) + ' · ' + (boardTripInfo.vehicle || '') + ' · ' + String(boardTripInfo.status).replace('_', ' ')
         : (isStaff ? 'You are not assigned to a departure — operations puts staff on the door'
           : 'No trip selected'),
       canPickTrip: !isStaff,
       boardTripId: tripId || '',
       boardTripOptions: allTrips.filter(t => ['OPEN', 'BOOKING_CLOSED', 'BOARDING', 'DEPARTED'].indexOf(t.status) >= 0)
         .map(t => ({ id: t.id, label: DLT.fmt.when(t.departureAt) + ' · ' + t.status.replace('_', ' ') })),
-      onBoardTrip: e => this.setState({ boardTripId: e.target.value, scan: null }),
+      onBoardTrip: e => { this.setState({ boardTripId: e.target.value, scan: null }); this._loadBoarding(); },
       boardedCount, manifestCount: manifest.length,
       pendingCount: manifest.filter(x => x.boardingStatus === 'NOT_BOARDED').length,
       scanResult: scan ? scan.result : 'Ready to scan',
@@ -1975,7 +2181,7 @@ class Component extends DCLogic {
       },
       manifestQuery: st.manifestQuery,
       onManifestQuery: e => this.setState({ manifestQuery: e.target.value }),
-      emptyManifest: filteredManifest.length === 0,
+      emptyManifest: !st.loading.Boarding && filteredManifest.length === 0,
       boardList: filteredManifest.map(x => {
         const actions = [];
         if (x.boardingStatus === 'NOT_BOARDED' && allow('boarding.manual')) {
@@ -1984,7 +2190,11 @@ class Component extends DCLogic {
             onPick: () => this.ask('Manual boarding',
               'Boarding ' + x.name + ' (seat ' + x.seatNumber + ') without a scan. Your name, the reason and the time are written to the audit log.',
               'Board ' + x.name.split(' ')[0], 'e.g. QR unreadable, student ID verified at the door',
-              (reason) => { const r = DLT.boarding.manual(x.passengerId, reason); this.ok(r.name + ' boarded manually at ' + DLT.fmt.time(r.at) + '. Audit logged.'); }),
+              async (reason) => {
+                const r = await DLT.boarding.manual(x.passengerId, reason, tripId);
+                this.ok(r.name + ' boarded manually at ' + DLT.fmt.time(r.at) + '. Audit logged.');
+                await this._loadBoarding();
+              }),
           });
         }
         if (x.boardingStatus === 'NOT_BOARDED' && allow('boarding.deny')) {
@@ -1993,7 +2203,11 @@ class Component extends DCLogic {
             onPick: () => this.ask('Deny boarding',
               'This is a distinct status from cancellation and no-show, and it voids the pass. No refund follows automatically.',
               'Deny boarding', 'e.g. No student ID presented at the door',
-              (reason) => { const r = DLT.boarding.deny(x.passengerId, reason); this.ok('Boarding denied for ' + r.name + '. Recorded with your reason.'); }),
+              async (reason) => {
+                const r = await DLT.boarding.deny(x.passengerId, reason, tripId);
+                this.ok('Boarding denied for ' + r.name + '. Recorded with your reason.');
+                await this._loadBoarding();
+              }),
           });
         }
         if (x.boardingStatus === 'POTENTIAL_NO_SHOW' && allow('boarding.noshow')) {
@@ -2002,13 +2216,17 @@ class Component extends DCLogic {
             onPick: () => this.ask('Confirm no-show',
               x.name + ' did not board. Confirming makes the status final. No refund is issued automatically.',
               'Confirm no-show', 'e.g. Called twice at the gate, did not travel',
-              (reason) => { const r = DLT.boarding.confirmNoShow(x.passengerId, reason); this.ok(r.name + ' confirmed as a no-show.'); }),
+              async (reason) => {
+                const r = await DLT.boarding.noShow(x.passengerId, reason, tripId);
+                this.ok(r.name + ' confirmed as a no-show.');
+                await this._loadBoarding();
+              }),
           });
         }
         return {
           name: x.name,
           sub: x.studentId + (x.phone ? ' · ' + x.phone : '') + ' · ' + x.bookingCode,
-          seat: x.seatNumber, typeShort: x.seatType === 'Window' ? 'W' : 'A',
+          seat: x.seatNumber, typeShort: x.seatType === 'WINDOW' ? 'W' : 'A',
           state: x.boardingStatus.replace(/_/g, ' '),
           fg: x.boardingStatus === 'BOARDED' ? '#0E4B34'
             : x.boardingStatus === 'DENIED_BOARDING' ? '#8A2F1C'
@@ -2019,8 +2237,8 @@ class Component extends DCLogic {
         };
       }),
 
-      /* payments */
-      payFilters: ['All', 'Successful', 'Pending', 'Failed', 'Duplicate', 'Discrepancy', 'Refunded', 'Manual/external'].map(f => ({
+      /* payments (Super Admin only) */
+      payFilters: ['All', 'Successful', 'Pending', 'Failed', 'Duplicate', 'Refunded', 'Manual/external'].map(f => ({
         label: f, on: st.payFilter === f,
         count: f === 'All' ? '' : (payCounts[f] ? '· ' + payCounts[f] : ''),
         bg: st.payFilter === f ? '#0E1014' : '#FFFFFF',
@@ -2028,65 +2246,37 @@ class Component extends DCLogic {
         bd: st.payFilter === f ? '#0E1014' : 'rgba(14,16,20,.18)',
         onPick: () => this.setState({ payFilter: f }),
       })),
-      payRows: payRows.map(r => {
-        const actions = [{
+      payRows: payRows.map(r => ({
+        code: r.bookingCode, student: r.student, amount: DLT.fmt.money(r.amount),
+        ref: r.providerReference || '— manual',
+        status: r.status + (r.refunds && r.refunds.length ? ' · ' + r.refunds[r.refunds.length - 1].status.replace('REFUND_', '') : ''),
+        fg: r.status === 'SUCCESS' ? '#0E4B34'
+          : r.status === 'FAILED' || r.status === 'CANCELLED' ? '#8A2F1C' : '#8A5A0E',
+        actions: [{
           label: 'Reconcile',
-          onPick: () => {
+          onPick: async () => {
             try {
-              const res = DLT.admin.reconcilePayment(r.id);
-              this.ok('Reconciled ' + r.code + ': payment ' + res.status + (res.bookingStatus ? ', booking ' + res.bookingStatus.replace(/_/g, ' ') : '') + '.');
+              const res = await DLT.payments.reconcile(r.id);
+              this.ok('Reconciled ' + r.bookingCode + ': payment ' + res.paymentStatus +
+                ', booking ' + String(res.bookingStatus).replace(/_/g, ' ') + '.');
+              this._patch({ payments: await DLT.admin.payments() });
             } catch (e) { this.bad(e); }
           },
-        }];
-        if (r.status === 'DISCREPANCY') {
-          actions.push({
-            label: 'Resolve',
-            onPick: () => this.ask('Resolve the amount mismatch',
-              'Received ₹' + r.amount + ' against ₹' + (r.expectedAmount || '?') + ' due on ' + r.code +
-              '. Accepting confirms the booking at the amount paid; refunding returns the money and releases the seats.',
-              'Accept and confirm', 'e.g. Student paid the balance in cash at the gate',
-              (reason) => { const res = DLT.admin.resolveDiscrepancy(r.id, 'accept', reason); this.ok('Resolved — payment ' + res.status + '.'); }),
-          });
-          actions.push({
-            label: 'Refund it',
-            onPick: () => this.ask('Refund the mismatched payment',
-              'This returns ₹' + r.amount + ' to the student and releases the seats on ' + r.code + '.',
-              'Raise the refund', 'e.g. Student could not pay the balance',
-              (reason) => { DLT.admin.resolveDiscrepancy(r.id, 'refund', reason); this.ok('Refund raised and seats released.'); }),
-          });
-        }
-        if (r.status === 'DUPLICATE') {
-          actions.push({
-            label: 'Refund extra',
-            onPick: () => this.ask('Refund the duplicate charge',
-              '₹' + r.amount + ' was taken a second time on ' + r.code + '. The booking is unaffected.',
-              'Refund the extra charge', 'e.g. Duplicate charge confirmed against the acquirer',
-              (reason) => { DLT.admin.refundExtra(r.id, reason); this.ok('Duplicate refund raised.'); }),
-          });
-        }
-        return {
-          code: r.bookingCode, student: r.student, amount: '₹' + r.amount,
-          ref: r.providerReference || '— manual',
-          status: r.status + (r.refundStatus ? ' · ' + r.refundStatus.replace('REFUND_', '') : ''),
-          fg: r.status === 'SUCCESS' ? '#0E4B34'
-            : r.status === 'FAILED' || r.status === 'EXPIRED' ? '#8A2F1C'
-            : r.status === 'REFUNDED' ? '#4A4F49' : '#8A5A0E',
-          actions,
-        };
-      }),
+        }],
+      })),
 
       /* waitlist */
-      wlTripId: wlTripId || '',
+      wlTripId: st.wlTripId || '',
       wlTripOptions: wlTrips.map(t => ({
-        id: t.id, label: DLT.fmt.when(t.departureAt) + ' · ' + t.waitlistCount + ' waiting',
+        id: t.id, label: DLT.fmt.when(t.departureAt) + ' · ' + (t.waitlistCount || 0) + ' waiting',
       })),
-      onWlTrip: e => this.setState({ wlTripId: e.target.value }),
-      wlRows, emptyWaitlist: wlRows.length === 0,
+      onWlTrip: e => { this.setState({ wlTripId: e.target.value }); this._loadWaitlist(); },
+      wlRows, emptyWaitlist: !st.loading.Waitlist && wlRows.length === 0,
 
       /* students, feedback, requests */
       students,
-      reviews, noReviews: reviews.length === 0,
-      requests, noRequests: requests.length === 0,
+      reviews, noReviews: !st.loading.Feedback && reviews.length === 0,
+      requests, noRequests: !st.loading.Requests && requests.length === 0,
 
       /* reports */
       repTripId: st.repTripId, repFrom: st.repFrom, repTo: st.repTo,
@@ -2099,34 +2289,35 @@ class Component extends DCLogic {
       previewTitle: st.preview ? st.preview.label : '',
       previewCount: st.preview ? st.preview.rows.length : 0,
       previewCols: st.preview && st.preview.rows.length ? Object.keys(st.preview.rows[0]) : [],
-      previewRows: st.preview ? st.preview.rows.slice(0, 12).map(r => ({ cells: Object.values(r).map(v => String(v)) })) : [],
+      previewRows: st.preview ? st.preview.rows.slice(0, 12).map(r => ({ cells: Object.values(r).map(v => String(v == null ? '—' : v)) })) : [],
       exportPreview: () => {
-        try {
-          const r = DLT.admin.exportCsv(st.preview.kind, repFilter);
-          this.ok('Downloaded ' + r.name + ' — ' + r.rows + ' rows. The export is audit logged.');
-        } catch (e) { this.bad(e); }
+        if (!st.preview) return;
+        window.open(DLT.admin.exportUrl(st.preview.kind, repFilter), '_blank');
+        this.ok('Downloading ' + st.preview.label + '.');
       },
       postTrip: !!post,
-      postTripWhen: post ? post.when : '',
+      postTripWhen: post ? DLT.fmt.when(post.departure_at) : '',
       postTripRows: post ? [
-        { k: 'Route', v: post.route }, { k: 'Status', v: post.status },
-        { k: 'Departed', v: post.departedAt }, { k: 'Capacity', v: post.capacity },
-        { k: 'Booked', v: post.booked }, { k: 'Boarded', v: post.boarded },
-        { k: 'No-show', v: post.noShow }, { k: 'Denied', v: post.denied },
-        { k: 'Revenue', v: '₹' + post.revenue }, { k: 'Refunded', v: '₹' + post.refunded },
-        { k: 'Vehicle', v: post.vehicle }, { k: 'Rating', v: post.rating },
+        { k: 'Route', v: post.origin + ' → ' + post.destination }, { k: 'Status', v: post.trip_status },
+        { k: 'Departed', v: DLT.fmt.when(post.departure_at) }, { k: 'Capacity', v: post.capacity },
+        { k: 'Booked', v: post.seats_booked }, { k: 'Boarded', v: post.boarded },
+        { k: 'No-show', v: post.no_shows }, { k: 'Denied', v: post.denied },
+        { k: 'Revenue', v: DLT.fmt.money(post.gross_rupees) }, { k: 'Refunded', v: DLT.fmt.money(post.refunded_rupees) },
+        { k: 'Vehicle', v: post.vehicle ? post.vehicle + ' · ' + post.registration : '—' }, { k: 'Rating', v: '—' },
       ] : [],
 
       /* audit */
       auditQuery: st.auditQuery,
       onAuditQuery: e => this.setState({ auditQuery: e.target.value }),
       auditRows,
-      exportAudit: () => {
+      exportAudit: async () => {
         try {
-          const rows = DLT.admin.audit({ limit: 500 }).map(a => ({
-            When: DLT.fmt.dateTime(a.at), Actor: a.actor, Role: a.actorRole,
-            Action: a.action, Entity: a.entity, From: a.oldValue || '',
-            To: a.newValue || '', Reason: a.reason || '',
+          const { entries } = await DLT.admin.audit({ limit: 500 });
+          if (!entries.length) { this.ok('Nothing to export.'); return; }
+          const rows = entries.map((a) => ({
+            When: DLT.fmt.dateTime(a.occurredAt), Actor: a.actorName, Role: a.actorRole,
+            Action: a.action, Entity: (a.entityType || '') + (a.entityId ? ' ' + a.entityId : ''),
+            From: a.before || '', To: a.after || '', Reason: a.reason || '',
           }));
           const cols = Object.keys(rows[0]);
           const csv = [cols.join(',')].concat(rows.map(r => cols.map(c => {

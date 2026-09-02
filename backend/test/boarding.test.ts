@@ -549,7 +549,7 @@ describe('manifest', () => {
   test('seats sort numerically, as staff read them', async () => {
     await confirmedBooking(TRIP_A, ['2A', '10A', '1A'], 'DLT-80006');
     const m = await boarding.manifest(null, staffA());
-    assert.deepEqual(m.passengers.map((p: any) => p.seat_number), ['1A', '2A', '10A'],
+    assert.deepEqual(m.passengers.map((p: any) => p.seatNumber), ['1A', '2A', '10A'],
       'text sorting would put 10A second');
   });
 

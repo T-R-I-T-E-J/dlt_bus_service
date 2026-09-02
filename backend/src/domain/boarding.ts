@@ -292,8 +292,18 @@ export async function manifest(tripIdInput: string | null | undefined, actor: Ac
     if (!tripId) throw new AppError('VALIDATION', 'Choose a departure');
 
     /* The phone column is nulled inside trip_manifest for BOARDING_STAFF —
-     * in the projection, not by a caller remembering to strip it. */
-    const { rows } = await c.query('SELECT * FROM trip_manifest($1,$2::user_role)', [tripId, actor.role]);
+     * in the projection, not by a caller remembering to strip it.
+     * Aliased to camelCase here (trip_manifest's own RETURNS TABLE is
+     * snake_case, unlike every other projection in this codebase) so a
+     * caller of manifest() sees the same field-naming convention as
+     * everywhere else — passengerId, studentId, seatNumber, and so on. */
+    const { rows: raw } = await c.query('SELECT * FROM trip_manifest($1,$2::user_role)', [tripId, actor.role]);
+    const rows = raw.map((r: any) => ({
+      passengerId: r.passenger_id, name: r.name, studentId: r.student_id,
+      seatNumber: r.seat_number, seatType: r.seat_type, boardingStatus: r.boarding_status,
+      bookingCode: r.booking_code, boardingCode: r.boarding_code, phone: r.phone,
+      boardedAt: r.boarded_at,
+    }));
     const { rows: [t] } = await c.query(
       `SELECT t.id, t.departure_at AS "departureAt", t.status, r.origin, r.destination,
               v.name AS vehicle, v.registration
@@ -303,9 +313,9 @@ export async function manifest(tripIdInput: string | null | undefined, actor: Ac
 
     const counts = rows.reduce((a, p) => {
       a.expected++;
-      if (p.boarding_status === 'BOARDED') a.boarded++;
-      else if (p.boarding_status === 'DENIED_BOARDING') a.denied++;
-      else if (p.boarding_status === 'NO_SHOW') a.noShow++;
+      if (p.boardingStatus === 'BOARDED') a.boarded++;
+      else if (p.boardingStatus === 'DENIED_BOARDING') a.denied++;
+      else if (p.boardingStatus === 'NO_SHOW') a.noShow++;
       else a.awaiting++;
       return a;
     }, { expected: 0, boarded: 0, denied: 0, noShow: 0, awaiting: 0 });

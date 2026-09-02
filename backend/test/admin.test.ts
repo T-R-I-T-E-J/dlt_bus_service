@@ -45,7 +45,7 @@ const student = () => ({ userId: STUDENT, role: 'STUDENT' });
 async function seed() {
   await resetTables(pool, `users, trips, routes, vehicles, trip_seats, bookings, booking_passengers,
     payments, refunds, boarding_passes, boarding_events, trip_staff, waitlist_entries,
-    notification_requests, student_profiles, user_credentials, sessions, audit_logs,
+    notification_requests, student_profiles, user_credentials, sessions, audit_logs, reviews,
     provider_events`);
   const mk = async (e: string, n: string, r: string) =>
     (await q(`INSERT INTO users (email,name,role,phone) VALUES ($1,$2,$3,'9876543210') RETURNING id`,
@@ -878,5 +878,192 @@ describe('F-12 refund override — preserved from Phase 3/4, not reimplemented',
     const [a] = await auditFor('refund.policy_override');
     assert.match(a.reason, /retimed/);
     assert.equal(a.after_value, '₹150');
+  });
+});
+
+/* ================================================================= Admin console migration
+ *
+ * The gaps found migrating DLT Admin.dc.html off dlt-store.js: an admin trip
+ * listing (every status, not just what a student may book), the route picker
+ * a new draft needs, draft validation without mutating, a rich per-booking
+ * detail view, student search, an audited emergency-contact reveal, reviews
+ * (schema and permissions already existed — migration 001/003 — nothing had
+ * ever called them), and the payment reconciliation list (deliberately
+ * without the accept/refund "discrepancy" choice dlt-store.js had — see
+ * domain/admin.ts's listPaymentsForReconciliation for why that choice no
+ * longer exists to make).
+ */
+
+describe('admin console migration · trip listing, routes, draft validation', () => {
+  test('listAllTrips includes every status — DRAFT and CANCELLED — unlike the public listing', async () => {
+    await q(`UPDATE trips SET status='CANCELLED' WHERE id=$1`,
+      [(await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
+                  VALUES ($1,$2, now() + interval '1 day', 259,'OPEN') RETURNING id`,
+        [ROUTE, VEHICLE])).rows[0].id]);
+    const rows = await admin.listAllTrips(ops());
+    const statuses = rows.map((t: any) => t.status);
+    assert.ok(statuses.includes('DRAFT'), 'the draft fixture trip is present');
+    assert.ok(statuses.includes('CANCELLED'), 'the cancelled trip is present');
+  });
+
+  test('listAllTrips is permission-gated like every other admin read', async () => {
+    await assert.rejects(admin.listAllTrips(student()), /cannot perform/);
+  });
+
+  test('listRoutes returns the seeded route, for the new-trip form', async () => {
+    const rows = await admin.listRoutes(ops());
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].origin, 'Woxsen');
+  });
+
+  test('validateTripDraft: a properly configured draft is valid, without publishing it', async () => {
+    const out = await admin.validateTripDraft(TRIP_DRAFT, ops());
+    assert.equal(out.valid, true);
+    assert.ok(out.checks.some((c: string) => /vehicle is assigned/.test(c)));
+    const { rows: [t] } = await q('SELECT status FROM trips WHERE id=$1', [TRIP_DRAFT]);
+    assert.equal(t.status, 'DRAFT', 'validating never mutates the trip');
+  });
+
+  test('validateTripDraft: an already-published trip reports why it cannot be validated as a draft', async () => {
+    const out = await admin.validateTripDraft(TRIP, ops());
+    assert.equal(out.valid, false);
+    assert.ok(out.problems.some((p: string) => /not a draft/.test(p)));
+  });
+});
+
+describe('admin console migration · booking detail', () => {
+  test('bookingDetail carries owner, trip/vehicle, passengers and payment — the search list does not', async () => {
+    const b = await confirmedBooking(['2A'], 'DLT-97001');
+    const out = await admin.bookingDetail(b.id, ops());
+    assert.equal(out.owner.studentId, 'WU204118');
+    assert.equal(out.trip.vehicle.registration, 'TS07 AA 1111');
+    assert.equal(out.passengers.length, 1);
+    assert.equal(out.passengers[0].seatNumber, '2A');
+    assert.equal(out.payment.status, 'SUCCESS');
+  });
+
+  test('the inline audit trail is Super Admin only — OPS_ADMIN gets an empty array, not a 403', async () => {
+    const b = await confirmedBooking(['2B'], 'DLT-97002');
+    const asOps = await admin.bookingDetail(b.id, ops());
+    assert.deepEqual(asOps.auditTrail, []);
+    const asSuper = await admin.bookingDetail(b.id, sup());
+    assert.ok(Array.isArray(asSuper.auditTrail));
+  });
+
+  test('bookingDetail is permission-gated', async () => {
+    const b = await confirmedBooking(['2C'], 'DLT-97003');
+    await assert.rejects(admin.bookingDetail(b.id, student()), /cannot perform/);
+  });
+
+  test('findBookings also matches a passenger name or student ID, not just the booking/boarding code', async () => {
+    await confirmedBooking(['2D'], 'DLT-97004');
+    const byName = await admin.findBookings({ q: 'Passenger 2D' }, ops());
+    assert.equal(byName.length, 1);
+    const byStudentId = await admin.findBookings({ q: 'WU2D' }, ops());
+    assert.equal(byStudentId.length, 1);
+    assert.equal(byStudentId[0].ownerName, 'Aarav', 'the search list now carries the owner\'s name');
+  });
+});
+
+describe('admin console migration · students and the emergency-contact reveal', () => {
+  test('listStudents finds the seeded student by name, email, student ID or phone', async () => {
+    assert.equal((await admin.listStudents(ops(), 'Aarav')).length, 1);
+    assert.equal((await admin.listStudents(ops(), 'WU204118')).length, 1);
+    assert.equal((await admin.listStudents(ops(), 'woxsen.edu.in')).length, 1);
+    assert.equal((await admin.listStudents(ops(), 'nobody-matches-this')).length, 0);
+  });
+
+  test('emergencyContactAvailable reflects whether one is on file, without disclosing it', async () => {
+    const [before] = await admin.listStudents(ops(), 'Aarav');
+    assert.equal(before.emergencyContactAvailable, false);
+    await q(`UPDATE student_profiles SET emergency_contact_name='Priya', emergency_contact_phone='9123456789'
+              WHERE user_id=$1`, [STUDENT]);
+    const [after] = await admin.listStudents(ops(), 'Aarav');
+    assert.equal(after.emergencyContactAvailable, true);
+    assert.deepEqual(Object.keys(after).sort(),
+      ['bookings', 'email', 'emailVerified', 'emergencyContactAvailable', 'id', 'name', 'phone', 'studentId'].sort(),
+      'the roster carries only that a contact exists, never the contact itself');
+  });
+
+  test('revealEmergencyContact is Super Admin only — OPS_ADMIN, which holds student.read, is still refused', async () => {
+    await assert.rejects(admin.revealEmergencyContact(STUDENT, 'urgent', ops()), /cannot perform/);
+  });
+
+  test('revealEmergencyContact requires a reason, returns the contact, and audits WITHOUT the PII', async () => {
+    await q(`UPDATE student_profiles SET emergency_contact_name='Priya', emergency_contact_phone='9123456789',
+              emergency_contact_relation='Sister' WHERE user_id=$1`, [STUDENT]);
+    await assert.rejects(admin.revealEmergencyContact(STUDENT, 'no', sup()), /reason/);
+    const c = await admin.revealEmergencyContact(STUDENT, 'Passenger taken ill on the 17:30 departure', sup());
+    assert.equal(c!.name, 'Priya');
+    assert.equal(c!.relation, 'Sister');
+    const [a] = await auditFor('student.emergency_contact_revealed');
+    assert.equal(a.before_value, null);
+    assert.equal(a.after_value, null);
+    assert.match(a.reason, /taken ill/);
+    assert.doesNotMatch(JSON.stringify(a), /Priya|9123456789/,
+      'the contact itself must never land in the audit trail — audit.read is far broader than this reveal permission');
+  });
+
+  test('revealEmergencyContact on a student with none on file returns null, not an error', async () => {
+    const c = await admin.revealEmergencyContact(STUDENT, 'checking on file', sup());
+    assert.equal(c, null);
+  });
+});
+
+describe('admin console migration · reviews (schema and permissions already existed; nothing used them)', () => {
+  async function seedReview(rating = 4) {
+    const b = await confirmedBooking(['3A'], 'DLT-96001');
+    const { rows: [r] } = await q(
+      `INSERT INTO reviews (trip_id, booking_id, user_id, rating, comment)
+       VALUES ($1,$2,$3,$4,'Good trip') RETURNING id`, [TRIP, b.id, STUDENT, rating]);
+    return r.id;
+  }
+
+  test('listReviews is feedback.read, moderateReview is feedback.moderate — distinct permissions', async () => {
+    await seedReview();
+    assert.equal((await admin.listReviews(ops())).length, 1);
+    await assert.rejects(admin.listReviews(student()), /cannot perform/);
+  });
+
+  test('a review starts VISIBLE, can be hidden, unhidden, or marked resolved — three real states, not two', async () => {
+    const id = await seedReview();
+    let [row] = await admin.listReviews(ops());
+    assert.equal(row.status, 'VISIBLE');
+
+    await admin.moderateReview(id, 'hide', ops());
+    [row] = await admin.listReviews(ops());
+    assert.equal(row.status, 'HIDDEN');
+
+    await admin.moderateReview(id, 'unhide', ops());
+    [row] = await admin.listReviews(ops());
+    assert.equal(row.status, 'VISIBLE');
+
+    await admin.moderateReview(id, 'resolve', ops());
+    [row] = await admin.listReviews(ops());
+    assert.equal(row.status, 'RESOLVED');
+    const [a] = await auditFor('review.resolved');
+    assert.equal(a.after_value, 'RESOLVED');
+  });
+});
+
+describe('admin console migration · payment reconciliation — Super Admin only, no discrepancy override', () => {
+  test('listPaymentsForReconciliation is payment.admin — narrower than payment.read/payment.reconcile, which OPS_ADMIN holds', async () => {
+    await confirmedBooking(['3B'], 'DLT-95001');
+    const rows = await admin.listPaymentsForReconciliation(sup());
+    assert.ok(rows.length >= 1);
+    await assert.rejects(admin.listPaymentsForReconciliation(ops()), /cannot perform/,
+      'OPS_ADMIN has payment.read/payment.reconcile for its own narrower needs, not the full list');
+  });
+});
+
+describe('admin console migration · dashboard summary', () => {
+  test('dashboardSummary aggregates real report_trip_summary rows — no total is invented', async () => {
+    await q(`UPDATE trips SET departure_at = now() + interval '2 hours' WHERE id=$1`, [TRIP]);
+    await confirmedBooking(['3C'], 'DLT-94001');
+    const out = await admin.dashboardSummary(ops());
+    assert.equal(out.tripsToday, 1);
+    assert.equal(out.passengers, 1);
+    assert.ok(Array.isArray(out.alerts));
+    assert.ok(Array.isArray(out.activity));
   });
 });

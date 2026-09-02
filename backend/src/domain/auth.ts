@@ -494,6 +494,15 @@ export async function requirePermission(role: string, permission: string): Promi
     throw new AppError('FORBIDDEN', 'Your role cannot perform that action');
 }
 
+/** The full permission set for a role, so the client can decide which buttons
+ *  to draw without a round trip per button. This is presentation only — every
+ *  route re-checks with requirePermission against the session's role, so a
+ *  stale or forged copy of this list authorises nothing by itself. */
+export async function permissionsFor(role: string): Promise<string[]> {
+  const { rows } = await query('SELECT permission FROM role_permissions WHERE role = $1::user_role', [role]);
+  return rows.map((r: any) => r.permission);
+}
+
 async function publicUser(c: PoolClient, id: string): Promise<PublicUser> {
   const { rows: [u] } = await c.query(`${PUBLIC_USER_SQL} WHERE u.id = $1`, [id]);
   return u as PublicUser;

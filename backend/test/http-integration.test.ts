@@ -26,6 +26,7 @@ import { createHmac } from 'node:crypto';
 import type { Server } from 'node:http';
 import pg from 'pg';
 import { createApp } from '../src/app.ts';
+import { close as closeAppPool } from '../src/db/index.ts';
 import { resetTables } from './_reset.ts';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
@@ -40,7 +41,17 @@ before(() => {
   const port = typeof addr === 'object' && addr ? addr.port : 0;
   BASE = `http://127.0.0.1:${port}`;
 });
-after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+/* Two open pools, not one: this file's own `pool` (fixture queries) and the
+ * one createApp() uses internally (db/index.ts's module-level singleton).
+ * Neither being closed left the process with open TCP connections and no
+ * event-loop reason to exit — node's test runner then waited out the whole
+ * file until its own timeout, well after every actual subtest had already
+ * passed. A hang here reads as a failure with no assertion behind it. */
+after(async () => {
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await pool.end();
+  await closeAppPool();
+});
 
 /* ---------------------------------------------------------------- a tiny
  * manual cookie jar. fetch() does not persist cookies across calls the way a

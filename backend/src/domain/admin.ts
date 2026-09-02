@@ -16,8 +16,9 @@
 
 import { query, tx } from '../db/index.ts';
 import { AppError } from './errors.ts';
-import { audit } from './audit.ts';
+import { audit, readAudit } from './audit.ts';
 import { requirePermission } from './auth.ts';
+import { TRIP_SQL, decorateTrip } from './seats.ts';
 import type { Actor } from './authz.ts';
 
 /* One canonical Actor for the whole backend. Two local definitions would drift,
@@ -330,6 +331,12 @@ export async function updateBookingContact(
   });
 }
 
+/** Console copy promises "booking ID, boarding code, name, student ID or
+ *  phone" — the name/student ID half needs booking_passengers, not just the
+ *  booking row, since a booking's own columns carry neither. ownerName is
+ *  the registered user's name where there is one (a MANUAL or guest-checkout
+ *  booking has none — b.user_id is nullable), so a search-result label can
+ *  show who a booking belongs to instead of just its code. */
 export async function findBookings(f: {
   q?: string; tripId?: string; status?: string; from?: string; to?: string; limit?: number;
 }, actor: Actor) {
@@ -338,14 +345,19 @@ export async function findBookings(f: {
     `SELECT b.id, b.code, b.boarding_code AS "boardingCode", b.status, b.kind,
             b.total_amount AS "totalAmount", b.contact_phone AS "contactPhone",
             b.created_at AS "createdAt", t.departure_at AS "departureAt",
+            u.name AS "ownerName",
             m.received, m.returned, m.refundable,
             (SELECT count(*)::int FROM booking_passengers bp WHERE bp.booking_id = b.id) AS seats
        FROM bookings b
        JOIN trips t ON t.id = b.trip_id
        JOIN booking_money m ON m.booking_id = b.id
+       LEFT JOIN users u ON u.id = b.user_id
       WHERE ($1::text IS NULL OR upper(b.code) LIKE '%' || upper($1) || '%'
                               OR upper(b.boarding_code) LIKE '%' || upper($1) || '%'
-                              OR b.contact_phone LIKE '%' || $1 || '%')
+                              OR b.contact_phone LIKE '%' || $1 || '%'
+                              OR EXISTS (SELECT 1 FROM booking_passengers bp WHERE bp.booking_id = b.id
+                                           AND (bp.name ILIKE '%' || $1 || '%'
+                                             OR upper(bp.student_id) LIKE '%' || upper($1) || '%')))
         AND ($2::uuid IS NULL OR b.trip_id = $2)
         AND ($3::text IS NULL OR b.status::text = $3)
         AND ($4::timestamptz IS NULL OR t.departure_at >= $4)
@@ -457,9 +469,10 @@ export async function listWaitlist(tripId: string, actor: Actor) {
   const { rows } = await query(
     `SELECT w.id, w.position, w.status, w.seats_wanted AS "seatsWanted",
             w.offer_expires_at AS "offerExpiresAt", w.created_at AS "createdAt",
-            u.name, u.email, ts.seat_number AS "reservedSeat"
+            u.name, u.email, sp.student_id AS "studentId", ts.seat_number AS "reservedSeat"
        FROM waitlist_entries w
        JOIN users u ON u.id = w.user_id
+       LEFT JOIN student_profiles sp ON sp.user_id = u.id
        LEFT JOIN trip_seats ts ON ts.id = w.reserved_seat_id
       WHERE w.trip_id = $1 AND w.status IN ('WAITING','CLAIM_OFFERED','CLAIMED')
       ORDER BY w.position, w.created_at`, [tripId]);
@@ -629,4 +642,337 @@ export async function today(actor: Actor) {
     `SELECT count(*) FILTER (WHERE severity='P0')::int AS p0,
             count(*) FILTER (WHERE severity='P1')::int AS p1 FROM operational_alerts`);
   return { trips, alerts };
+}
+
+/* Known operational_alerts kinds (migration 008's UNION ALL, read verbatim —
+ * not guessed). An unmapped kind still renders, under its own raw name,
+ * rather than being silently dropped. */
+const ALERT_LABELS: Record<string, { title: string; section: string }> = {
+  LATE_SETTLEMENT: { title: 'Late settlement', section: 'Bookings' },
+  REFUND_STUCK: { title: 'Refund stuck', section: 'Payments' },
+  WEBHOOK_UNPROCESSED: { title: 'Webhook unprocessed', section: 'Payments' },
+  BAD_SIGNATURE: { title: 'Webhook signature failed', section: 'Payments' },
+  NO_STAFF_ASSIGNED: { title: 'No staff assigned', section: 'Boarding' },
+  OFFER_EXPIRING: { title: 'Waitlist offer expiring', section: 'Waitlist' },
+};
+
+/** The dashboard's summary tiles, alerts and activity feed — every figure
+ *  summed from report_trip_summary's already-correct per-trip rows (the same
+ *  view today() reads), never recomputed by a caller. */
+export async function dashboardSummary(actor: Actor) {
+  await requirePermission(actor.role, 'trip.read');
+  const { rows: trips } = await query(
+    `SELECT s.* FROM report_trip_summary s
+      WHERE s.departure_at BETWEEN now() - interval '6 hours' AND now() + interval '18 hours'
+      ORDER BY s.departure_at`);
+
+  const byStatus: Record<string, number> = {};
+  let passengers = 0, seatsSold = 0, capacity = 0, revenue = 0, refundToday = 0, boarded = 0;
+  for (const t of trips as any[]) {
+    byStatus[t.trip_status] = (byStatus[t.trip_status] ?? 0) + 1;
+    passengers += t.passengers; seatsSold += t.seats_booked; capacity += t.capacity;
+    revenue += t.gross_rupees; refundToday += t.refunded_rupees; boarded += t.boarded;
+  }
+  const occupancy = capacity ? Math.round((seatsSold / capacity) * 100) : 0;
+  const tripsTodayDetail = Object.entries(byStatus)
+    .map(([s, n]) => `${n} ${s.toLowerCase().replace(/_/g, ' ')}`).join(', ') || 'none scheduled';
+
+  let alertRows: Awaited<ReturnType<typeof operationalAlerts>> = [];
+  try { alertRows = await operationalAlerts(actor); } catch { alertRows = []; }
+  const alerts = alertRows
+    .filter((a: any) => a.severity !== 'P2')
+    .map((a: any) => ({
+      kind: a.kind, title: ALERT_LABELS[a.kind]?.title ?? a.kind, detail: a.detail,
+      cta: 'Review', section: ALERT_LABELS[a.kind]?.section ?? 'Dashboard',
+    }));
+
+  const { entries } = await readAudit({ limit: 8 });
+  const activity = entries.map((e: any) => ({
+    at: e.occurredAt,
+    text: `${e.actorName ?? 'system'} · ${e.action}${e.reason ? ' — ' + e.reason : ''}`,
+  }));
+
+  return { tripsToday: trips.length, tripsTodayDetail, passengers, seatsSold, capacity,
+    occupancy, revenue, refundToday, boarded, alerts, activity };
+}
+
+/** The route picker a new trip draft needs. This is a single-route product
+ *  today (Woxsen → Miyapur) but saveTrip's contract takes a routeId, and
+ *  nothing previously exposed one — the console's "New trip" form has no
+ *  route selector at all because there has only ever been the one row. */
+export async function listRoutes(actor: Actor) {
+  await requirePermission(actor.role, 'trip.read');
+  const { rows } = await query(
+    `SELECT id, code, origin, destination, duration_min AS "durationMin" FROM routes ORDER BY origin`);
+  return rows;
+}
+
+/* ---------------------------------------------------------------- trip listing
+ *
+ * Migrating the Admin console off dlt-store.js surfaced this gap: the public
+ * /trips list (seats.listTrips) is deliberately narrow — only what a student
+ * may book — so operations had nowhere to see a DRAFT being built or a
+ * CANCELLED departure in its own history. Same projection as the public list
+ * (seats.TRIP_SQL / decorateTrip — NO DUPLICATED RULES), every status, plus
+ * the two figures only operations needs: net revenue and the waitlist count.
+ */
+export async function listAllTrips(actor: Actor) {
+  await requirePermission(actor.role, 'trip.read');
+  const { rows } = await query(`${TRIP_SQL} ORDER BY t.departure_at DESC LIMIT 500`);
+  const { rows: extra } = await query(
+    `SELECT t.id::text AS id,
+            (SELECT COALESCE(sum(p.amount),0)::int FROM payments p JOIN bookings b ON b.id = p.booking_id
+              WHERE b.trip_id = t.id AND p.status = 'SUCCESS')
+            - (SELECT COALESCE(sum(rf.amount),0)::int FROM refunds rf JOIN bookings b ON b.id = rf.booking_id
+              WHERE b.trip_id = t.id AND rf.status <> 'REFUND_FAILED') AS revenue,
+            (SELECT count(*)::int FROM waitlist_entries w WHERE w.trip_id = t.id
+              AND w.status IN ('WAITING','CLAIM_OFFERED')) AS "waitlistCount"
+       FROM trips t`);
+  const byId = new Map(extra.map((e: any) => [e.id, e]));
+  return rows.map((r: any) => {
+    const t = decorateTrip(r);
+    const e = byId.get(t.id) ?? { revenue: 0, waitlistCount: 0 };
+    return { ...t, revenue: e.revenue, waitlistCount: e.waitlistCount,
+      staffUserIds: t.assignedStaff.map((s: any) => s.id) };
+  });
+}
+
+/** Read-only. Runs the same checks publishTrip() enforces, without mutating,
+ *  so the console can show "ready to publish" or exactly what is missing
+ *  before an operator commits. publishTrip still re-checks everything itself
+ *  on the actual transition — this is a preview, never the authority. */
+export async function validateTripDraft(tripId: string, actor: Actor) {
+  await requirePermission(actor.role, 'trip.read');
+  const { rows: [t] } = await query('SELECT * FROM trips WHERE id = $1', [tripId]);
+  if (!t) throw new AppError('NOT_FOUND', 'Trip not found');
+  const problems: string[] = [];
+  const checks: string[] = [];
+
+  if (t.status !== 'DRAFT') problems.push(`This trip is ${t.status}, not a draft.`);
+  else checks.push('Status is DRAFT.');
+
+  if (!t.vehicle_id) problems.push('No vehicle is assigned.');
+  else checks.push('A vehicle is assigned.');
+
+  const { rows: [seats] } = await query(
+    'SELECT count(*)::int n FROM trip_seats WHERE trip_id = $1', [tripId]);
+  if (!seats.n) problems.push('The trip has no seat map.');
+  else checks.push(`${seats.n} seats mapped.`);
+
+  if (new Date(t.departure_at).getTime() < Date.now())
+    problems.push('The departure time is in the past.');
+  else checks.push('The departure time is in the future.');
+
+  return { valid: problems.length === 0, problems, checks };
+}
+
+/* ---------------------------------------------------------------- booking detail
+ *
+ * findBookings() (above) is the search list — one row per booking, cheap to
+ * scan. This is the drill-down the console's tabs need: owner, the trip's
+ * vehicle, every passenger with how and by whom they boarded, the payment,
+ * every refund. Built once here rather than reusing payments.ts's
+ * student-facing BOOKING_SQL, which is deliberately narrower (no owner
+ * identity, no staff/method on a boarding, no admin-only audit trail).
+ */
+export async function bookingDetail(id: string, actor: Actor) {
+  await requirePermission(actor.role, 'booking.read');
+  const { rows: [b] } = await query(
+    `SELECT b.id, b.code, b.boarding_code AS "boardingCode", b.status,
+            b.kind AS "bookingType", b.total_amount AS "totalAmount",
+            b.contact_phone AS "contactPhone", b.created_at AS "createdAt",
+            json_build_object('id', u.id, 'name', u.name, 'studentId', sp.student_id) AS owner,
+            json_build_object(
+              'departureAt', t.departure_at, 'status', t.status,
+              'vehicle', CASE WHEN v.id IS NULL THEN NULL ELSE
+                json_build_object('name', v.name, 'registration', v.registration) END) AS trip,
+            m.received, m.returned, m.refundable,
+            COALESCE(rf.rows, '[]'::json) AS refunds,
+            (SELECT row_to_json(x) FROM (
+               SELECT p.id, p.status, p.amount, p.provider,
+                      p.provider_reference AS "providerReference",
+                      p.updated_at AS "updatedAt"
+                 FROM payments p WHERE p.booking_id = b.id
+                ORDER BY CASE p.status WHEN 'SUCCESS' THEN 0 ELSE 1 END, p.created_at DESC
+                LIMIT 1) x) AS payment,
+            COALESCE(pax.rows, '[]'::json) AS passengers
+       FROM bookings b
+       JOIN trips t ON t.id = b.trip_id
+       LEFT JOIN vehicles v ON v.id = t.vehicle_id
+       JOIN users u ON u.id = b.user_id
+       LEFT JOIN student_profiles sp ON sp.user_id = u.id
+       JOIN booking_money m ON m.booking_id = b.id
+       LEFT JOIN LATERAL (
+         SELECT json_agg(json_build_object('amount', r.amount, 'status', r.status,
+                'createdAt', r.created_at) ORDER BY r.created_at) AS rows
+           FROM refunds r WHERE r.booking_id = b.id) rf ON true
+       LEFT JOIN LATERAL (
+         SELECT json_agg(json_build_object(
+              'id', bp.id, 'name', bp.name, 'studentId', bp.student_id, 'phone', bp.phone,
+              'seatNumber', bp.seat_number, 'boardingStatus', bp.boarding_status,
+              'boardedAt', ev.occurred_at, 'boardingMethod', ev.method,
+              'boardedBy', su.name, 'boardingReason', ev.reason,
+              'passStatus', pass.status)
+            ORDER BY bp.seat_row_order, bp.seat_number) AS rows
+           FROM booking_passengers bp
+           LEFT JOIN boarding_passes pass ON pass.passenger_id = bp.id
+           LEFT JOIN LATERAL (
+             SELECT * FROM boarding_events e WHERE e.passenger_id = bp.id
+              ORDER BY e.occurred_at DESC LIMIT 1) ev ON true
+           LEFT JOIN users su ON su.id = ev.staff_user_id
+          WHERE bp.booking_id = b.id) pax ON true
+      WHERE b.id = $1`, [id]);
+  if (!b) throw new AppError('NOT_FOUND', 'Booking not found');
+
+  const refundedTotal = (b.refunds as { amount: number; status: string }[])
+    .filter(r => r.status !== 'REFUND_FAILED')
+    .reduce((n, r) => n + r.amount, 0);
+
+  /* The console's own copy calls this "Super Admin only" — a narrower gate
+   * than booking.read (which OPS_ADMIN also holds), kept exactly as stated
+   * rather than loosened on my own inference. OPS_ADMIN still reaches the
+   * same entries through the general Audit section (audit.read), which it
+   * also holds; this only keeps them out of the inline per-booking view. */
+  let auditTrail: unknown[] = [];
+  if (actor.role === 'SUPER_ADMIN') {
+    auditTrail = (await readAudit({ entityId: id, limit: 50 })).entries;
+  }
+
+  return { ...b, refundedTotal, auditTrail };
+}
+
+/* ---------------------------------------------------------------- students
+ *
+ * §8.1. The roster is student.read — OPS_ADMIN's usual scope. Revealing an
+ * emergency contact is narrower and deliberately its own permission
+ * (student.emergency.reveal, migration 016, Super Admin only): it discloses a
+ * THIRD PARTY's name and phone, not the student's own data, and Admin Spec
+ * §8.1 requires it be reasoned and audited every time.
+ */
+export async function listStudents(actor: Actor, q?: string | null) {
+  await requirePermission(actor.role, 'student.read');
+  const needle = q?.trim() || null;
+  const { rows } = await query(
+    `SELECT u.id, u.name, u.email, u.phone,
+            (u.email_verified_at IS NOT NULL) AS "emailVerified",
+            sp.student_id AS "studentId",
+            (sp.emergency_contact_name IS NOT NULL) AS "emergencyContactAvailable",
+            (SELECT count(*)::int FROM bookings b
+              WHERE b.user_id = u.id AND b.status <> 'ABANDONED') AS bookings
+       FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id
+      WHERE u.role = 'STUDENT' AND u.status = 'ACTIVE'
+        AND ($1::text IS NULL OR u.name ILIKE '%' || $1 || '%' OR u.email ILIKE '%' || $1 || '%'
+                              OR sp.student_id ILIKE '%' || $1 || '%' OR u.phone LIKE '%' || $1 || '%')
+      ORDER BY u.name LIMIT 200`, [needle]);
+  return rows;
+}
+
+export async function revealEmergencyContact(userId: string, reason: string, actor: Actor) {
+  await requirePermission(actor.role, 'student.emergency.reveal');
+  const why = needReason(reason, 'to reveal an emergency contact');
+  return tx(async (c) => {
+    const { rows: [u] } = await c.query(
+      `SELECT sp.emergency_contact_name AS name, sp.emergency_contact_phone AS phone,
+              sp.emergency_contact_relation AS relation
+         FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id
+        WHERE u.id = $1 AND u.role = 'STUDENT'`, [userId]);
+    if (!u) throw new AppError('NOT_FOUND', 'Student not found');
+    /* Deliberately no before/after value: the contact's name and phone must
+     * never land in the audit trail itself, which OPS_ADMIN can browse
+     * generally (audit.read) — that would make the reveal gate pointless.
+     * Only that a reveal happened, of whom, by whom, and why. */
+    await audit(c, actor, 'student.emergency_contact_revealed', 'user', userId, null, null, why);
+    if (!u.name) return null;
+    return { name: u.name, phone: u.phone, relation: u.relation };
+  });
+}
+
+/* ---------------------------------------------------------------- reviews (§Feedback)
+ *
+ * The table (migration 001) and the permissions (feedback.read/moderate,
+ * migration 003) already existed; nothing in domain/ or http/ ever used them.
+ * `resolved_at`/`resolved_by` (migration 016) mirror `hidden_at`/`hidden_by`
+ * exactly, for the third state the console's copy already described
+ * ("Hiding a review keeps it on the record...") but the schema had no column
+ * for: acknowledged and kept visible, as distinct from never looked at.
+ */
+export async function listReviews(actor: Actor) {
+  await requirePermission(actor.role, 'feedback.read');
+  const { rows } = await query(
+    `SELECT rv.id, rv.rating, rv.comment AS feedback, rv.hidden_at AS "hiddenAt",
+            rv.resolved_at AS "resolvedAt", rv.created_at AS "createdAt",
+            u.name AS student,
+            r.origin || ' → ' || r.destination || ' · ' || to_char(t.departure_at, 'DD Mon') AS trip
+       FROM reviews rv
+       JOIN trips t ON t.id = rv.trip_id
+       JOIN routes r ON r.id = t.route_id
+       JOIN users u ON u.id = rv.user_id
+      ORDER BY rv.created_at DESC LIMIT 200`);
+  return rows.map((r: any) => ({
+    ...r, status: r.hiddenAt ? 'HIDDEN' : r.resolvedAt ? 'RESOLVED' : 'VISIBLE',
+  }));
+}
+
+export async function moderateReview(
+  reviewId: string, action: 'hide' | 'unhide' | 'resolve', actor: Actor
+) {
+  await requirePermission(actor.role, 'feedback.moderate');
+  if (!['hide', 'unhide', 'resolve'].includes(action))
+    throw new AppError('VALIDATION', 'Choose hide, unhide or resolve');
+  return tx(async (c) => {
+    const { rows: [rv] } = await c.query('SELECT * FROM reviews WHERE id = $1 FOR UPDATE', [reviewId]);
+    if (!rv) throw new AppError('NOT_FOUND', 'Review not found');
+    const before = rv.hidden_at ? 'HIDDEN' : rv.resolved_at ? 'RESOLVED' : 'VISIBLE';
+    let after: string;
+    if (action === 'hide') {
+      await c.query('UPDATE reviews SET hidden_at = now(), hidden_by = $2 WHERE id = $1',
+        [reviewId, actor.userId]);
+      after = 'HIDDEN';
+    } else if (action === 'unhide') {
+      await c.query('UPDATE reviews SET hidden_at = NULL, hidden_by = NULL WHERE id = $1', [reviewId]);
+      after = 'VISIBLE';
+    } else {
+      await c.query('UPDATE reviews SET resolved_at = now(), resolved_by = $2 WHERE id = $1',
+        [reviewId, actor.userId]);
+      after = 'RESOLVED';
+    }
+    await audit(c, actor, `review.${action}d`, 'review', reviewId, before, after, null);
+    return { moderated: action, status: after };
+  });
+}
+
+/* ---------------------------------------------------------------- payment reconciliation
+ *
+ * F-01/F-05's fix already made discrepancy and duplicate handling AUTOMATIC:
+ * the webhook processor (domain/payments.ts) refunds an amount mismatch or a
+ * duplicate payment in full the moment it is detected — "never a silent
+ * accept", by its own comment — and no PENDING discrepancy state exists to
+ * hand an operator a choice between accepting a short payment or refunding
+ * it. dlt-store.js's resolveDiscrepancy(accept|refund) / refundExtra
+ * describe exactly that choice, which no longer exists once the fix is
+ * server-side and the money already moved before anyone opens this screen.
+ * Building it now would mean inventing a manual override of a rule the
+ * backend was deliberately changed to enforce automatically. This function
+ * is the transparency list only — real statuses, real references, real
+ * refunds already raised — plus the one action still genuine: nudging a
+ * reconciliation via the existing payments.reconcile() when a webhook is
+ * late. See the migration report for this exact mismatch, reported rather
+ * than papered over.
+ */
+export async function listPaymentsForReconciliation(actor: Actor) {
+  await requirePermission(actor.role, 'payment.admin');
+  const { rows } = await query(
+    `SELECT p.id, p.status, p.amount, p.provider, p.provider_reference AS "providerReference",
+            p.failure_reason AS "failureReason", p.updated_at AS "updatedAt",
+            b.id AS "bookingId", b.code AS "bookingCode", b.kind AS "bookingType",
+            u.name AS student,
+            COALESCE(rf.rows, '[]'::json) AS refunds
+       FROM payments p
+       JOIN bookings b ON b.id = p.booking_id
+       JOIN users u ON u.id = b.user_id
+       LEFT JOIN LATERAL (
+         SELECT json_agg(json_build_object('amount', r.amount, 'status', r.status)) AS rows
+           FROM refunds r WHERE r.booking_id = b.id) rf ON true
+      ORDER BY p.updated_at DESC LIMIT 300`);
+  return rows;
 }

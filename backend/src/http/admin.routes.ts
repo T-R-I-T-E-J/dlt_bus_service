@@ -40,11 +40,32 @@ router.get('/admin/today', requirePermission('trip.read'), async (req, res, next
   try { res.json(await admin.today(actorOf(req))); } catch (e) { next(e); }
 });
 
+router.get('/admin/dashboard', requirePermission('trip.read'), async (req, res, next) => {
+  try { res.json(await admin.dashboardSummary(actorOf(req))); } catch (e) { next(e); }
+});
+
 router.get('/admin/alerts', requirePermission('booking.read'), async (req, res, next) => {
   try { res.json({ alerts: await admin.operationalAlerts(actorOf(req)) }); } catch (e) { next(e); }
 });
 
 /* ---------------------------------------------------------------- trips */
+
+/* Every status, not just what a student may book — the Trips console's own
+ * listing. Registered before /admin/trips/:id/... below only by convention;
+ * Express does not confuse a literal 'affected'/'publish'/'status' suffix
+ * with the :id segment either way. */
+router.get('/admin/trips', requirePermission('trip.read'), async (req, res, next) => {
+  try { res.json({ trips: await admin.listAllTrips(actorOf(req)) }); } catch (e) { next(e); }
+});
+
+router.get('/admin/routes', requirePermission('trip.read'), async (req, res, next) => {
+  try { res.json({ routes: await admin.listRoutes(actorOf(req)) }); } catch (e) { next(e); }
+});
+
+router.get('/admin/trips/:id/validate', requirePermission('trip.read'), async (req, res, next) => {
+  try { res.json(await admin.validateTripDraft(UUID.parse(req.params.id), actorOf(req))); }
+  catch (e) { next(e); }
+});
 
 router.post('/admin/trips', requirePermission('trip.write'), async (req, res, next) => {
   try {
@@ -159,6 +180,11 @@ router.get('/admin/bookings', requirePermission('booking.read'), async (req, res
   } catch (e) { next(e); }
 });
 
+router.get('/admin/bookings/:id', requirePermission('booking.read'), async (req, res, next) => {
+  try { res.json({ booking: await admin.bookingDetail(UUID.parse(req.params.id), actorOf(req)) }); }
+  catch (e) { next(e); }
+});
+
 router.patch('/admin/bookings/:id/contact', requirePermission('booking.contact'),
   async (req, res, next) => {
     try {
@@ -231,6 +257,48 @@ router.get('/admin/reports/:kind/export', requirePermission('report.export'),
       res.send(out.csv);
     } catch (e) { next(e); }
   });
+
+/* ---------------------------------------------------------------- students */
+
+router.get('/admin/students', requirePermission('student.read'), async (req, res, next) => {
+  try {
+    const q = z.string().max(80).optional().parse(req.query.q);
+    res.json({ students: await admin.listStudents(actorOf(req), q ?? null) });
+  } catch (e) { next(e); }
+});
+
+router.post('/admin/students/:id/reveal-emergency-contact',
+  requirePermission('student.emergency.reveal'), async (req, res, next) => {
+    try {
+      const reason = REASON.parse(req.body?.reason);
+      res.json({ contact: await admin.revealEmergencyContact(UUID.parse(req.params.id), reason, actorOf(req)) });
+    } catch (e) { next(e); }
+  });
+
+/* ---------------------------------------------------------------- reviews */
+
+router.get('/admin/reviews', requirePermission('feedback.read'), async (req, res, next) => {
+  try { res.json({ reviews: await admin.listReviews(actorOf(req)) }); } catch (e) { next(e); }
+});
+
+router.post('/admin/reviews/:id/moderate', requirePermission('feedback.moderate'), async (req, res, next) => {
+  try {
+    const { action } = z.object({ action: z.enum(['hide', 'unhide', 'resolve']) }).parse(req.body);
+    res.json(await admin.moderateReview(UUID.parse(req.params.id), action, actorOf(req)));
+  } catch (e) { next(e); }
+});
+
+/* ---------------------------------------------------------------- payments
+ *
+ * Kept at the same restriction the console's own copy states ("Super Admin
+ * only") — see domain/admin.ts's listPaymentsForReconciliation and migration
+ * 016 for why this is payment.admin rather than the OPS_ADMIN-held
+ * payment.read/payment.reconcile.
+ */
+router.get('/admin/payments', requirePermission('payment.admin'), async (req, res, next) => {
+  try { res.json({ payments: await admin.listPaymentsForReconciliation(actorOf(req)) }); }
+  catch (e) { next(e); }
+});
 
 /* ---------------------------------------------------------------- audit */
 

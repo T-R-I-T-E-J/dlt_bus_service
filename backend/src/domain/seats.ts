@@ -100,7 +100,11 @@ export interface TripView {
 
 /* Counts come from the seat rows in the same statement as the trip, so a list
  * can never show an availability that never existed at any single instant. */
-const TRIP_SQL = `
+/* Exported so admin.ts's full trip listing (every status, not just the
+ * public OPEN/BOOKING_CLOSED/BOARDING window) can build on the same
+ * projection rather than re-deriving vehicle/capacity/assignedStaff a second
+ * way — NO DUPLICATED RULES, the same principle admin.ts states for itself. */
+export const TRIP_SQL = `
   SELECT t.id, t.departure_at AS "departureAt", t.price, t.status,
          /* B-1: the reporting and arrival estimates are computed HERE, from the
           * departure and the route duration, so the policy has exactly one home.
@@ -137,7 +141,7 @@ const TRIP_SQL = `
         FROM trip_staff ts JOIN users u ON u.id = ts.user_id WHERE ts.trip_id = t.id
     ) staff ON true`;
 
-const decorate = (t: any): TripView => ({
+export const decorateTrip = (t: any): TripView => ({
   ...t,
   bookable: t.status === 'OPEN' && t.available > 0,
   soldOut: t.available === 0 && ['OPEN', 'BOOKING_CLOSED'].includes(t.status),
@@ -153,13 +157,13 @@ export async function listTrips(opts: { days?: number; limit?: number } = {}): P
       ORDER BY t.departure_at
       LIMIT $2`,
     [String(opts.days ?? 14), opts.limit ?? 50]);
-  return rows.map(decorate);
+  return rows.map(decorateTrip);
 }
 
 export async function getTrip(id: string): Promise<TripView> {
   const { rows: [t] } = await query(`${TRIP_SQL} WHERE t.id = $1`, [id]);
   if (!t) throw new AppError('NOT_FOUND', 'That departure does not exist');
-  return decorate(t);
+  return decorateTrip(t);
 }
 
 /* ---------------------------------------------------------------- seat map */

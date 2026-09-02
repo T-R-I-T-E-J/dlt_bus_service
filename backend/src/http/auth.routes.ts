@@ -107,8 +107,11 @@ router.post('/auth/login', loginThrottle, async (req, res, next) => {
     const { user, sessionToken, expiresAt } = await auth.signIn(email, password, ctxOf(req));
     res.cookie(SESSION_COOKIE, sessionToken, cookieOpts(new Date(expiresAt)));
     res.clearCookie(GUEST_COOKIE, { path: '/' });   // holds are now the account's
-    /* The token itself is never in the body — only in the HttpOnly cookie. */
-    res.json({ user });
+    /* The token itself is never in the body — only in the HttpOnly cookie.
+     * `permissions` is the role's full grant list, read from role_permissions —
+     * presentation only (Admin.dc.html draws buttons from it); every route
+     * still re-checks the session's role itself. */
+    res.json({ user, permissions: await auth.permissionsFor(user.role) });
   } catch (e) { next(e); }
 });
 
@@ -131,9 +134,9 @@ router.post('/auth/logout-all', requireAuth, async (req, res, next) => {
 /** Replaces the prototype's synchronous DLT.auth.current(). */
 router.get('/auth/me', async (req, res, next) => {
   try {
-    if (!req.session) return res.json({ user: null });
+    if (!req.session) return res.json({ user: null, permissions: [] });
     const user = await auth.currentUser(req.session.userId);
-    res.json({ user });
+    res.json({ user, permissions: user ? await auth.permissionsFor(user.role) : [] });
   } catch (e) { next(e); }
 });
 

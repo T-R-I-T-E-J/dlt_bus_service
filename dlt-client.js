@@ -115,6 +115,7 @@ const qs = (obj) => {
  */
 
 let me = null;
+let mePermissions = [];
 let booted = false;
 let bootPromise = null;
 
@@ -122,12 +123,12 @@ let bootPromise = null;
 export function boot() {
   if (bootPromise) return bootPromise;
   bootPromise = GET('/auth/me')
-    .then((r) => { me = (r && r.user) || null; booted = true; return me; })
+    .then((r) => { me = (r && r.user) || null; mePermissions = (r && r.permissions) || []; booted = true; return me; })
     .catch((e) => {
       booted = true;
       /* An outage must not look like being signed out — a screen that shows the
        * sign-in panel on a flaky network is worse than one that says so. */
-      if (!e.isOffline) me = null;
+      if (!e.isOffline) { me = null; mePermissions = []; }
       throw e;
     });
   return bootPromise;
@@ -135,7 +136,25 @@ export function boot() {
 
 export const isReady = () => booted;
 
-function setMe(user) { me = user || null; booted = true; }
+function setMe(user, permissions) {
+  me = user || null;
+  if (permissions !== undefined) mePermissions = permissions || [];
+  else if (!user) mePermissions = [];
+  booted = true;
+}
+
+/** Server-verified, from the role's row in role_permissions (via /auth/me and
+ *  /auth/login) — never a client-side table that could drift from the DB.
+ *  Presentation only: it decides which buttons Admin.dc.html draws, never
+ *  what a request is allowed to do — every route re-checks the session's
+ *  role itself. 'STUDENT' holds no admin permissions and reaches an empty
+ *  list; '*' is the one shorthand the prototype used for "every permission",
+ *  which is true of exactly SUPER_ADMIN's granted set today. */
+function can(role, permission) {
+  if (permission === '*') return role === 'SUPER_ADMIN';
+  if (!me || me.role !== role) return false;
+  return mePermissions.includes(permission);
+}
 
 /* ---------------------------------------------------------------- live updates
  *
@@ -210,7 +229,7 @@ const auth = {
 
   async signIn(email, password) {
     const r = await POST('/auth/login', { email, password });
-    setMe(r.user);
+    setMe(r.user, r.permissions);
     notify();
     return r.user;
   },
@@ -228,7 +247,7 @@ const auth = {
   /** Refresh the cache from the server — after a change that alters the user. */
   async refresh() {
     const r = await GET('/auth/me');
-    setMe(r && r.user);
+    setMe(r && r.user, r && r.permissions);
     return me;
   },
 
@@ -501,9 +520,16 @@ const boarding = {
 
 const admin = {
   today: () => GET('/admin/today'),
+  dashboard: () => GET('/admin/dashboard'),
   alerts: () => GET('/admin/alerts').then((r) => r.alerts),
 
+  /** Every status — DRAFT and CANCELLED included. trips.listPublic (above) is
+   *  deliberately narrower: only what a student may book. */
+  listAllTrips: () => GET('/admin/trips').then((r) => r.trips),
+  /** The single-route picker a new trip draft needs. */
+  routes: () => GET('/admin/routes').then((r) => r.routes),
   saveTrip: (input) => POST('/admin/trips', input).then((r) => r.trip),
+  validateDraft: (id) => GET(`/admin/trips/${id}/validate`),
   publishTrip: (id) => POST(`/admin/trips/${id}/publish`),
   setTripStatus: (id, status, reason) => POST(`/admin/trips/${id}/status`, { status, reason }),
   cancelTrip: (id, reason) => POST(`/admin/trips/${id}/cancel`, { reason }),
@@ -520,6 +546,9 @@ const admin = {
   unassignStaff: (tripId, userId) => DEL(`/admin/trips/${tripId}/staff/${userId}`),
 
   bookings: (filter) => GET('/admin/bookings' + qs(filter)).then((r) => r.bookings),
+  /** The rich single-booking drill-down: owner, vehicle, every passenger's
+   *  boarding detail, payment, refunds — bookings() above is the search list. */
+  bookingDetail: (id) => GET(`/admin/bookings/${id}`).then((r) => r.booking),
   updateContact: (id, contactPhone, reason) =>
     PATCH(`/admin/bookings/${id}/contact`, { contactPhone, reason }),
 
@@ -528,6 +557,21 @@ const admin = {
 
   waitlist: (tripId) => GET(`/admin/trips/${tripId}/waitlist`).then((r) => r.entries),
   moveWaitlistToTop: (id, reason) => POST(`/admin/waitlist/${id}/move-to-top`, { reason }),
+
+  students: (q) => GET('/admin/students' + qs({ q })).then((r) => r.students),
+  /** Reason is mandatory and every reveal is audit logged (§8.1) — the
+   *  returned contact is never cached by this file; the screen shows it once. */
+  revealEmergencyContact: (userId, reason) =>
+    POST(`/admin/students/${userId}/reveal-emergency-contact`, { reason }).then((r) => r.contact),
+
+  reviews: () => GET('/admin/reviews').then((r) => r.reviews),
+  moderateReview: (id, action) => POST(`/admin/reviews/${id}/moderate`, { action }),
+
+  /** Real statuses and references, Super Admin only (§ Payments · payment.admin).
+   *  No accept/refund "discrepancy" decision — the webhook processor already
+   *  refunds an amount mismatch or a duplicate payment automatically and in
+   *  full; there is no pending state left for an operator to resolve. */
+  payments: () => GET('/admin/payments').then((r) => r.payments),
 
   /* Reports are computed SERVER-SIDE, every total. The prototype recomputed
    * every report on every render on a six-second timer (F-21); nothing here
@@ -554,7 +598,7 @@ const admin = {
 
 export const DLT = {
   auth, trips, seats, bookings, payments, checkout, waitlist, boarding, admin,
-  notifications, fmt, seatType, roleLabel,
+  notifications, fmt, seatType, roleLabel, can,
   subscribe, startPolling, stopPolling,
   boot, isReady, setUnauthenticatedHandler,
   ApiError,
