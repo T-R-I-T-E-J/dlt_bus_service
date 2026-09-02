@@ -57,6 +57,13 @@ const CodeBody = z.object({ code: z.string().min(4).max(64) });
 const ResetBody = z.object({ code: z.string().min(4).max(64), password: z.string().min(8).max(200) });
 const EmailBody = z.object({ email: z.string().max(254) });
 const ChangeBody = z.object({ currentPassword: z.string().max(200), password: z.string().min(8).max(200) });
+const ProfileBody = z.object({
+  name: z.string().min(3).max(120),
+  phone: z.string().min(10).max(15),
+  emergencyContact: z.object({ name: z.string().max(120), phone: z.string().max(15), relation: z.string().max(60).nullish() }).nullable(),
+});
+const StudentIdChangeBody = z.object({ studentId: z.string().min(1).max(32), reason: z.string().max(500).nullish() });
+const DeletionBody = z.object({ reason: z.string().max(500).nullish() });
 
 /* ---------------------------------------------------------------- middleware */
 
@@ -163,6 +170,35 @@ router.post('/auth/change-password', requireAuth, async (req, res, next) => {
     await auth.changePassword(req.session!.userId, currentPassword, password);
     res.clearCookie(SESSION_COOKIE, { path: '/' });   // every session died
     res.json({ ok: true, reauthenticate: true });
+  } catch (e) { next(e); }
+});
+
+router.patch('/auth/profile', requireAuth, async (req, res, next) => {
+  try {
+    const body = ProfileBody.parse(req.body);
+    const user = await auth.updateProfile(req.session!.userId, body, { userId: req.session!.userId });
+    res.json({ user });
+  } catch (e) { next(e); }
+});
+
+router.get('/auth/requests/mine', requireAuth, async (req, res, next) => {
+  try { res.json({ requests: await auth.myPendingRequests(req.session!.userId) }); }
+  catch (e) { next(e); }
+});
+
+router.post('/auth/requests/student-id-change', requireAuth, resetThrottle, async (req, res, next) => {
+  try {
+    const { studentId, reason } = StudentIdChangeBody.parse(req.body);
+    res.status(201).json(await auth.requestStudentIdChange(
+      req.session!.userId, studentId, reason ?? null, { userId: req.session!.userId }));
+  } catch (e) { next(e); }
+});
+
+router.post('/auth/requests/account-deletion', requireAuth, resetThrottle, async (req, res, next) => {
+  try {
+    const { reason } = DeletionBody.parse(req.body);
+    res.status(201).json(await auth.requestAccountDeletion(
+      req.session!.userId, reason ?? null, { userId: req.session!.userId }));
   } catch (e) { next(e); }
 });
 

@@ -68,7 +68,7 @@ export interface PublicUser {
   id: string; email: string; name: string; role: string; phone: string | null;
   studentId: string | null; university: string | null; status: string;
   emailVerified: boolean; createdAt: string;
-  emergencyContact: { name: string; phone: string } | null;
+  emergencyContact: { name: string; phone: string; relation: string | null } | null;
 }
 
 /* The exact shape dlt-store.js's publicUser() returned, so the client contract
@@ -81,7 +81,8 @@ const PUBLIC_USER_SQL = `
          sp.student_id AS "studentId", sp.university,
          CASE WHEN sp.emergency_contact_name IS NULL THEN NULL
               ELSE json_build_object('name', sp.emergency_contact_name,
-                                     'phone', sp.emergency_contact_phone) END
+                                     'phone', sp.emergency_contact_phone,
+                                     'relation', sp.emergency_contact_relation) END
            AS "emergencyContact"
     FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id`;
 
@@ -359,6 +360,123 @@ export async function changePassword(
     await audit(c, { actorId: userId }, 'auth.password_changed', 'user', userId, null, null, null);
     return { ok: true as const };
   });
+}
+
+/* ---------------------------------------------------------------- profile
+ *
+ * Name, phone and emergency contact are the student's to change immediately —
+ * Account's own copy says so ("Name, phone and emergency contact are yours to
+ * change"). A student ID is identity information; it goes through a request
+ * instead (§ requests below), which is why updateProfile never writes it.
+ */
+
+export interface ProfileUpdate {
+  name: string; phone: string;
+  emergencyContact: { name: string; phone: string; relation?: string | null } | null;
+}
+
+function validateProfile(i: ProfileUpdate) {
+  if (!i.name || i.name.trim().length < 3) throw new AppError('VALIDATION', 'Enter your full name');
+  if (!/^[6-9]\d{9}$/.test((i.phone ?? '').replace(/\s/g, '')))
+    throw new AppError('VALIDATION', 'Enter a valid Indian mobile number');
+  if (i.emergencyContact) {
+    const ec = i.emergencyContact;
+    if (!ec.name || !ec.name.trim())
+      throw new AppError('VALIDATION', 'Enter the emergency contact\'s name');
+    if (!/^[6-9]\d{9}$/.test((ec.phone ?? '').replace(/\s/g, '')))
+      throw new AppError('VALIDATION', 'Enter a valid emergency contact number');
+  }
+}
+
+export async function updateProfile(userId: string, input: ProfileUpdate, actor: { userId: string }): Promise<PublicUser> {
+  validateProfile(input);
+  return tx(async (c) => {
+    await c.query(
+      'UPDATE users SET name=$2, phone=$3, updated_at=now() WHERE id=$1',
+      [userId, input.name.trim(), input.phone.replace(/\s/g, '')]
+    );
+    await c.query(
+      `UPDATE student_profiles
+          SET emergency_contact_name = $2, emergency_contact_phone = $3,
+              emergency_contact_relation = $4, updated_at = now()
+        WHERE user_id = $1`,
+      [userId, input.emergencyContact ? input.emergencyContact.name.trim() : null,
+       input.emergencyContact ? input.emergencyContact.phone.replace(/\s/g, '') : null,
+       input.emergencyContact ? (input.emergencyContact.relation || null) : null]
+    );
+    await audit(c, actor, 'auth.profile_updated', 'user', userId, null, null, null);
+    return publicUser(c, userId);
+  });
+}
+
+/* ---------------------------------------------------------------- account requests
+ *
+ * notification_requests already carries STUDENT_ID_CHANGE and ACCOUNT_DELETION
+ * (migration 001) and domain/admin.ts already decides both — approving an ID
+ * change writes student_profiles.student_id, approving a deletion anonymises
+ * the account. What was missing is the student-facing half: nothing let a
+ * student FILE either request. This is that half, not a new mechanism.
+ *
+ * requests_one_open_per_kind (migration 001, F-15) is a partial unique index on
+ * (user_id, kind) WHERE status='PENDING' — the database itself refuses a
+ * second open request of the same kind, which is why the 23505 branch below is
+ * reachable and is the one place "already pending" is decided.
+ */
+
+const STUDENT_ID_RE = /^[A-Za-z0-9]{4,20}$/;
+
+export async function requestStudentIdChange(
+  userId: string, requestedValue: string, reason: string | null, actor: { userId: string }
+): Promise<{ requested: true }> {
+  const value = (requestedValue ?? '').trim();
+  if (!STUDENT_ID_RE.test(value))
+    throw new AppError('VALIDATION', 'Enter a valid student ID (4–20 letters or numbers)');
+  return tx(async (c) => {
+    const { rows: [u] } = await c.query(
+      'SELECT student_id FROM student_profiles WHERE user_id=$1', [userId]);
+    try {
+      await c.query(
+        `INSERT INTO notification_requests (kind, user_id, requested_value, current_value, reason)
+         VALUES ('STUDENT_ID_CHANGE', $1, $2, $3, $4)`,
+        [userId, value, u?.student_id ?? null, reason || null]);
+    } catch (e: any) {
+      if (e.code === '23505')
+        throw new AppError('CONFLICT', 'You already have a student ID change request pending review');
+      throw e;
+    }
+    await audit(c, actor, 'request.filed', 'notification_request', userId, null, 'STUDENT_ID_CHANGE', reason || null);
+    return { requested: true as const };
+  });
+}
+
+export async function requestAccountDeletion(
+  userId: string, reason: string | null, actor: { userId: string }
+): Promise<{ requested: true }> {
+  return tx(async (c) => {
+    try {
+      await c.query(
+        `INSERT INTO notification_requests (kind, user_id, reason)
+         VALUES ('ACCOUNT_DELETION', $1, $2)`,
+        [userId, reason || null]);
+    } catch (e: any) {
+      if (e.code === '23505')
+        throw new AppError('CONFLICT', 'A deletion request is already filed and waiting on review');
+      throw e;
+    }
+    await audit(c, actor, 'request.filed', 'notification_request', userId, null, 'ACCOUNT_DELETION', reason || null);
+    return { requested: true as const };
+  });
+}
+
+/** The student's own open requests — never another student's. Used only to
+ *  show "already pending" state; the decision itself stays admin.ts's alone. */
+export async function myPendingRequests(userId: string): Promise<Array<{ kind: string; createdAt: string }>> {
+  const { rows } = await query(
+    `SELECT kind, created_at AS "createdAt" FROM notification_requests
+      WHERE user_id = $1 AND status = 'PENDING'
+      ORDER BY created_at DESC`,
+    [userId]);
+  return rows;
 }
 
 /* ---------------------------------------------------------------- authorization */

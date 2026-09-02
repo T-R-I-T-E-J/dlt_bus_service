@@ -17,6 +17,7 @@
 import { test, describe, before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import * as auth from '../src/domain/auth.ts';
+import * as admin from '../src/domain/admin.ts';
 import { query, tx, pool } from '../src/db/index.ts';
 import { AppError } from '../src/domain/errors.ts';
 import { outbox } from '../src/integrations/email/index.ts';   // test transport
@@ -30,7 +31,7 @@ async function truncateAll() {
    * behind (no afterEach), and seedGuestHeldSeat inserts a fixed registration. */
   await resetTables(pool, `users, sessions, user_credentials, student_profiles,
     password_resets, email_verifications, login_attempts, audit_logs,
-    routes, vehicles, trips, trip_seats`);
+    routes, vehicles, trips, trip_seats, notification_requests`);
 }
 const codeFromLastEmail = () => outbox.at(-1)!.vars.code as string;
 const rejectsWith = async (p: Promise<unknown>, code: string, match?: RegExp) => {
@@ -318,6 +319,152 @@ describe('authentication', () => {
       const blob = JSON.stringify(rows);
       assert.ok(!blob.includes(codeFromLastEmail()), 'a reset code must never reach the audit log');
       assert.ok(!blob.includes(STUDENT.password));
+    });
+  });
+
+  /* ---------------------------------------------------------- student_id
+   * nullable (migration 014) — the Account migration's approved fix for the
+   * signup crash: student_profiles.student_id was NOT NULL, but signup always
+   * allowed studentId to be absent. */
+  describe('signup without a student ID (migration 014)', () => {
+    test('signup succeeds with no studentId at all, and the profile row exists with NULL', async () => {
+      const { studentId, ...noId } = STUDENT;
+      const u = await auth.signUp(noId, {});
+      assert.equal(u.studentId, null);
+      const { rows: [row] } = await query(
+        'SELECT student_id FROM student_profiles WHERE user_id=$1', [u.id]);
+      assert.equal(row.student_id, null, 'the profile row must exist, just with a null id');
+    });
+
+    test('two studentId-less signups do not collide with each other', async () => {
+      const { studentId, ...noId } = STUDENT;
+      await auth.signUp(noId, {});
+      const u2 = await auth.signUp({ ...noId, email: 'diya@woxsen.edu.in' }, {});
+      assert.equal(u2.studentId, null, 'a second NULL studentId must not violate uniqueness');
+    });
+
+    test('signup with a valid studentId still works exactly as before', async () => {
+      const u = await auth.signUp(STUDENT, {});
+      assert.equal(u.studentId, 'WU204118');
+    });
+
+    test('two accounts still cannot share one real studentId', async () => {
+      await auth.signUp(STUDENT, {});
+      await assert.rejects(
+        auth.signUp({ ...STUDENT, email: 'diya@woxsen.edu.in' }, {}),
+        /./, 'a duplicate real studentId must still be refused by the unique index');
+    });
+  });
+
+  /* ---------------------------------------------------------- profile */
+
+  describe('updateProfile', () => {
+    let userId: string;
+    beforeEach(async () => { userId = (await auth.signUp(STUDENT, {})).id; });
+
+    test('updates name and phone immediately, no review needed', async () => {
+      const u = await auth.updateProfile(userId,
+        { name: 'Aarav K Menon', phone: '9876500000', emergencyContact: null },
+        { userId });
+      assert.equal(u.name, 'Aarav K Menon');
+      assert.equal(u.phone, '9876500000');
+    });
+
+    test('sets and clears the emergency contact, relation included (mismatch fix, migration 015)', async () => {
+      const withEc = await auth.updateProfile(userId,
+        { name: STUDENT.name, phone: STUDENT.phone,
+          emergencyContact: { name: 'Lakshmi Menon', phone: '9840012233', relation: 'Mother' } },
+        { userId });
+      assert.deepEqual(withEc.emergencyContact, { name: 'Lakshmi Menon', phone: '9840012233', relation: 'Mother' });
+
+      const cleared = await auth.updateProfile(userId,
+        { name: STUDENT.name, phone: STUDENT.phone, emergencyContact: null }, { userId });
+      assert.equal(cleared.emergencyContact, null);
+    });
+
+    test('never touches studentId — that is requestStudentIdChange\'s job, not this one', async () => {
+      const u = await auth.updateProfile(userId,
+        { name: STUDENT.name, phone: STUDENT.phone, emergencyContact: null }, { userId });
+      assert.equal(u.studentId, 'WU204118', 'updateProfile must be a no-op on the protected field');
+    });
+
+    test('validates the same rules signup does', async () => {
+      await rejectsWith(auth.updateProfile(userId,
+        { name: 'Al', phone: STUDENT.phone, emergencyContact: null }, { userId }), 'VALIDATION', /full name/);
+      await rejectsWith(auth.updateProfile(userId,
+        { name: STUDENT.name, phone: '123', emergencyContact: null }, { userId }), 'VALIDATION', /mobile/);
+    });
+  });
+
+  /* ---------------------------------------------------------- account requests
+   * The student-facing half of notification_requests — domain/admin.ts already
+   * approves STUDENT_ID_CHANGE and ACCOUNT_DELETION; nothing previously let a
+   * student file either. requests_one_open_per_kind (F-15) is the database's
+   * own duplicate-request guard, exercised here, not simulated. */
+  describe('account requests (student ID change / deletion)', () => {
+    let userId: string, opsId: string;
+    beforeEach(async () => {
+      userId = (await auth.signUp(STUDENT, {})).id;
+      opsId = (await query(
+        `INSERT INTO users (email,name,role,phone) VALUES ('ops@dlt.co.in','Ops','OPS_ADMIN','9876500001') RETURNING id`
+      )).rows[0].id;
+    });
+    const ops = () => ({ userId: opsId, role: 'OPS_ADMIN' });
+
+    test('files a student ID change request without changing the ID yet', async () => {
+      const r = await auth.requestStudentIdChange(userId, 'WU999999', 'lost my card', { userId });
+      assert.deepEqual(r, { requested: true });
+      const me = await auth.currentUser(userId);
+      assert.equal(me!.studentId, 'WU204118', 'the old ID stays active until operations approves');
+      const mine = await auth.myPendingRequests(userId);
+      assert.equal(mine.length, 1);
+      assert.equal(mine[0].kind, 'STUDENT_ID_CHANGE');
+    });
+
+    test('rejects a malformed requested student ID', async () => {
+      await rejectsWith(auth.requestStudentIdChange(userId, '!!', null, { userId }), 'VALIDATION');
+    });
+
+    test('F-15 — a second open student ID change request is refused, not silently queued', async () => {
+      await auth.requestStudentIdChange(userId, 'WU999999', null, { userId });
+      await rejectsWith(auth.requestStudentIdChange(userId, 'WU888888', null, { userId }),
+        'CONFLICT', /already have a student ID change request/);
+    });
+
+    test('operations approving the request is what actually changes the ID (existing admin.ts path)', async () => {
+      await auth.requestStudentIdChange(userId, 'WU999999', null, { userId });
+      const { rows: [row] } = await query(
+        `SELECT id FROM notification_requests WHERE user_id=$1 AND kind='STUDENT_ID_CHANGE'`, [userId]);
+      await admin.decideRequest(row.id, 'approve', 'verified new ID card', ops());
+      const me = await auth.currentUser(userId);
+      assert.equal(me!.studentId, 'WU999999');
+    });
+
+    test('files a deletion request', async () => {
+      const r = await auth.requestAccountDeletion(userId, 'graduating', { userId });
+      assert.deepEqual(r, { requested: true });
+      const mine = await auth.myPendingRequests(userId);
+      assert.equal(mine.some(x => x.kind === 'ACCOUNT_DELETION'), true);
+    });
+
+    test('F-15 — a second open deletion request is refused', async () => {
+      await auth.requestAccountDeletion(userId, null, { userId });
+      await rejectsWith(auth.requestAccountDeletion(userId, null, { userId }),
+        'CONFLICT', /already filed/);
+    });
+
+    test('a student ID change and a deletion request can both be open at once — different kinds', async () => {
+      await auth.requestStudentIdChange(userId, 'WU999999', null, { userId });
+      await auth.requestAccountDeletion(userId, null, { userId });
+      const mine = await auth.myPendingRequests(userId);
+      assert.equal(mine.length, 2);
+    });
+
+    test('myPendingRequests never returns another student\'s request', async () => {
+      const other = (await auth.signUp({ ...STUDENT, email: 'diya@woxsen.edu.in', studentId: 'WU111111' }, {})).id;
+      await auth.requestAccountDeletion(userId, null, { userId });
+      const mineForOther = await auth.myPendingRequests(other);
+      assert.equal(mineForOther.length, 0);
     });
   });
 });
