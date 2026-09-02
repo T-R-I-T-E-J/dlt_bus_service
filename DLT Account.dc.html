@@ -28,7 +28,7 @@
     [data-m="cols"] { grid-template-columns: minmax(0,1fr) !important; }
   }
 </style>
-<script src="./dlt-store.js"></script>
+<script type="module" src="./dlt-client.js"></script>
 </helmet>
 
 <header style="height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(18px,4vw,44px);border-bottom:1px solid rgba(14,16,20,.10)">
@@ -106,18 +106,6 @@
   </section>
 
   <aside style="display:flex;flex-direction:column;gap:14px">
-    <div style="border:1px solid rgba(14,16,20,.14);background:#FFFFFF;padding:18px">
-      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Reference accounts</div>
-      <p style="margin:9px 0 0;font-size:12.5px;line-height:1.55;color:#4A4F49">Seeded for review. Password <strong style="font-weight:600">{{ demoPassword }}</strong> for all of them.</p>
-      <div style="margin:13px 0 0;display:flex;flex-direction:column;gap:8px">
-        <sc-for list="{{ demos }}" as="d" hint-placeholder-count="4">
-          <button type="button" onClick="{{ d.onUse }}" style="text-align:left;border:1px solid rgba(14,16,20,.16);background:#FCFBF8;padding:11px 12px;border-radius:2px;cursor:pointer;min-height:44px">
-            <span style="display:block;font-size:12.5px;font-weight:600">{{ d.email }}</span>
-            <span style="display:block;margin-top:3px;font-size:11.5px;color:#5F6560">{{ d.role }}</span>
-          </button>
-        </sc-for>
-      </div>
-    </div>
     <div style="border:1px solid rgba(14,16,20,.14);padding:18px">
       <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Eligibility</div>
       <p style="margin:9px 0 0;font-size:12.5px;line-height:1.6;color:#4A4F49">DLT is open to enrolled students with a valid student ID. Automatic university verification is not part of this release, so IDs are checked at the door.</p>
@@ -219,21 +207,54 @@
 <script type="text/x-dc" data-dc-script data-props="{
   &quot;$preview&quot;: { &quot;width&quot;: 1180, &quot;height&quot;: 860 }
 }">
+/* Student account screen, on the real API.
+ *
+ * Architecture matches the Booking/Dashboard migration: the SERVER is
+ * authoritative, dlt-client.js is the only boundary, every read lands in
+ * state.data through _load(), and renderVals() is pure — it makes no request
+ * and decides nothing.
+ *
+ * Deliberately absent rather than faked: the "Reference accounts" demo-login
+ * panel (DLT.auth.demoPassword/demoAccounts do not exist in dlt-client.js —
+ * prototype authority, not ported, same as Booking's deleted sandbox panel).
+ *
+ * Two account requests — a student ID change and account deletion — go
+ * through notification_requests (kind STUDENT_ID_CHANGE / ACCOUNT_DELETION),
+ * which domain/admin.ts already knows how to approve; this screen is the
+ * student-facing half of that existing, previously one-sided contract.
+ */
 class Component extends DCLogic {
   state = {
-    ready: false, mode: 'signin', busy: false, error: null, message: null,
+    ready: false, offline: false, mode: 'signin', busy: false, error: null, message: null,
     name: '', email: '', phone: '', studentId: '', password: '', resetToken: '',
     fName: '', fPhone: '', fStudentId: '', ecName: '', ecPhone: '', ecRelation: '',
-    delReason: '', tick: 0,
+    delReason: '',
+    /* server state, filled only by _load() */
+    data: { bookings: [], pendingRequests: [] },
   };
 
   async componentDidMount() {
-    await DLT.ready;
-    this._unsub = DLT.subscribe(() => this.setState({ tick: this.state.tick + 1 }));
-    this.setState({ ready: true });
-    this._loadProfile();
+    /* Account IS the sign-in surface, so a 401 mid-session means "the cached
+       session is stale" — refresh it from the server rather than pretending
+       nothing changed. */
+    DLT.setUnauthenticatedHandler(() => {
+      DLT.auth.refresh().catch(() => {});
+      this.setState({ mode: 'signin', message: null });
+    });
+    try {
+      await DLT.boot();
+    } catch (e) {
+      if (e.isOffline) this.setState({ offline: true });
+    }
+    this.setState({ ready: true }, () => this._load());
   }
-  componentWillUnmount() { if (this._unsub) this._unsub(); }
+
+  fail(e) {
+    if (!e) return this.setState({ busy: false });
+    if (e.isOffline) return this.setState({ busy: false, offline: true,
+      error: 'You appear to be offline. Nothing was changed.' });
+    this.setState({ busy: false, error: e.message ? e.message : String(e) });
+  }
 
   _loadProfile() {
     const me = DLT.auth.current();
@@ -245,23 +266,35 @@ class Component extends DCLogic {
     });
   }
 
+  /* Every server read for this screen, in one place, called from lifecycle
+     and from actions — never from render. */
+  async _load() {
+    const me = DLT.auth.current();
+    if (!me) return this.setState({ data: { bookings: [], pendingRequests: [] } });
+    this._loadProfile();
+    try {
+      const bookings = me.role === 'STUDENT' ? await DLT.bookings.mine() : [];
+      const pendingRequests = await DLT.auth.myRequests();
+      this.setState({ data: { bookings, pendingRequests }, offline: false });
+    } catch (e) { this.fail(e); }
+  }
+
   submit = async () => {
     const st = this.state;
     this.setState({ busy: true, error: null, message: null });
     try {
       if (st.mode === 'signup') {
         await DLT.auth.signUp({ name: st.name, email: st.email, password: st.password,
-          phone: st.phone, studentId: st.studentId });
+          phone: st.phone, studentId: st.studentId || null });
         await DLT.auth.signIn(st.email, st.password);
         this.setState({ busy: false, password: '', message: 'Account created. Verify your email when you get a chance — booking works either way.' });
-        this._loadProfile();
-        this._afterSignIn();
+        this._afterSignIn(() => this._load());
       } else if (st.mode === 'forgot') {
-        const r = DLT.auth.requestReset(st.email);
+        /* Always the same response whether or not the address exists, and
+           NEVER a code — the code leaves only by email (F-06). */
+        await DLT.auth.requestReset(st.email);
         this.setState({ busy: false, mode: 'reset',
-          message: r.resetToken
-            ? 'Reset code for this sandbox: ' + r.resetToken + ' (a real deployment emails this).'
-            : 'If that address has an account, a reset link is on its way.' });
+          message: 'If that address has an account, a reset link is on its way.' });
       } else if (st.mode === 'reset') {
         await DLT.auth.resetPassword(st.resetToken, st.password);
         this.setState({ busy: false, mode: 'signin', password: '', resetToken: '',
@@ -269,34 +302,46 @@ class Component extends DCLogic {
       } else {
         await DLT.auth.signIn(st.email, st.password);
         this.setState({ busy: false, password: '' });
-        this._loadProfile();
-        this._afterSignIn();
+        this._afterSignIn(() => this._load());
       }
     } catch (e) { this.setState({ busy: false, error: e.message || String(e) }); }
   };
 
-  _afterSignIn() {
+  _afterSignIn(then) {
     const me = DLT.auth.current();
     const next = new URLSearchParams(location.search).get('next');
     if (me && me.role !== 'STUDENT') { location.href = './DLT Admin.dc.html'; return; }
     if (next === 'book') { location.href = './DLT Booking.dc.html'; return; }
-    if (next === 'trips') { location.href = './DLT Dashboard.dc.html'; }
+    if (next === 'trips') { location.href = './DLT Dashboard.dc.html'; return; }
+    if (then) then();
   }
 
-  saveProfile = () => {
+  saveProfile = async () => {
     const st = this.state;
+    this.setState({ busy: true, error: null });
     try {
       const ec = (st.ecName || st.ecPhone)
-        ? { name: st.ecName, phone: st.ecPhone, relation: st.ecRelation } : null;
+        ? { name: st.ecName, phone: st.ecPhone, relation: st.ecRelation || null } : null;
       const me = DLT.auth.current();
-      const idChanged = st.fStudentId !== (me.studentId || '');
-      DLT.auth.updateProfile({ name: st.fName, phone: st.fPhone, emergencyContact: ec,
-        studentId: idChanged ? st.fStudentId : null });
-      this._loadProfile();
-      this.setState({ error: null, message: idChanged
+      const newId = st.fStudentId.trim();
+      const idRequestFiled = !!newId && newId !== (me.studentId || '');
+      await DLT.auth.updateProfile({ name: st.fName, phone: st.fPhone, emergencyContact: ec });
+      if (idRequestFiled) await DLT.auth.requestStudentIdChange(newId, null);
+      await this._load();
+      this.setState({ busy: false, error: null, message: idRequestFiled
         ? 'Saved. Your student ID change has gone to operations for review — the old ID stays active until they approve it.'
         : 'Saved.' });
-    } catch (e) { this.setState({ error: e.message || String(e) }); }
+    } catch (e) { this.fail(e); }
+  };
+
+  requestDeletion = async () => {
+    const st = this.state;
+    this.setState({ busy: true, error: null });
+    try {
+      await DLT.auth.requestDeletion(st.delReason || null);
+      await this._load();
+      this.setState({ busy: false, message: 'Deletion request filed. Operations will review it; your bookings stay valid until they do.', error: null });
+    } catch (e) { this.fail(e); }
   };
 
   renderVals() {
@@ -304,7 +349,7 @@ class Component extends DCLogic {
     if (!st.ready) {
       return { kicker: 'Account', signedIn: false, signedOut: true, formKicker: 'Loading',
         formTitle: 'One moment', formBlurb: 'Reading your session.', cta: 'Please wait',
-        busy: true, demos: [], demoPassword: '', switchLabel: '', submit: () => {},
+        busy: true, switchLabel: '', submit: () => {},
         toggleMode: () => {}, goForgot: () => {}, needsPassword: false, isSignUp: false,
         isReset: false, showForgot: false, name: '', email: '', phone: '', studentId: '',
         password: '', resetToken: '', onName: () => {}, onEmail: () => {}, onPhone: () => {},
@@ -314,21 +359,30 @@ class Component extends DCLogic {
     const me = DLT.auth.current();
     const mode = st.mode;
 
-    let bookings = [], reviewCount = 0;
-    if (me && me.role === 'STUDENT') {
-      bookings = DLT.bookings.mine();
-      reviewCount = bookings.filter(b => b.bucket === 'Completed').length;
-    }
+    /* Presentation-only grouping, identical to Dashboard's own _bucket() — a
+       classification of server data, never a value the server did not send. */
+    const bucket = (b) => {
+      if (['CANCELLED_BY_STUDENT', 'CANCELLED_BY_DLT'].indexOf(b.status) >= 0)
+        return (b.refunds || []).some(r => r.status === 'REFUNDED') ? 'Refunded' : 'Cancelled';
+      if (b.status === 'ABANDONED') return 'Cancelled';
+      if (b.trip && ['COMPLETED', 'DEPARTED'].indexOf(b.trip.status) >= 0) return 'Completed';
+      return 'Upcoming';
+    };
+    const bookings = (this.state.data.bookings || []).map(b => Object.assign({ bucket: bucket(b) }, b));
+    const reviewCount = bookings.filter(b => b.bucket === 'Completed').length;
     const spent = bookings.filter(b => b.status === 'CONFIRMED' || b.bucket === 'Completed')
       .reduce((n, b) => n + b.totalAmount, 0);
-    const refunded = bookings.reduce((n, b) => n + (b.refundedTotal || 0), 0);
+    const refunded = bookings.reduce((n, b) =>
+      n + (b.refunds || []).filter(r => r.status === 'REFUNDED').reduce((m, r) => m + r.amount, 0), 0);
+    const pending = this.state.data.pendingRequests || [];
+    const deletionPending = pending.some(r => r.kind === 'ACCOUNT_DELETION');
 
     return {
       kicker: me ? 'Account' : 'Sign in',
       signedIn: !!me, signedOut: !me,
       error: st.error, message: st.message,
       busy: st.busy,
-      signOut: () => { DLT.auth.signOut(); this.setState({ message: 'Signed out.', mode: 'signin' }); },
+      signOut: () => { DLT.auth.signOut().finally(() => this.setState({ message: 'Signed out.', mode: 'signin', data: { bookings: [], pendingRequests: [] } })); },
 
       /* signed-out form */
       formKicker: mode === 'signup' ? 'New account' : mode === 'forgot' ? 'Password help' : mode === 'reset' ? 'Set a new password' : 'Student sign in',
@@ -361,11 +415,6 @@ class Component extends DCLogic {
       onStudentId: e => this.setState({ studentId: e.target.value }),
       onPassword: e => this.setState({ password: e.target.value }),
       onResetToken: e => this.setState({ resetToken: e.target.value }),
-      demoPassword: DLT.auth.demoPassword,
-      demos: DLT.auth.demoAccounts.map(d => ({
-        email: d.email, role: d.role,
-        onUse: () => this.setState({ mode: 'signin', email: d.email, password: DLT.auth.demoPassword, error: null }),
-      })),
 
       /* signed-in profile */
       roleLabel: me ? DLT.roleLabel(me.role) : '',
@@ -390,15 +439,10 @@ class Component extends DCLogic {
         { k: 'Paid', v: '₹' + spent },
         { k: 'Refunded', v: '₹' + refunded },
       ],
-      deletionOpen: true, deletionPending: false,
+      deletionOpen: !deletionPending, deletionPending: deletionPending,
       delReason: st.delReason,
       onDelReason: e => this.setState({ delReason: e.target.value }),
-      requestDeletion: () => {
-        try {
-          DLT.auth.requestDeletion(st.delReason);
-          this.setState({ message: 'Deletion request filed. Operations will review it; your bookings stay valid until they do.', error: null });
-        } catch (e) { this.setState({ error: e.message || String(e) }); }
-      },
+      requestDeletion: this.requestDeletion,
     };
   }
 }

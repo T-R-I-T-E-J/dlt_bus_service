@@ -243,6 +243,26 @@ const auth = {
     setMe(null); notify();
     return r;
   },
+
+  /** Name, phone, emergency contact — immediate. Student ID is NOT here; it
+   *  goes through requestStudentIdChange because it is identity information
+   *  reviewed by operations, never written by the student directly. */
+  async updateProfile({ name, phone, emergencyContact }) {
+    const r = await PATCH('/auth/profile', { name, phone, emergencyContact });
+    setMe(r.user);
+    return r.user;
+  },
+
+  /** The student's own open requests (STUDENT_ID_CHANGE / ACCOUNT_DELETION),
+   *  so the screen can show "already pending" instead of offering the form
+   *  again — the server refuses a second open one either way (F-15). */
+  myRequests: () => GET('/auth/requests/mine').then((r) => r.requests),
+
+  requestStudentIdChange: (studentId, reason) =>
+    POST('/auth/requests/student-id-change', { studentId, reason: reason || null }),
+
+  requestDeletion: (reason) =>
+    POST('/auth/requests/account-deletion', { reason: reason || null }),
 };
 
 /* ---------------------------------------------------------------- presentation
