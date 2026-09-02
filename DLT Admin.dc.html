@@ -36,8 +36,14 @@
 <!-- QR decoding only. It never decides anything: DLT.boarding.scan remains the
      authority for pass, booking, payment, trip, cancellation, refund and prior
      boarding. Native BarcodeDetector is used where the browser has it (Chromium,
-     Android); jsQR covers Safari, Firefox and iOS, which do not. -->
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+     Android); jsQR covers Safari, Firefox and iOS, which do not.
+     Vendored (./jsqr.vendor.js, jsQR 1.4.0 unpkg/jsdelivr build, sha256
+     bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859) rather
+     than loaded live from a CDN — this runs inside boarding staff's
+     authenticated session at the door, and an unpinned third-party script
+     there is a real supply-chain surface, not a hypothetical one: a CDN
+     compromise or an on-path MITM could inject arbitrary JS into it. -->
+<script src="./jsqr.vendor.js"></script>
 </helmet>
 
 <div data-m="shell" style="min-height:100vh;display:grid;grid-template-columns:236px minmax(0,1fr);background:#EFEDE6">
