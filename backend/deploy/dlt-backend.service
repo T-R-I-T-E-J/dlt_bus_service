@@ -1,0 +1,63 @@
+# DLT · deploy/dlt-backend.service — systemd unit for the Node process.
+#
+# Install:
+#   sudo cp backend/deploy/dlt-backend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now dlt-backend
+#
+# Fill in the placeholders below (WorkingDirectory, User, EnvironmentFile,
+# node's absolute path) for the real host before installing. Nothing here
+# has been installed or started — this is a template.
+#
+# Graceful shutdown: app.ts already handles SIGTERM/SIGINT itself (clears
+# the three background-job timers, closes the HTTP server so in-flight
+# requests finish, then closes the DB pool, then exits 0) — this unit does
+# not need ExecStop or KillSignal overrides for that; the defaults
+# (SIGTERM, then SIGKILL after TimeoutStopSec) are exactly what app.ts
+# already expects to receive.
+
+[Unit]
+Description=DLT backend (Woxsen <-> Miyapur student shuttle)
+After=network.target postgresql.service
+# Only add this if PostgreSQL runs on the SAME host as a systemd unit named
+# postgresql — remove the postgresql.service reference if the database is
+# remote or containerized elsewhere.
+
+[Service]
+Type=simple
+# CHANGE: absolute path to the repo's backend/ directory on this host.
+WorkingDirectory=/opt/dlt/backend
+# CHANGE: a dedicated, unprivileged system user — never root.
+User=dlt
+Group=dlt
+# CHANGE: absolute path to node (`which node` on the target host) — 22+.
+ExecStart=/usr/bin/node --experimental-strip-types src/app.ts
+Restart=on-failure
+RestartSec=5
+# Five crashes in 60s and systemd stops trying — a fast crash loop is an
+# incident to page on, not something to spin on forever.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# CHANGE: absolute path to the real .env on this host. Root-owned, mode 600,
+# readable only by the dlt user this unit runs as. NEVER the repo's own
+# .env.example, and never a copy checked into any repo.
+EnvironmentFile=/etc/dlt/backend.env
+
+# Give in-flight requests time to finish after SIGTERM before systemd
+# escalates to SIGKILL. app.ts's own shutdown already closes the server and
+# waits for connections; this just avoids systemd cutting that short.
+TimeoutStopSec=30
+
+# Hardening: least privilege for the unit itself, independent of the
+# database role least privilege (dlt_app) the application connects with.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# The app needs to read its own working directory (source) and write
+# nowhere on disk except stdout/stderr (systemd journal) — no ReadWritePaths
+# needed unless a future feature writes local files.
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,341 @@
+# DLT — production deployment guide
+
+Status: the application (Homepage/3D, Booking, Dashboard, Account, Admin,
+Razorpay payments/refunds) is feature-complete and verified — 348/348
+backend tests passing, typecheck clean, every screen migrated off the
+prototype store and confirmed against the real backend in a real browser.
+**Nothing has been deployed.** This document is what's left between "works
+on a dev machine" and "serving real traffic," and exactly what was
+verified this session versus what still needs a real production host to
+verify for real.
+
+---
+
+## 1. Production PostgreSQL
+
+### What the schema already does for you
+Migration 009 creates `dlt_app` as `NOLOGIN` with least-privilege grants
+(`SELECT/INSERT/UPDATE/DELETE` on ordinary tables; `SELECT/INSERT` only on
+`audit_logs`), and a trigger that refuses `DELETE`/`UPDATE` on `audit_logs`
+for **every** role, the table owner and the connected superuser included.
+`assertReady()` (`backend/src/db/index.ts`) refuses to let the app boot if
+the role it's connected as can `DELETE`/`UPDATE` `audit_logs`, unless
+`ALLOW_AUDIT_PRIVILEGE=i-understand-the-risk` is explicitly set — which
+must **never** be set in production.
+
+### What I verified this session (real commands, real results, not claimed)
+Against a **throwaway** local database, torn down afterward:
+
+```
+CREATE DATABASE dlt_prodcheck;
+DATABASE_URL=postgres://postgres:postgres@<host>/dlt_prodcheck node scripts/migrate.mjs
+  -> all 16 migrations applied cleanly from zero, no manual intervention
+
+ALTER ROLE dlt_app LOGIN PASSWORD '<generated>';
+
+DATABASE_URL=postgres://dlt_app:<generated>@<host>/dlt_prodcheck \
+  NODE_ENV=production node --experimental-strip-types src/app.ts
+GET /api/health -> {"ok":true,"db":{"version":160014,"migrations":16,"auditAppendOnly":true}, ...}
+  -> the app boots and serves against the LEAST-PRIVILEGED role, not a superuser
+
+psql -U dlt_app -c "DELETE FROM audit_logs;"           -> permission denied for table audit_logs
+psql -U dlt_app -c "UPDATE audit_logs SET reason='x';" -> permission denied for table audit_logs
+psql -U postgres -c "DELETE FROM audit_logs;"           -> refused by the trigger even as superuser
+```
+
+Also verified: a real `pg_dump`/`pg_restore` round-trip of `dlt_dev` (see
+§5) preserves the same schema, triggers, and grants — this isn't a
+one-off artifact of the migrations, it survives a restore too.
+
+**The password used above was generated for this local verification only
+and was discarded** (`dlt_app` was reverted to `NOLOGIN` afterward, the
+throwaway database dropped). It is not, and must not become, a real
+credential — it has been through conversation logs and is not secret. The
+real production password must be generated fresh, on the real host, by
+whoever provisions it.
+
+### What you still need to do, on the real production database
+
+```sh
+# 1. Create the database (if PostgreSQL is freshly provisioned)
+createdb dlt_prod
+
+# 2. Run every migration from zero
+DATABASE_URL=postgres://postgres:<superuser-pw>@<prod-host>:5432/dlt_prod \
+  node backend/scripts/migrate.mjs
+
+# 3. Generate a strong password and grant LOGIN — do this ON the production
+#    host, and do not paste the generated password back into a chat, an
+#    issue tracker, or a commit. A password manager or your platform's
+#    secrets store, not a text file.
+openssl rand -base64 32
+psql -U postgres -d dlt_prod -c "ALTER ROLE dlt_app LOGIN PASSWORD '<paste generated password>';"
+
+# 4. Point production DATABASE_URL at dlt_app, never postgres:
+DATABASE_URL=postgres://dlt_app:<password>@<prod-host>:5432/dlt_prod
+
+# 5. Confirm ALLOW_AUDIT_PRIVILEGE is ABSENT from the production
+#    environment file entirely (not set to any value — absent).
+
+# 6. Boot once and check:
+curl https://<domain>/api/health
+#   -> "auditAppendOnly": true is the pass condition. If it's false, the
+#      connection is still over-privileged — stop and fix before serving
+#      real traffic on it.
+```
+
+If PostgreSQL is managed (RDS, Cloud SQL, etc.), the platform usually
+creates its own bootstrap superuser under a different name than
+`postgres` — migration 009's `dlt_app` creation is idempotent
+(`IF NOT EXISTS`) and doesn't care what the bootstrap role is called; only
+step 3's `ALTER ROLE ... LOGIN PASSWORD` and the final `DATABASE_URL` need
+adjusting to match.
+
+---
+
+## 2. HTTPS / domain readiness
+
+**Required, not optional**: `cookieOpts` in `auth.routes.ts` hardcodes
+`secure: true` on the session cookie, unconditional on `NODE_ENV`. Browsers
+refuse to store a `Secure` cookie set over plain HTTP for any origin other
+than `localhost`. Deployed on a real domain over plain HTTP, sign-in would
+silently never persist a session — not a crash, just a student who can
+never stay signed in. TLS is a hard requirement for this app to function
+at all past `localhost`, not hardening on top of a working HTTP deployment.
+
+### Architecture: one origin, nginx in front
+
+```
+Browser
+  │  HTTPS (443)
+  ▼
+nginx  ──── serves *.dc.html, dlt-client.js, journey.js, assets/*  (static, from disk)
+  │
+  │  /api/*  (proxy_pass, plain HTTP, loopback only)
+  ▼
+node src/app.ts  (127.0.0.1:3000, never exposed directly to the internet)
+  │
+  ▼
+PostgreSQL (dlt_app role)
+```
+
+Template: `backend/deploy/nginx-dlt.conf` (CHANGE the domain and
+certificate paths before use — not installed, not pointed at a real
+domain).
+
+**Why one origin, not a separate API domain**: there is no CORS middleware
+anywhere in `app.ts` — a deliberate, documented gap (M-2,
+`backend/SECURITY_FINDINGS.md`), because same-origin needs none, and a
+hastily added `Access-Control-Allow-Origin: *` with credentials would be a
+real vulnerability, not a convenience. This mirrors the local dev
+architecture exactly (`devserve.mjs`'s static-host-plus-`/api`-proxy
+pattern) — same shape, real TLS in front. **If a separate frontend domain
+is ever wanted, build real CORS deliberately first** — do not point two
+domains at this backend and expect requests to succeed.
+
+`app.set('trust proxy', 1)` in `app.ts` trusts exactly one reverse-proxy
+hop for `X-Forwarded-For`/`req.ip`, which the rate limiters and audit log
+depend on for a real client IP. The nginx config above is that one hop —
+if a CDN or load balancer sits in front of nginx too, the trust-proxy
+count needs to change to match, or `req.ip` becomes spoofable.
+
+### TLS certificate
+Not provisioned — needs a real domain first. Standard path: Let's Encrypt
+via `certbot --nginx`, auto-renewing. Any CA works; nothing in the app
+cares which one issued the certificate, only that nginx terminates TLS
+before traffic reaches the Node process (the app itself only ever speaks
+plain HTTP, on loopback).
+
+---
+
+## 3. Email
+
+`backend/src/integrations/email/index.ts` already implements the
+transport boundary — this was NOT built this session, it already existed
+and was already correct. What's still missing is a real provider bound to
+it, which needs your decision on which provider before it can send a
+single real email.
+
+### Exact environment variables required
+```
+EMAIL_API_URL=<the provider's send-email HTTP endpoint>
+EMAIL_API_KEY=<the provider's API key>
+EMAIL_FROM=no-reply@dlt.co.in        # optional, has a default
+EMAIL_FROM_NAME=DLT                  # optional, has a default
+```
+Without both `EMAIL_API_URL` and `EMAIL_API_KEY` set, the backend runs
+with `unconfiguredTransport`: every verification email, password reset,
+and (once built) booking/cancellation/refund notification **fails loudly**
+with "Email delivery is not configured on this server" rather than
+silently no-op'ing. That's deliberate (a silent failure here means a
+student locked out with nothing in the logs to explain why) — it also
+means **account verification and password reset do not work at all**
+until a real provider is wired in.
+
+### What I did NOT do, and why
+`httpTransport()`'s request body —
+`{ from: {email,name}, to: [{email}], template, variables }` — is a
+**generic placeholder shape**, not any specific real provider's actual
+API contract (SendGrid, Postmark, AWS SES, Resend, and Mailgun all differ
+here). I have not picked a provider or invented credentials for one — the
+mega-prompt's own rule ("do not invent credentials") extends to not
+inventing *which provider*, since that request-body shape would need to
+change to match whatever's actually chosen. **This needs your decision**:
+which provider, and I'll adjust `httpTransport()`'s request shape to that
+provider's real API in one place, exactly as the file's own comment
+already anticipates ("bind it to whichever provider is chosen and adjust
+the request body in ONE place").
+
+Until then, `EMAIL_TRANSPORT=memory` keeps the current dev/test behavior
+(no external calls, captured in an in-process outbox) — it must not be
+set in production once a real provider is configured, since it would
+silently stop delivering anything while reporting success.
+
+---
+
+## 4. Process supervision
+
+Template: `backend/deploy/dlt-backend.service` (systemd — not installed,
+not started). `Restart=on-failure`, capped at 5 restarts per 60s so a fast
+crash loop pages someone instead of spinning forever.
+
+**Graceful shutdown was already correct and required no change**:
+`app.ts`'s `SIGTERM`/`SIGINT` handler already clears the three background
+job timers (`sweep`/`events`/`refunds`), closes the HTTP server (letting
+in-flight requests finish), then closes the DB pool, then exits 0. I
+verified this holds under a real `systemctl`-style stop this session: the
+temporary verification instance (§1) was stopped and the port was
+confirmed free with no orphaned process or hung connection. The systemd
+unit's `TimeoutStopSec=30` just gives that sequence room to finish before
+systemd would otherwise escalate to `SIGKILL` — no code change was needed
+or made.
+
+`startJobs()` is explicitly documented in `app.ts` as in-process and
+single-instance ("running these twice concurrently is safe... but
+wasteful") — do not run two instances of this unit behind a load balancer
+without moving the three jobs to a real scheduler first; each instance
+would otherwise redundantly poll the same work.
+
+---
+
+## 5. Backups
+
+### Procedure (scripted, `backend/scripts/backup.sh` / `restore.sh`)
+```sh
+# Backup (run on a schedule — cron/systemd timer — against production)
+DATABASE_URL=postgres://dlt_app:<pw>@<prod-host>/dlt_prod \
+  ./backend/scripts/backup.sh /var/backups/dlt
+
+# Restore, into a NEW empty database — never in place onto the live one
+createdb dlt_restore_check
+DATABASE_URL=postgres://dlt_app:<pw>@<prod-host>/dlt_restore_check \
+  ./backend/scripts/restore.sh /var/backups/dlt/dlt-<timestamp>.dump
+```
+`backup.sh` uses `pg_dump --format=custom` (portable across a role/name
+change, which `pg_restore` needs since a restore target's role won't be
+called `dlt_dev`) and prunes dumps older than 14 days — a starting
+retention policy, not a compliance decision made on your behalf.
+
+### What I actually verified this session (not merely documented)
+Against real data in the local `dlt_dev` database (10 users, 15 trips, 3
+bookings, 75 audit log entries at the time):
+
+```
+pg_dump -Fc dlt_dev -> dlt_dev_verify.dump (199 KB)
+CREATE DATABASE dlt_restore_verify
+pg_restore --no-owner -d dlt_restore_verify dlt_dev_verify.dump
+  -> users: 10, trips: 15, bookings: 3, audit_logs: 75   — identical to source
+  -> schema_migrations: 16                                — every migration intact
+  -> DELETE FROM audit_logs on the RESTORED copy -> refused by the trigger
+     — the append-only protection survives a restore, not just fresh migrations
+```
+Both the throwaway backup file and the restored database were deleted
+after verification.
+
+### What's genuinely still open
+- **Scheduling**: no cron/systemd-timer is installed. Add one calling
+  `backup.sh` (daily is a reasonable starting cadence for a service this
+  size).
+- **Off-host storage**: `backup.sh` writes to local disk. A backup that
+  lives only on the database server is not a backup against that
+  server's own failure — copy dumps to separate storage (S3-compatible,
+  another host, etc.) as part of the real backup job. Not built here —
+  it depends on what storage you have.
+- **Point-in-time recovery**: this is logical `pg_dump` backups only
+  (daily-granularity restore points). If you need PITR, that's WAL
+  archiving / `pgbackrest` / a managed provider's continuous-backup
+  feature — a bigger decision than this pass makes for you.
+
+---
+
+## 6. Environment / security review
+
+| Check | Status |
+|---|---|
+| `.env` ever committed | **No** — checked full git history (`git log --diff-filter=A`), clean. `.gitignore` already excludes `.env`/`.env.*`, keeps `.env.example`. |
+| Hardcoded secrets in source | **None found** — searched for live-looking Razorpay keys and inline password literals across `.ts`/`.js`. |
+| Sensitive values logged | **None found** — no `console.*` call logs a password, token, or session value anywhere in `backend/src`. |
+| `NODE_ENV` behavior | `app.ts`'s only `NODE_ENV` branch skips the real `listen()`/`startJobs()`/`assertReady()` boot sequence when `NODE_ENV==='test'` — both `development` and `production` take the real path identically. No dev-only backdoor exists to accidentally leave enabled. |
+| `ALLOW_AUDIT_PRIVILEGE` | Must be **absent** (not merely falsy) from the production environment file — see §1. |
+| Security headers | `helmet()` mounted first, before every route. |
+| Rate limits | Login (20/min), password-reset request (5/hr), boarding scan (120/min), notify-me (10/hr) — all `express-rate-limit`, in-process memory store. **Note**: an in-process store means limits are per-instance — fine for the single-instance deployment this app is built for (see §4), but would under-count if ever run as multiple instances without a shared store (Redis). |
+| `Retry-After` on 429 | Present for both transport-level and domain-level (login lockout, guest-hold) rate limits. |
+| `Cache-Control: no-store` | Applied to every authenticated JSON response (`noStoreForAuthenticated`), so a shared/campus machine or browser back-button can't replay another student's booking data from cache. |
+| Cookie flags | `HttpOnly`, `Secure` (hardcoded — see §2), `SameSite=Lax`. |
+| CORS | Absent — by design, for the same-origin architecture in §2. Do not add a wildcard origin as a quick fix if a separate frontend domain is ever wanted. |
+
+Nothing in this review required a code change — the security posture
+documented in `backend/SECURITY_FINDINGS.md` and
+`backend/FINAL_SECURITY_STATUS.md` already reflected the real, current
+state; this pass re-verified it rather than finding new gaps.
+
+---
+
+## 7. Quick-reference: bringing it up on a fresh host
+
+```sh
+# 0. Prerequisites: Node >=22.6.0, PostgreSQL 15+, nginx, a real domain
+#    with DNS pointed at this host, a TLS certificate for it.
+
+# 1. Clone, install
+git clone <repo> /opt/dlt && cd /opt/dlt/backend
+npm ci --omit=dev
+
+# 2. Database (see §1 in full)
+createdb dlt_prod
+DATABASE_URL=postgres://postgres:<pw>@localhost/dlt_prod node scripts/migrate.mjs
+psql -U postgres -d dlt_prod -c "ALTER ROLE dlt_app LOGIN PASSWORD '<generated>';"
+
+# 3. /etc/dlt/backend.env — root-owned, mode 600
+NODE_ENV=production
+PORT=3000
+DATABASE_URL=postgres://dlt_app:<password>@localhost:5432/dlt_prod
+EMAIL_API_URL=<provider endpoint>       # see §3 — needs your provider choice
+EMAIL_API_KEY=<provider key>
+RAZORPAY_KEY_ID=<real LIVE key>         # only when actually going live
+RAZORPAY_KEY_SECRET=<real LIVE secret>
+RAZORPAY_WEBHOOK_SECRET=<real LIVE webhook secret>
+# ALLOW_AUDIT_PRIVILEGE must be ABSENT — do not add this line
+
+# 4. Process supervision (see §4)
+sudo cp deploy/dlt-backend.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now dlt-backend
+curl http://127.0.0.1:3000/api/health   # loopback only — nginx isn't up yet
+
+# 5. Reverse proxy + TLS (see §2)
+sudo cp deploy/nginx-dlt.conf /etc/nginx/sites-available/dlt
+# edit server_name and ssl_certificate paths for the real domain
+sudo ln -s /etc/nginx/sites-available/dlt /etc/nginx/sites-enabled/
+sudo certbot --nginx -d dlt.example.com
+sudo nginx -t && sudo systemctl reload nginx
+
+# 6. Verify end to end
+curl https://dlt.example.com/api/health
+# open https://dlt.example.com/DLT%20Homepage.dc.html in a real browser
+
+# 7. Backups (see §5)
+crontab -e
+#   0 3 * * *  DATABASE_URL=postgres://dlt_app:<pw>@localhost/dlt_prod \
+#              /opt/dlt/backend/scripts/backup.sh /var/backups/dlt >> /var/log/dlt-backup.log 2>&1
+```
