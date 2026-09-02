@@ -617,3 +617,106 @@ function fakeProvider(): any {
     verifyCheckoutHandback() { return true; },
   };
 }
+
+/* ================================================================= M-1 */
+
+describe('M-1 · student boarding passes and the qr_token', () => {
+  test('the owner gets their passes, with the scannable token', async () => {
+    const { booking } = await paidBooking(ALICE, '5A', 'M1A');
+    const passes = await boarding.passesForBooking(booking.id, alice());
+    assert.equal(passes.length, 1);
+    const p = passes[0];
+    assert.ok(p.qrToken, 'the owner is the one caller entitled to the token');
+    assert.equal(p.seatNumber, '5A');
+    assert.equal(p.passStatus, 'VALID');
+    assert.equal(p.bookingCode, booking.code);
+    assert.equal(p.boardingCode, booking.boardingCode);
+    assert.equal(p.paymentStatus, 'SUCCESS');
+    assert.equal(p.total, booking.totalAmount);
+    assert.ok(p.route.includes('→'), 'route is server-composed');
+    assert.ok(p.reportingAt, 'reportingAt is server-derived, never client-computed');
+    assert.ok(new Date(p.reportingAt) < new Date(p.departureAt));
+  });
+
+  test('THE DEFECT WE ARE PREVENTING · another student gets nothing', async () => {
+    const { booking } = await paidBooking(ALICE, '5B', 'M1B');
+    await assert.rejects(boarding.passesForBooking(booking.id, bob()), (e: any) => {
+      assert.equal(e.code, 'FORBIDDEN');
+      assert.ok(!/qr|dlt\./i.test(e.message), 'the refusal must not leak a token');
+      return true;
+    });
+  });
+
+  test('a non-owner cannot reach the passes, whatever role they claim', async () => {
+    const { booking } = await paidBooking(ALICE, '5C', 'M1C');
+
+    /* Bob as himself: ownership is the check, and he does not own it. */
+    await assert.rejects(
+      boarding.passesForBooking(booking.id, bob()), /not yours|FORBIDDEN/i);
+
+    /* Bob CLAIMING a role. Note what this proves and what it does not: an Actor
+     * is only ever built from the session — actorOf reads req.session.role,
+     * which resolveSession read from the database — so an HTTP caller cannot
+     * present these objects at all; N-1 covers that boundary.
+     *
+     * What this proves is that the elevated path is not satisfied by a STRING.
+     * The claimed role is resolved against role_permissions, so a role that
+     * does not hold booking.read buys nothing even when claimed outright. */
+    await assert.rejects(
+      boarding.passesForBooking(booking.id, { userId: BOB, role: 'BOARDING_STAFF' }),
+      /not yours|FORBIDDEN/i,
+      'BOARDING_STAFF holds boarding.scan and boarding.read, never booking.read');
+
+    /* ...and a role that genuinely does hold it is admitted, so the assertion
+     * above is discriminating rather than refusing everything. */
+    assert.ok(await boarding.passesForBooking(booking.id, { userId: BOB, role: 'OPS_ADMIN' }),
+      'OPS_ADMIN holds booking.read in role_permissions');
+  });
+
+  test('an unauthenticated / guest caller is refused', async () => {
+    const { booking } = await paidBooking(ALICE, '5D', 'M1D');
+    await assert.rejects(
+      boarding.passesForBooking(booking.id, { guestToken: 'nobody', ip: '1.2.3.4' } as any),
+      /Sign in required/);
+  });
+
+  test('an operator with booking.read may read them — staff authorization is unchanged', async () => {
+    const { booking } = await paidBooking(ALICE, '6A', 'M1E');
+    const passes = await boarding.passesForBooking(booking.id, ops());
+    assert.equal(passes.length, 1, 'operations can still resolve a pass for support');
+  });
+
+  test('THE CONTAINMENT · qrToken is absent from the ordinary booking projections', async () => {
+    const { booking } = await paidBooking(ALICE, '6B', 'M1F');
+
+    const one = await pay.bookingForActor(booking.id, alice());
+    assert.ok(!/qrToken|qr_token/.test(JSON.stringify(one)),
+      'GET /bookings/:id must not carry the scannable token');
+
+    const many = await pay.myBookings(ALICE);
+    assert.ok(many.length > 0);
+    assert.ok(!/qrToken|qr_token/.test(JSON.stringify(many)),
+      'GET /bookings/mine must not hand out every token a student holds');
+
+    /* and the token really does exist — so the assertions above are not passing
+     * merely because nothing was issued */
+    const passes = await boarding.passesForBooking(booking.id, alice());
+    assert.ok(passes[0].qrToken.length > 8);
+  });
+
+  test('a booking with no pass issued yet returns an empty list, not an error', async () => {
+    await q('SELECT hold_seat($1,$2,$3::uuid,NULL)', [TRIP, '6C', ALICE]);
+    const b = await pay.createBooking({
+      tripId: TRIP, holder: { userId: ALICE }, contactPhone: '9876543210',
+      idempotencyKey: 'k-M1G',
+      passengers: [{ seatNumber: '6C', name: 'Unpaid Passenger', studentId: 'WU0007' }],
+    });
+    assert.deepEqual(await boarding.passesForBooking(b.id, alice()), []);
+  });
+
+  test('a stranger cannot use a nonexistent id to enumerate bookings', async () => {
+    await assert.rejects(
+      boarding.passesForBooking('00000000-0000-4000-8000-000000000000', bob()),
+      /not found/i);
+  });
+});

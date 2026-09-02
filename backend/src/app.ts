@@ -28,25 +28,32 @@ export function createApp() {
   app.set('trust proxy', 1);            // behind TLS termination; req.ip must be real
   app.use(helmet());
 
+  /* Cookies and the session they resolve to are independent of the request
+   * body, so both run BEFORE bookingRoutes without touching the webhook's raw
+   * bytes. This is a fix, not a preference: bookingRoutes was mounted before
+   * these ran, so req.session and req.cookies were undefined for every route
+   * in it — requireAuth threw UNAUTHENTICATED unconditionally, and a guest
+   * checkout read an always-empty guestToken. No booking, cancellation,
+   * checkout, passes read or handback ever authenticated over real HTTP. */
+  app.use(cookieParser());
+  app.use(attachSession);
+
+  /* HD-6: no-store on authenticated JSON. After attachSession so req.session
+   * exists; before every route, bookingRoutes included, so every handler is
+   * covered. */
+  app.use(noStoreForAuthenticated);
+
   /* THE WEBHOOK MUST BE MOUNTED BEFORE express.json().
    *
    * Razorpay signs the exact bytes it sent, and their documentation is explicit
    * that the body must not be parsed or cast before verification. If the JSON
    * parser ran first, the raw buffer would be gone and EVERY signature would
-   * fail. bookingRoutes attaches its own raw() parser to this path. */
+   * fail. bookingRoutes attaches its own raw() parser to that one path, and a
+   * per-route express.json() to the others that need a parsed body — see
+   * bookings.routes.ts for why it cannot be a router-level middleware here. */
   app.use('/api', bookingRoutes(provider));
 
   app.use(express.json({ limit: '64kb' }));
-  app.use(cookieParser());
-
-  /* Resolves the session cookie into req.session for every route below. The
-   * role on it comes from the database, and is the only role any authorization
-   * check reads. */
-  app.use(attachSession);
-
-  /* HD-6: no-store on authenticated JSON. After attachSession so req.session
-   * exists; before the routes so every handler is covered. */
-  app.use(noStoreForAuthenticated);
 
   app.use('/api', authRoutes);
   app.use('/api', tripRoutes);

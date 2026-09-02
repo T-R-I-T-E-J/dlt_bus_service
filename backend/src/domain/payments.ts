@@ -23,7 +23,7 @@ import { query, tx } from '../db/index.ts';
 import { AppError } from './errors.ts';
 import { audit } from './audit.ts';
 import type { PaymentProvider, NormalizedEvent } from './payment-provider.ts';
-import type { Holder } from './seats.ts';
+import { REPORTING_LEAD_MIN, MAX_SEATS_PER_BOOKING, type Holder } from './seats.ts';
 import { bookingFor, paymentFor, requireOperator, type AnyActor, type Actor } from './authz.ts';
 import { createHash } from 'node:crypto';
 
@@ -77,7 +77,8 @@ export async function createBooking(input: {
 
 function validatePassengers(pax: PassengerInput[], contactPhone: string) {
   if (!pax?.length) throw new AppError('VALIDATION', 'Add at least one passenger');
-  if (pax.length > 4) throw new AppError('VALIDATION', 'Up to 4 passengers in one booking');
+  if (pax.length > MAX_SEATS_PER_BOOKING)
+    throw new AppError('VALIDATION', `Up to ${MAX_SEATS_PER_BOOKING} passengers in one booking`);
   if (!/^[6-9]\d{9}$/.test((contactPhone ?? '').replace(/\s/g, '')))
     throw new AppError('VALIDATION', 'Enter a valid Indian mobile number for the booking contact');
   for (const p of pax) {
@@ -745,22 +746,49 @@ const BOOKING_SQL = `
          b.unit_price AS "unitPrice", b.total_amount AS "totalAmount",
          b.contact_phone AS "contactPhone", b.hold_expires_at AS "holdExpiresAt",
          b.reprice_to AS "repriceTo", b.created_at AS "createdAt",
-         json_build_object('id', t.id, 'departureAt', t.departure_at, 'status', t.status) AS trip,
+         /* reportingAt uses the SAME derivation as TRIP_SQL (B-1): one policy,
+          * one home. cancelledReason is trips.cancel_reason — an existing
+          * authoritative column, not a new one. There is deliberately no
+          * pickupPoint: no column anywhere holds one, and a default would be
+          * fabricated operational instruction printed on a boarding pass. */
+         json_build_object(
+           'id', t.id, 'departureAt', t.departure_at, 'status', t.status,
+           'reportingAt', t.departure_at - (${REPORTING_LEAD_MIN} || ' minutes')::interval,
+           'cancelledReason', t.cancel_reason) AS trip,
          COALESCE(pax.rows,'[]'::json) AS passengers,
          m.received, m.returned, m.refundable,
+         COALESCE(rf.rows,'[]'::json) AS refunds,
          (SELECT row_to_json(x) FROM (
-            SELECT p.id, p.status, p.amount, p.provider, p.provider_reference AS "reference"
+            SELECT p.id, p.status, p.amount, p.provider, p.provider_reference AS "reference",
+                   /* M-2: settlement time, from the payment record itself. Only a
+                    * SUCCESS payment has been paid, so anything else is null
+                    * rather than a misleading timestamp. */
+                   CASE WHEN p.status = 'SUCCESS' THEN p.updated_at END AS "paidAt"
               FROM payments p WHERE p.booking_id = b.id
              ORDER BY CASE p.status WHEN 'SUCCESS' THEN 0 WHEN 'NOT_APPLICABLE' THEN 1 ELSE 2 END,
                       p.created_at DESC LIMIT 1) x) AS payment
     FROM bookings b
     JOIN trips t ON t.id = b.trip_id
     JOIN booking_money m ON m.booking_id = b.id
+    /* M-3: the refund ROWS, not just the totals. "Refunded" and "refund pending"
+     * are different things to a student, and a returned total cannot tell them
+     * apart. Money stays authoritative in booking_money; this is the detail. */
+    LEFT JOIN LATERAL (
+      SELECT json_agg(json_build_object(
+        'id', r.id, 'amount', r.amount, 'status', r.status,
+        'createdAt', r.created_at) ORDER BY r.created_at) AS rows
+        FROM refunds r WHERE r.booking_id = b.id
+    ) rf ON true
     LEFT JOIN LATERAL (
       SELECT json_agg(json_build_object(
         'id', bp.id, 'name', bp.name, 'studentId', bp.student_id,
         'seatNumber', bp.seat_number, 'seatType', bp.seat_type,
         'boardingStatus', bp.boarding_status,
+        /* When they actually boarded, from the boarding event that did it.
+         * booking_passengers has no boarded_at column; boarding_events is the
+         * record of record. */
+        'boardedAt', (SELECT max(e.occurred_at) FROM boarding_events e
+                       WHERE e.passenger_id = bp.id AND e.result = 'VALID'),
         'passStatus', pass.status) ORDER BY bp.seat_number) AS rows
         FROM booking_passengers bp
         LEFT JOIN boarding_passes pass ON pass.passenger_id = bp.id

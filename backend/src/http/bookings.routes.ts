@@ -2,15 +2,24 @@
  * No business rules here. WRITTEN, NOT EXECUTED.
  */
 
-import { Router, raw, type Request } from 'express';
+import { Router, raw, json, type Request } from 'express';
 import { z } from 'zod';
 import * as pay from '../domain/payments.ts';
+import * as boarding from '../domain/boarding.ts';
+import { MAX_SEATS_PER_BOOKING } from '../domain/seats.ts';
 import { requireAuth, requirePermission, GUEST_COOKIE } from './auth.routes.ts';
 import { AppError } from '../domain/errors.ts';
 import type { PaymentProvider } from '../domain/payment-provider.ts';
 
 export default function bookingRoutes(provider: PaymentProvider) {
   const router = Router();
+  /* This router is mounted at '/api' BEFORE app.use(express.json()) — the
+   * webhook (below) needs the unparsed raw body for its signature check, and
+   * that ordering constraint is app-wide. Every OTHER route in this router that
+   * reads req.body must therefore parse it itself; there is no router-level
+   * express.json() here because that would also swallow the webhook's raw
+   * bytes before its own raw() middleware ever saw them. */
+  const jsonBody = json({ limit: '64kb' });
   const UUID = z.string().uuid();
 
   const holderOf = (req: Request) => req.session
@@ -33,14 +42,14 @@ export default function bookingRoutes(provider: PaymentProvider) {
 
   /* ------------------------------------------------------------ bookings */
 
-  router.post('/bookings', async (req, res, next) => {
+  router.post('/bookings', jsonBody, async (req, res, next) => {
     try {
       const key = req.get('Idempotency-Key');
       if (!key) throw new AppError('VALIDATION', 'An Idempotency-Key header is required');
       const body = z.object({
         tripId: UUID,
         contactPhone: z.string().min(10).max(15),
-        passengers: z.array(PassengerSchema).min(1).max(4),
+        passengers: z.array(PassengerSchema).min(1).max(MAX_SEATS_PER_BOOKING),
       }).parse(req.body);
 
       const holder = holderOf(req);
@@ -65,6 +74,17 @@ export default function bookingRoutes(provider: PaymentProvider) {
     } catch (e) { next(e); }
   });
 
+  /* M-1 · the student's own boarding passes, and the only route that discloses
+   * a qr_token. Same ownership guard as the booking itself — the domain calls
+   * bookingFor(), so this route cannot forget it and cannot weaken it. Nothing
+   * is read from the request but the booking id. */
+  router.get('/bookings/:id/passes', requireAuth, async (req, res, next) => {
+    try {
+      res.json({ passes: await boarding.passesForBooking(
+        UUID.parse(req.params.id), actorOf(req) as any) });
+    } catch (e) { next(e); }
+  });
+
   /* F-03 · the student is shown the new total and accepts it. The prototype had
    * no such control, which is why its price-change error looped forever. */
   router.post('/bookings/:id/accept-price', requireAuth, async (req, res, next) => {
@@ -80,7 +100,7 @@ export default function bookingRoutes(provider: PaymentProvider) {
     catch (e) { next(e); }
   });
 
-  router.post('/bookings/:id/cancel', requireAuth, async (req, res, next) => {
+  router.post('/bookings/:id/cancel', requireAuth, jsonBody, async (req, res, next) => {
     try {
       const reason = z.string().max(500).optional().parse(req.body?.reason);
       res.json(await pay.cancelBooking(UUID.parse(req.params.id), actorOf(req) as any, reason));
@@ -89,7 +109,7 @@ export default function bookingRoutes(provider: PaymentProvider) {
 
   /* ------------------------------------------------------------ payments */
 
-  router.post('/payments/create', requireAuth, async (req, res, next) => {
+  router.post('/payments/create', requireAuth, jsonBody, async (req, res, next) => {
     try {
       const { bookingId } = z.object({ bookingId: UUID }).parse(req.body);
       /* Note what is NOT accepted from the client: an amount. The fare is read
@@ -126,7 +146,7 @@ export default function bookingRoutes(provider: PaymentProvider) {
    *
    * The posted order id is still not trusted: the signature is verified against
    * the order id WE stored, per Razorpay's own warning. */
-  router.post('/payments/handback', requireAuth, async (req, res, next) => {
+  router.post('/payments/handback', requireAuth, jsonBody, async (req, res, next) => {
     try {
       const body = z.object({
         paymentId: UUID,                                  // OUR payment row id
@@ -190,7 +210,7 @@ export default function bookingRoutes(provider: PaymentProvider) {
   /* ------------------------------------------------------------ admin money */
 
   router.post('/admin/bookings/:id/override-refund',
-    requireAuth, requirePermission('refund.override'), async (req, res, next) => {
+    requireAuth, requirePermission('refund.override'), jsonBody, async (req, res, next) => {
     try {
       const body = z.object({
         amount: z.coerce.number().int().positive(),
@@ -205,12 +225,12 @@ export default function bookingRoutes(provider: PaymentProvider) {
   });
 
   router.post('/admin/bookings/manual',
-    requireAuth, requirePermission('booking.manual'), async (req, res, next) => {
+    requireAuth, requirePermission('booking.manual'), jsonBody, async (req, res, next) => {
     try {
       const body = z.object({
         tripId: UUID,
         type: z.enum(['COMPLIMENTARY', 'PAID_EXTERNALLY']),
-        passengers: z.array(PassengerSchema).min(1).max(4),
+        passengers: z.array(PassengerSchema).min(1).max(MAX_SEATS_PER_BOOKING),
         contactPhone: z.string().min(10).max(15),
         reason: z.string().min(4).max(500),
       }).parse(req.body);

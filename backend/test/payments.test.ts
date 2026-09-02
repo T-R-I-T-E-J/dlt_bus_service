@@ -813,3 +813,165 @@ describe('F-02 · paying for a claimed waitlist seat [provider-simulated]', () =
     assert.equal(w.status, 'CONVERTED');
   });
 });
+
+/* ============================================ M-2 / M-3 · receipt projection
+ *
+ * The Dashboard's receipt and its row statuses are composed from the booking
+ * response. "Refunded" and "refund pending" are different things to a student,
+ * and a returned total cannot tell them apart — so the ROWS are projected, not
+ * just booking_money's aggregates. The aggregates stay authoritative for money.
+ */
+
+describe('M-2/M-3 · paidAt and refund rows on the booking projection', () => {
+  test('a settled payment carries paidAt; the money totals are unchanged', async () => {
+    const b = await booked(ALICE, ['2A']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'captured');
+
+    const v = await pay.bookingViewById(b.id);
+    assert.equal(v.payment.status, 'SUCCESS');
+    assert.ok(v.payment.paidAt, 'a settled payment records when it settled');
+    assert.ok(new Date(v.payment.paidAt).getTime() > 0);
+    assert.equal(v.received, FARE);
+    assert.equal(v.returned, 0);
+    assert.equal(v.refundable, FARE);
+    assert.deepEqual(v.refunds, [], 'nothing refunded yet');
+  });
+
+  test('an unpaid booking has no paidAt — never a misleading timestamp', async () => {
+    const b = await booked(ALICE, ['2B']);
+    const v0 = await pay.bookingViewById(b.id);
+    assert.equal(v0.payment, null, 'no intent has been created yet');
+
+    await pay.createCheckout(b.id, A(ALICE), rp);
+    const v1 = await pay.bookingViewById(b.id);
+    assert.notEqual(v1.payment.status, 'SUCCESS');
+    assert.equal(v1.payment.paidAt, null, 'an unsettled intent has not been paid');
+  });
+
+  test('a failed payment has no paidAt', async () => {
+    const b = await booked(ALICE, ['2C']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'failed');
+    const v = await pay.bookingViewById(b.id);
+    assert.equal(v.payment.status, 'FAILED');
+    assert.equal(v.payment.paidAt, null);
+  });
+
+  test('a pending refund is distinguishable from a settled one', async () => {
+    const b = await booked(ALICE, ['2D']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'captured', { providerPaymentId: 'pay_m3a' });
+    await pay.cancelBooking(b.id, A(ALICE));
+
+    const pendingView = await pay.bookingViewById(b.id);
+    assert.equal(pendingView.refunds.length, 1);
+    assert.equal(pendingView.refunds[0].status, 'REFUND_PENDING');
+    assert.equal(pendingView.refunds[0].amount, FARE);
+    assert.ok(pendingView.refunds[0].createdAt, 'each row carries when it was raised');
+    assert.equal(pendingView.returned, FARE,
+      'the total counts it as returned while it is in flight');
+
+    /* the total alone cannot tell these two states apart — the row can */
+    await pay.dispatchPendingRefunds(rp);
+    const { rows: [r] } = await q('SELECT * FROM refunds WHERE booking_id=$1', [b.id]);
+    await deliverRefund(r.id, r.provider_refund_id, 'processed');
+
+    const settledView = await pay.bookingViewById(b.id);
+    assert.equal(settledView.refunds[0].status, 'REFUNDED');
+    assert.equal(settledView.returned, FARE, 'the total is the same in both states');
+  });
+
+  test('multiple refund rows are all projected, in order', async () => {
+    /* A duplicate payment produces a second receipt and its own refund, so one
+     * booking legitimately carries more than one refund row. */
+    const b = await booked(ALICE, ['3A']);
+    const one = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(one.paymentId, 'captured');
+
+    const { rows: [p2] } = await q(
+      `INSERT INTO payments (booking_id, amount, status, provider, provider_order_id)
+       VALUES ($1,$2,'PENDING','RAZORPAY',$3) RETURNING *`, [b.id, FARE, 'order_m3dup']);
+    rp.orders.set('order_m3dup', { id: 'order_m3dup', amount: FARE * 100, status: 'paid', receipt: p2.id });
+    await deliver(p2.id, 'captured', { eventId: 'evt_m3dup' });
+
+    /* now cancel, which raises a second refund against the remaining balance */
+    await pay.cancelBooking(b.id, A(ALICE));
+
+    const v = await pay.bookingViewById(b.id);
+    assert.ok(v.refunds.length >= 2, `expected more than one refund row, got ${v.refunds.length}`);
+    const times = v.refunds.map((x: any) => new Date(x.createdAt).getTime());
+    assert.deepEqual(times, [...times].sort((x, y) => x - y), 'rows are oldest first');
+    const summed = v.refunds
+      .filter((x: any) => x.status !== 'REFUND_FAILED')
+      .reduce((a: number, x: any) => a + x.amount, 0);
+    assert.equal(summed, v.returned, 'the rows and the total agree');
+  });
+
+  test('refund rows never let the totals exceed money in (F-05 unchanged)', async () => {
+    const b = await booked(ALICE, ['3B']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'captured');
+    await pay.cancelBooking(b.id, A(ALICE));
+
+    const v = await pay.bookingViewById(b.id);
+    assert.ok(v.returned <= v.received, 'money out never exceeds money in');
+    assert.equal(v.refundable, 0);
+    await assert.rejects(pay.overrideRefund({ bookingId: b.id, amount: 1,
+      reason: 'a second bite', actorId: SUPER }), /Nothing is left to refund/);
+  });
+
+  test('the trip projection carries server-derived reportingAt and the cancellation reason', async () => {
+    const b = await booked(ALICE, ['3C']);
+    const v = await pay.bookingViewById(b.id);
+    assert.ok(v.trip.reportingAt, 'reportingAt is derived server-side, as on TripView');
+    assert.ok(new Date(v.trip.reportingAt) < new Date(v.trip.departureAt));
+    assert.equal(v.trip.cancelledReason, null, 'a live trip has no cancellation reason');
+    assert.ok(!('pickupPoint' in v.trip),
+      'no pickup point is invented — no column holds one');
+
+    await q(`UPDATE trips SET status='CANCELLED', cancel_reason='Vehicle breakdown' WHERE id=$1`, [TRIP]);
+    const after = await pay.bookingViewById(b.id);
+    assert.equal(after.trip.cancelledReason, 'Vehicle breakdown',
+      'the reason comes from trips.cancel_reason, the authoritative column');
+  });
+
+  test('boardedAt comes from the boarding event that actually boarded them', async () => {
+    const b = await booked(ALICE, ['3D']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'captured');
+
+    const before = await pay.bookingViewById(b.id);
+    assert.equal(before.passengers[0].boardedAt, null, 'nobody has boarded yet');
+
+    const { rows: [pax] } = await q(
+      'SELECT id FROM booking_passengers WHERE booking_id=$1', [b.id]);
+    await q(`UPDATE booking_passengers SET boarding_status='BOARDED' WHERE id=$1`, [pax.id]);
+    await q(`SELECT log_boarding($1,$2,$3,'VALID','SCAN',NULL,NULL)`, [TRIP, pax.id, SUPER]);
+
+    const after = await pay.bookingViewById(b.id);
+    assert.ok(after.passengers[0].boardedAt, 'the time comes from boarding_events');
+  });
+});
+
+/* ================================================================= §12 cap */
+
+describe('§12 · the booking cap is five, at every layer that enforces it', () => {
+  test('five passengers book through createBooking; six are refused', async () => {
+    /* The cap has THREE homes: the basket check while holding (seats.ts), this
+     * validation on the booking payload, and create_booking_from_holds. The
+     * first and third moved to five with migration 012; validatePassengers was
+     * still refusing a fifth, so a student could hold five seats and then be
+     * told they could not book them. The HTTP schema capped it at four too. */
+    const b = await booked(ALICE, ['9A', '9B', '9C', '9D', '10A']);
+    assert.equal(b.passengers.length, 5, 'five is the documented maximum');
+    assert.equal(b.totalAmount, FARE * 5);
+
+    await assert.rejects(pay.createBooking({
+      tripId: TRIP, holder: { userId: BOB }, contactPhone: '9876543210',
+      idempotencyKey: 'k-six',
+      passengers: ['11A', '11B', '11C', '11D', '12A', '12B'].map((s, i) => ({
+        seatNumber: s, name: `Passenger ${i + 1}`, studentId: `WU30000${i}` })),
+    }), /Up to 5 passengers in one booking/);
+  });
+});

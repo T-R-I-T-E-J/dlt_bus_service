@@ -277,6 +277,17 @@ const fmt = {
     const total = Math.max(0, Math.floor(Number(ms || 0) / 1000));
     return Math.floor(total / 60) + ':' + pad(total % 60);
   },
+  /** Ported verbatim from dlt-store: pure formatting, no authority. */
+  dateTime(v) { return v ? fmt.date(v) + ' ' + fmt.time(v) : '—'; },
+  /** "today" / "tomorrow" / "in 3 days" / "2 days ago", from a server timestamp. */
+  relativeDay(v) {
+    if (!v) return '—';
+    const d = asDate(v), t = new Date();
+    d.setHours(0, 0, 0, 0); t.setHours(0, 0, 0, 0);
+    const n = Math.round((d - t) / 86400000);
+    return n === 0 ? 'today' : n === 1 ? 'tomorrow'
+      : n > 1 ? 'in ' + n + ' days' : Math.abs(n) + ' days ago';
+  },
   money(rupees) {
     return rupees === null || rupees === undefined ? '—' : '₹' + Number(rupees).toLocaleString('en-IN');
   },
@@ -436,6 +447,10 @@ const waitlist = {
 };
 
 const boarding = {
+  /** M-1 · the signed-in student's own passes for ONE booking. This is the only
+   *  route that returns a qr_token, and the server checks ownership on it — the
+   *  token is never present in /bookings/mine or /bookings/:id. */
+  passesFor: (bookingId) => GET(`/bookings/${bookingId}/passes`).then((r) => r.passes),
   context: () => GET('/boarding/context'),
 
   /** The scanner submits an identifier and NOTHING else. It never sends a

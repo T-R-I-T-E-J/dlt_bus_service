@@ -23,7 +23,8 @@ import { query, tx } from '../db/index.ts';
 import { AppError } from './errors.ts';
 import { audit } from './audit.ts';
 import { requirePermission } from './auth.ts';
-import { boardingScopeFor, requireTripScope, passengerFor } from './authz.ts';
+import { REPORTING_LEAD_MIN } from './seats.ts';
+import { boardingScopeFor, requireTripScope, passengerFor, bookingFor } from './authz.ts';
 import type { Actor } from './authz.ts';
 
 export type ScanResult = 'VALID' | 'INVALID' | 'ALREADY BOARDED' | 'DENIED' | 'NO_SHOW' | 'CHOOSE';
@@ -329,5 +330,57 @@ export async function boardingEvents(tripId: string, actor: Actor, limit = 200) 
        LEFT JOIN users u ON u.id = e.staff_user_id
        LEFT JOIN booking_passengers bp ON bp.id = e.passenger_id
       WHERE e.trip_id = $1 ORDER BY e.occurred_at DESC LIMIT $2`, [tripId, limit]);
+  return rows;
+}
+
+/* ---------------------------------------------------------------- M-1 · student passes
+ *
+ * The student's own boarding passes, for the Dashboard. This is the ONLY path
+ * that discloses qr_token, and it does so one booking at a time behind the
+ * canonical ownership guard.
+ *
+ * Why not add qrToken to BOOKING_SQL: that projection backs GET /bookings/mine,
+ * so the scannable secret for every pass a student has ever held would be handed
+ * out on one unremarkable list request, and would sit in any log or cache of it.
+ * A pass token is a bearer credential for a seat — it is read deliberately, for
+ * one booking, or not at all.
+ *
+ * Authorization is bookingFor(), unchanged and not reimplemented: ownership OR
+ * booking.read. Nothing is taken from the request but the booking id — not the
+ * user id, not the role, not the booking code, not a passenger id.
+ *
+ * pickupPoint is absent on purpose. No column holds one, and inventing a default
+ * would print fabricated operational instruction onto a boarding pass.
+ */
+export async function passesForBooking(bookingId: string, actor: Actor) {
+  await bookingFor(actor, bookingId);          // throws NOT_FOUND / FORBIDDEN
+
+  const { rows } = await query(
+    `SELECT bp.name, bp.student_id AS "studentId", bp.seat_number AS "seatNumber",
+            bp.seat_type AS "seatType", bp.boarding_status AS "boardingStatus",
+            pass.qr_token AS "qrToken", pass.status AS "passStatus",
+            (SELECT max(e.occurred_at) FROM boarding_events e
+              WHERE e.passenger_id = bp.id AND e.result = 'VALID') AS "boardedAt",
+            r.origin || ' → ' || r.destination AS route,
+            t.departure_at AS "departureAt",
+            t.departure_at - ($2 || ' minutes')::interval AS "reportingAt",
+            v.name AS vehicle,
+            b.code AS "bookingCode", b.boarding_code AS "boardingCode",
+            b.unit_price AS "fareShare", b.total_amount AS total,
+            (SELECT p.status FROM payments p WHERE p.booking_id = b.id
+              ORDER BY CASE p.status WHEN 'SUCCESS' THEN 0 WHEN 'NOT_APPLICABLE' THEN 1 ELSE 2 END,
+                       p.created_at DESC LIMIT 1) AS "paymentStatus"
+       FROM booking_passengers bp
+       JOIN bookings b ON b.id = bp.booking_id
+       JOIN trips t    ON t.id = b.trip_id
+       JOIN routes r   ON r.id = t.route_id
+       LEFT JOIN vehicles v ON v.id = t.vehicle_id
+       /* INNER join: a passenger with no pass yet has no pass to show. The
+        * Dashboard renders its own "issued on payment" state from an empty list. */
+       JOIN boarding_passes pass ON pass.passenger_id = bp.id
+      WHERE bp.booking_id = $1
+      ORDER BY bp.seat_row_order, bp.seat_number`,
+    [bookingId, String(REPORTING_LEAD_MIN)]);
+
   return rows;
 }
