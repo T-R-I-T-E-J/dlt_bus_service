@@ -306,13 +306,21 @@ const roleLabel = (role) => ROLE_LABELS[role] || String(role || '');
 /* Field-level form validation, so Continue can disable before a round trip.
  * The SERVER validates authoritatively in validatePassengers() and still
  * refuses — this is a courtesy, never the rule. Kept identical to the server's
- * checks so the two cannot disagree about what is acceptable. */
+ * checks so the two cannot disagree about what is acceptable.
+ *
+ * Returns one flag PER FIELD, not a single boolean — the Booking screen reads
+ * v.name / v.studentId / v.phone individually to show the right inline error
+ * under the right input (this matches dlt-store's original prototype shape).
+ * A collapsed boolean here previously made every field read as invalid the
+ * moment it was touched, regardless of the actual value, because v.name on a
+ * boolean primitive is always undefined. */
 function validatePassenger(p) {
-  if (!p) return false;
-  if (!p.name || String(p.name).trim().length < 3) return false;
-  if (!p.studentId || !/^[A-Za-z0-9]{4,20}$/.test(String(p.studentId).trim())) return false;
-  if (p.phone && !/^[6-9]\d{9}$/.test(String(p.phone).replace(/\s/g, ''))) return false;
-  return true;
+  if (!p) return { name: false, studentId: false, phone: false };
+  return {
+    name: !!p.name && String(p.name).trim().length >= 3,
+    studentId: !!p.studentId && /^[A-Za-z0-9]{4,20}$/.test(String(p.studentId).trim()),
+    phone: !p.phone || /^[6-9]\d{9}$/.test(String(p.phone).replace(/\s/g, '')),
+  };
 }
 
 const notifications = {
