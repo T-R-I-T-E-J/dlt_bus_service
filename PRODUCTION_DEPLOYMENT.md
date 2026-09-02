@@ -150,46 +150,99 @@ plain HTTP, on loopback).
 
 ## 3. Email
 
-`backend/src/integrations/email/index.ts` already implements the
-transport boundary — this was NOT built this session, it already existed
-and was already correct. What's still missing is a real provider bound to
-it, which needs your decision on which provider before it can send a
-single real email.
+`backend/src/integrations/email/index.ts` implements the transport
+boundary. As of this pass it has **two real transports** — SMTP
+(`nodemailer`, added this session) and a generic HTTP provider-API adapter
+(pre-existing) — selected by which environment variables are present, SMTP
+taking priority. **SMTP is the one actually configured**, against a real
+Gmail account, verified end-to-end this session (see below).
 
-### Exact environment variables required
+### Gmail SMTP — configured and verified
+
+```
+EMAIL_SMTP_HOST=smtp.gmail.com
+EMAIL_SMTP_PORT=587
+EMAIL_SMTP_SECURE=false                 # 587 is STARTTLS, not implicit TLS
+EMAIL_SMTP_USER=<the Gmail address>
+EMAIL_SMTP_PASS=<a Gmail App Password>
+EMAIL_FROM=<the Gmail address>          # optional — defaults to EMAIL_SMTP_USER
+EMAIL_FROM_NAME=DLT                     # optional, has a default
+```
+
+**The App Password is not in this repository anywhere** — not in source,
+not in a test, not in a log, not in this document. It lives only in
+`backend/.env` (gitignored) on whatever machine runs the backend, and
+belongs in a real secrets store (not a plain `.env` file) once this is on
+a real production host.
+
+Getting a Gmail App Password (if a fresh one is ever needed): the Google
+Account must have **2-Step Verification enabled** first — Google Account
+→ Security → 2-Step Verification → App passwords → generate one scoped to
+this app. It is a 16-character password, distinct from the account's own
+login password, and Google will not show it again after generation —
+whoever generates it should save it directly into the secrets store, not
+paste it anywhere that persists (a chat, a ticket, a shared doc).
+
+**Gmail-specific limits worth knowing before relying on this at scale**: a
+personal Gmail account is capped at roughly 500 outbound messages/day, and
+Google may throttle or flag automated SMTP traffic that looks like bulk
+sending. This is fine for verification/reset volume at DLT's current
+scale; if trip/booking notification volume grows meaningfully, a real
+transactional-email provider (Option B below) has headroom this doesn't.
+
+### Option B: generic HTTP provider API (SendGrid/Postmark/SES/etc.)
+Still available, unchanged, and still not bound to a specific provider —
+`httpTransport()`'s request body (`{from, to, template, variables}`) is a
+generic placeholder shape, not any real provider's actual API contract.
+Choosing a provider and adjusting that shape to match it remains open;
+not needed while SMTP is configured and sufficient.
+
 ```
 EMAIL_API_URL=<the provider's send-email HTTP endpoint>
 EMAIL_API_KEY=<the provider's API key>
-EMAIL_FROM=no-reply@dlt.co.in        # optional, has a default
-EMAIL_FROM_NAME=DLT                  # optional, has a default
 ```
-Without both `EMAIL_API_URL` and `EMAIL_API_KEY` set, the backend runs
-with `unconfiguredTransport`: every verification email, password reset,
-and (once built) booking/cancellation/refund notification **fails loudly**
-with "Email delivery is not configured on this server" rather than
-silently no-op'ing. That's deliberate (a silent failure here means a
-student locked out with nothing in the logs to explain why) — it also
-means **account verification and password reset do not work at all**
-until a real provider is wired in.
 
-### What I did NOT do, and why
-`httpTransport()`'s request body —
-`{ from: {email,name}, to: [{email}], template, variables }` — is a
-**generic placeholder shape**, not any specific real provider's actual
-API contract (SendGrid, Postmark, AWS SES, Resend, and Mailgun all differ
-here). I have not picked a provider or invented credentials for one — the
-mega-prompt's own rule ("do not invent credentials") extends to not
-inventing *which provider*, since that request-body shape would need to
-change to match whatever's actually chosen. **This needs your decision**:
-which provider, and I'll adjust `httpTransport()`'s request shape to that
-provider's real API in one place, exactly as the file's own comment
-already anticipates ("bind it to whichever provider is chosen and adjust
-the request body in ONE place").
+### What happens with neither configured
+The backend runs with `unconfiguredTransport`: every verification email,
+password reset, and notification email **fails loudly** with "Email
+delivery is not configured on this server" rather than silently no-op'ing
+— deliberate, so a half-configured deployment doesn't lock students out
+with nothing in the logs to explain why.
 
-Until then, `EMAIL_TRANSPORT=memory` keeps the current dev/test behavior
-(no external calls, captured in an in-process outbox) — it must not be
-set in production once a real provider is configured, since it would
-silently stop delivering anything while reporting success.
+`EMAIL_TRANSPORT=memory` keeps the dev/test behavior (no external calls,
+captured in an in-process outbox) — must not be set in production once a
+real transport is configured, since its presence is checked before either
+real transport and would silently stop delivery while reporting success.
+
+### Templates
+`renderTemplate()` in `email/index.ts` composes the subject/text/html for
+all five `EmailMessage` template names, for either transport. Only two
+have a real caller today — `verify-email` and `password-reset`
+(`domain/auth.ts`) — and both were exercised for real this session (see
+below). `booking-confirmed`, `trip-cancelled`, and `refund-processed`
+render real, reviewable copy but have **no trigger call site yet**
+anywhere in `domain/`; the `vars` shape each expects is a reasonable
+placeholder, not a verified contract — confirm it against whatever call
+site eventually triggers them (a booking confirming, a trip cancelling, a
+refund settling) before relying on it. Wiring those trigger points is a
+product decision (when, and under what conditions, DLT emails a student)
+this pass did not make.
+
+### Verified this session (real send, real inbox — not claimed)
+Sent through the real Gmail SMTP transport configured above, to
+`tristarnex@gmail.com`:
+- a real `verify-email` send (the same call `domain/auth.ts` makes on
+  signup)
+- a real `password-reset` send (the same call `domain/auth.ts` makes on
+  a forgot-password request)
+- a real `trip-cancelled` send, invoked directly through the transport
+  (proving arbitrary templates deliver correctly, since nothing in
+  `domain/` triggers this one yet — see "Templates" above)
+
+All three arrived. Exact evidence — message IDs, timestamps, and the
+codes/tokens each email carried — is intentionally NOT reproduced in this
+document; see the session report instead, which describes what was
+confirmed without repeating the sensitive values themselves.
 
 ---
 
