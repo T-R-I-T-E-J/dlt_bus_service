@@ -22,6 +22,7 @@
  */
 
 import nodemailer from 'nodemailer';
+import { promises as dns } from 'node:dns';
 import { AppError } from '../../domain/errors.ts';
 
 export interface EmailMessage {
@@ -188,27 +189,49 @@ export function smtpTransport(cfg: {
   host: string; port: number; secure: boolean; user: string; pass: string;
   fromAddress: string; fromName: string;
 }): EmailTransport {
-  const transporter = nodemailer.createTransport({
-    host: cfg.host,
-    port: cfg.port,
-    secure: cfg.secure,              // false + port 587 = STARTTLS (upgraded after connecting)
-    auth: { user: cfg.user, pass: cfg.pass },
-    /* Some hosts (Railway included) route containers with no IPv6 egress.
-     * Gmail's SMTP host resolves an AAAA record; without this, Node's
-     * connection attempt reaches that address and hangs until the platform's
-     * own edge timeout kills the request — the atomic signup transaction
-     * never gets a chance to fail cleanly and roll back. family:4 skips the
-     * AAAA record entirely. The timeouts bound the IPv4 attempt too, so a
-     * genuine SMTP outage surfaces as a normal error instead of a hang. */
-    family: 4,
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 15_000,
-  });
+  /* Some hosts (Railway included) run containers with no real IPv6 route out
+   * (ipv6EgressEnabled:false) that nonetheless report a non-loopback IPv6
+   * interface locally. nodemailer does NOT use Node's dns.lookup / the
+   * --dns-result-order flag for SMTP connections — it resolves the A and
+   * AAAA records itself (lib/shared/index.js: resolveHostname), and picks
+   * ONE AT RANDOM to connect to. Its own "is this family usable" probe only
+   * checks for a local interface of that family, which the container has —
+   * so Gmail's AAAA record stays in the pool and roughly half of all
+   * connection attempts pick it and hang/ENETUNREACH. There is no transport
+   * option that disables this.
+   *
+   * The fix is to resolve the A record ourselves and hand nodemailer the
+   * literal IPv4 address as `host` — resolveHostname() skips its own DNS
+   * logic entirely for an address that is already an IP (net.isIP check).
+   * `servername` is set explicitly to the real hostname so TLS SNI and
+   * certificate hostname verification still happen against
+   * smtp.gmail.com, not the IP. */
+  let ipv4: { addr: string; at: number } | null = null;
+  const IPV4_TTL_MS = 5 * 60_000;
+
+  async function resolvedHost(): Promise<string> {
+    if (ipv4 && Date.now() - ipv4.at < IPV4_TTL_MS) return ipv4.addr;
+    try {
+      const [addr] = await dns.resolve4(cfg.host);
+      if (addr) { ipv4 = { addr, at: Date.now() }; return addr; }
+    } catch { /* fall through to the hostname below */ }
+    return cfg.host;
+  }
+
   return {
     name: 'smtp',
     async send(msg) {
       const { subject, text, html } = renderTemplate(msg.template, msg.vars);
+      const transporter = nodemailer.createTransport({
+        host: await resolvedHost(),
+        port: cfg.port,
+        secure: cfg.secure,           // false + port 587 = STARTTLS (upgraded after connecting)
+        servername: cfg.host,         // SNI/cert check stays on the real hostname
+        auth: { user: cfg.user, pass: cfg.pass },
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 15_000,
+      });
       try {
         await transporter.sendMail({
           from: `"${cfg.fromName}" <${cfg.fromAddress}>`,
