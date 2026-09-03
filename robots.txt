@@ -11,4 +11,4 @@ Disallow: /DLT Readiness Audit.dc.html
 Disallow: /DLT Second Audit.dc.html
 Disallow: /DLT Final Verification.dc.html
 
-Sitemap: https://dlt.example.com/sitemap.xml
+Sitemap: https://webtesters.site/sitemap.xml

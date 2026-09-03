@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- CHANGE: replace dlt.example.com with the real production domain before deploying. -->
+<!-- Production domain: webtesters.site -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://dlt.example.com/DLT%20Homepage.dc.html</loc></url>
-  <url><loc>https://dlt.example.com/DLT%20Booking.dc.html</loc></url>
-  <url><loc>https://dlt.example.com/DLT%20Policies.dc.html</loc></url>
+  <url><loc>https://webtesters.site/DLT%20Homepage.dc.html</loc></url>
+  <url><loc>https://webtesters.site/DLT%20Booking.dc.html</loc></url>
+  <url><loc>https://webtesters.site/DLT%20Policies.dc.html</loc></url>
 </urlset>
