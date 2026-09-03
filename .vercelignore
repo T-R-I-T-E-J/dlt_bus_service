@@ -1,0 +1,24 @@
+# Vercel serves ONLY the static frontend. Everything below is either the
+# backend (which runs on EC2, not here) or internal engineering material.
+#
+# This is the same class of exposure the production-completeness audit found
+# and closed in nginx: a static host handed the whole repo will happily serve
+# backend source, SQL migrations and internal docs to anyone who guesses the
+# path. Vercel needs its own denylist because .gitignore does not apply here —
+# these files ARE committed, they simply must not be published.
+
+backend/
+test/
+uploads/
+.claude/
+
+# Internal engineering documents — not user-facing pages.
+*.md
+DLT Readiness Audit.dc.html
+DLT Second Audit.dc.html
+DLT Final Verification.dc.html
+store-tests.html
+dlt-store.js
+
+# Local dev tooling
+devserve.mjs
