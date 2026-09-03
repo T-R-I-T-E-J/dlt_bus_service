@@ -4,21 +4,21 @@
  * consistency audit.
  *
  * This is the module that makes email verification and password reset real.
- * Two real transports exist: smtpTransport (any SMTP server, Gmail with an
- * App Password is the one actually configured — see PRODUCTION_DEPLOYMENT.md
- * §3) and httpTransport (a generic provider-API adapter, for whenever a
- * transactional-email API is chosen instead). In every environment except
- * test, with neither configured, sending FAILS LOUDLY rather than pretending
- * to send. A silent no-op here would mean a student who cannot verify their
- * account and cannot reset their password, with nothing in the logs to say
- * why.
+ * Two real transports exist: httpTransport (Resend's HTTPS API — the one
+ * actually configured in production, since Railway firewalls outbound SMTP
+ * below the Pro plan) and smtpTransport (any SMTP server; kept for local dev
+ * or a non-Railway host — see PRODUCTION_DEPLOYMENT.md §3 for the Gmail
+ * setup it was written against). In every environment except test, with
+ * neither configured, sending FAILS LOUDLY rather than pretending to send. A
+ * silent no-op here would mean a student who cannot verify their account and
+ * cannot reset their password, with nothing in the logs to say why.
  *
  * Credentials for whichever transport is configured live ONLY in the
- * environment (EMAIL_SMTP_* / EMAIL_API_*) — never in this file, never in a
- * test, never in a log line. The catch blocks below are deliberate about
+ * environment (RESEND_API_KEY / EMAIL_SMTP_*) — never in this file, never in
+ * a test, never in a log line. The catch blocks below are deliberate about
  * this: nodemailer/fetch error objects can echo back connection details, but
- * never the password, and only the error's own message is logged, never the
- * message body (which carries the verification or reset code).
+ * never the password/key, and only the error's own message is logged, never
+ * the message body (which carries the verification or reset code).
  */
 
 import nodemailer from 'nodemailer';
@@ -51,30 +51,39 @@ export const memoryTransport: EmailTransport = {
 
 /* ---------------------------------------------------------------- real transport
  *
- * A single HTTP-API provider adapter. The shape below is deliberately generic:
- * bind it to whichever provider is chosen and adjust the request body in ONE
- * place. Templates live provider-side so copy can change without a deploy.
+ * HTTP-API provider adapter, bound to Resend (api.resend.com/emails). Chosen
+ * because Railway firewalls outbound SMTP (25/465/587/2525) entirely below
+ * the Pro plan — confirmed against Railway's own docs, not a guess — so
+ * plain nodemailer/SMTP cannot deliver from this host regardless of DNS or
+ * timeout tuning. Resend speaks plain HTTPS, which Railway never blocks.
+ *
+ * Templates are rendered locally with the same renderTemplate() SMTP uses
+ * (below) — Resend has no server-side named-template+variables API, so this
+ * keeps copy and behavior identical across both transports and both live in
+ * exactly one place. apiKey is read from RESEND_API_KEY only; never
+ * hardcoded, never logged.
  */
 export function httpTransport(cfg: {
-  apiUrl: string; apiKey: string; fromAddress: string; fromName: string;
+  apiKey: string; fromAddress: string; fromName: string;
 }): EmailTransport {
   return {
     name: 'http',
     async send(msg) {
-      const res = await fetch(cfg.apiUrl, {
+      const { subject, text, html } = renderTemplate(msg.template, msg.vars);
+      const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
         body: JSON.stringify({
-          from: { email: cfg.fromAddress, name: cfg.fromName },
-          to: [{ email: msg.to }],
-          template: msg.template,
-          variables: msg.vars,
+          from: `${cfg.fromName} <${cfg.fromAddress}>`,
+          to: [msg.to],
+          subject, text, html,
         }),
       });
       if (!res.ok) {
         /* Log our own reference and the status. NEVER the body — it contains the
-         * verification or reset code. */
-        console.error('[email] %s -> %s for template %s', cfg.apiUrl, res.status, msg.template);
+         * verification or reset code, and Resend's own error body can also
+         * echo request details we don't want in logs. */
+        console.error('[email] resend -> %s for template %s', res.status, msg.template);
         throw new AppError('INTERNAL', 'We could not send that email. Try again shortly.');
       }
     },
@@ -257,7 +266,7 @@ const unconfiguredTransport: EmailTransport = {
   name: 'unconfigured',
   async send(msg) {
     console.error('[email] NO TRANSPORT CONFIGURED — refusing to send %s to %s. ' +
-      'Set EMAIL_SMTP_HOST/EMAIL_SMTP_USER/EMAIL_SMTP_PASS, or EMAIL_API_URL/EMAIL_API_KEY.',
+      'Set RESEND_API_KEY, or EMAIL_SMTP_HOST/EMAIL_SMTP_USER/EMAIL_SMTP_PASS.',
       msg.template, msg.to);
     throw new AppError('INTERNAL',
       'Email delivery is not configured on this server. Contact support.');
@@ -267,8 +276,20 @@ const unconfiguredTransport: EmailTransport = {
 let transport: EmailTransport = (() => {
   if (process.env.NODE_ENV === 'test' || process.env.EMAIL_TRANSPORT === 'memory')
     return memoryTransport;
-  /* SMTP takes priority when both are somehow configured — it's the one
-   * actually wired to a real account (Gmail) as of this pass. */
+  /* Resend takes priority when both are somehow configured. Railway
+   * firewalls outbound SMTP below the Pro plan (confirmed against Railway's
+   * own docs), so SMTP is kept for local dev / any non-Railway host, but
+   * production must go through Resend's HTTPS API. */
+  if (process.env.RESEND_API_KEY)
+    return httpTransport({
+      apiKey: process.env.RESEND_API_KEY,
+      /* onboarding@resend.dev is Resend's own shared sending domain — works
+       * immediately with no DNS/domain verification. Set EMAIL_FROM to an
+       * address on a domain verified in Resend once that's done; until then
+       * this default keeps delivery working. */
+      fromAddress: process.env.EMAIL_FROM ?? 'onboarding@resend.dev',
+      fromName: process.env.EMAIL_FROM_NAME ?? 'DLT',
+    });
   if (process.env.EMAIL_SMTP_HOST && process.env.EMAIL_SMTP_USER && process.env.EMAIL_SMTP_PASS)
     return smtpTransport({
       host: process.env.EMAIL_SMTP_HOST,
@@ -283,13 +304,6 @@ let transport: EmailTransport = (() => {
       user: process.env.EMAIL_SMTP_USER,
       pass: process.env.EMAIL_SMTP_PASS,
       fromAddress: process.env.EMAIL_FROM ?? process.env.EMAIL_SMTP_USER,
-      fromName: process.env.EMAIL_FROM_NAME ?? 'DLT',
-    });
-  if (process.env.EMAIL_API_URL && process.env.EMAIL_API_KEY)
-    return httpTransport({
-      apiUrl: process.env.EMAIL_API_URL,
-      apiKey: process.env.EMAIL_API_KEY,
-      fromAddress: process.env.EMAIL_FROM ?? 'no-reply@dlt.co.in',
       fromName: process.env.EMAIL_FROM_NAME ?? 'DLT',
     });
   return unconfiguredTransport;

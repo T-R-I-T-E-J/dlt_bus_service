@@ -184,13 +184,51 @@ real domain together with the nginx `server_name`.
 ## 3. Email
 
 `backend/src/integrations/email/index.ts` implements the transport
-boundary. As of this pass it has **two real transports** — SMTP
-(`nodemailer`, added this session) and a generic HTTP provider-API adapter
-(pre-existing) — selected by which environment variables are present, SMTP
-taking priority. **SMTP is the one actually configured**, against a real
-Gmail account, verified end-to-end this session (see below).
+boundary. It has **two real transports** — an HTTP adapter bound to
+Resend's API, and SMTP (`nodemailer`) — selected by which environment
+variables are present, `RESEND_API_KEY` taking priority. **Resend is the
+one actually configured in production (Railway)**, verified end-to-end
+this session (see below).
 
-### Gmail SMTP — configured and verified
+### Why Resend, not Gmail SMTP, in production
+Railway firewalls outbound SMTP (ports 25/465/587/2525) entirely below
+the **Pro plan** — this is documented Railway platform policy
+(`docs.railway.com/networking/outbound-networking`: *"SMTP is only
+available on the Pro plan and above... disabled on \[Free/Trial/Hobby]
+plans to prevent spam and abuse"*), not a bug in this app. It was
+confirmed empirically this session too: both 587 and 465 timed out
+identically from the Railway container while every other outbound HTTPS
+call (Neon, Razorpay) worked fine. No DNS or Nodemailer configuration
+change can route around a platform-level port block. Resend speaks plain
+HTTPS (443), which Railway never blocks, and is Railway's own recommended
+provider for exactly this reason.
+
+### Resend — configured and verified (production, Railway)
+
+```
+RESEND_API_KEY=<starts with re_ — from resend.com -> API Keys>
+EMAIL_FROM=<an address on a domain verified in Resend>   # optional — defaults
+                                                           # to onboarding@resend.dev
+EMAIL_FROM_NAME=DLT                                       # optional, has a default
+```
+
+**The API key is not in this repository anywhere** — not in source, not
+in a test, not in a log, not in this document. It lives only in
+`backend/.env` (gitignored) locally, or as a Railway service variable in
+production, and belongs in a real secrets store rather than a plain
+`.env` file long-term.
+
+`onboarding@resend.dev` is Resend's own shared sending domain — it works
+immediately with no DNS setup, which is what production uses until
+`dltservices.tech` (or a subdomain of it) is added and verified in
+Resend's dashboard (SPF/DKIM records at whichever DNS host manages the
+domain). Switch `EMAIL_FROM` to that address once verified; no code
+change is needed for that switch, only the environment variable.
+
+### Option B: Gmail SMTP — kept for local dev / any non-Railway host
+Still available, unchanged, still real (`nodemailer`) — just unusable
+from Railway specifically. Used automatically when `RESEND_API_KEY` is
+not set and these three are:
 
 ```
 EMAIL_SMTP_HOST=smtp.gmail.com
@@ -202,12 +240,6 @@ EMAIL_FROM=<the Gmail address>          # optional — defaults to EMAIL_SMTP_US
 EMAIL_FROM_NAME=DLT                     # optional, has a default
 ```
 
-**The App Password is not in this repository anywhere** — not in source,
-not in a test, not in a log, not in this document. It lives only in
-`backend/.env` (gitignored) on whatever machine runs the backend, and
-belongs in a real secrets store (not a plain `.env` file) once this is on
-a real production host.
-
 Getting a Gmail App Password (if a fresh one is ever needed): the Google
 Account must have **2-Step Verification enabled** first — Google Account
 → Security → 2-Step Verification → App passwords → generate one scoped to
@@ -216,24 +248,11 @@ login password, and Google will not show it again after generation —
 whoever generates it should save it directly into the secrets store, not
 paste it anywhere that persists (a chat, a ticket, a shared doc).
 
-**Gmail-specific limits worth knowing before relying on this at scale**: a
-personal Gmail account is capped at roughly 500 outbound messages/day, and
-Google may throttle or flag automated SMTP traffic that looks like bulk
-sending. This is fine for verification/reset volume at DLT's current
-scale; if trip/booking notification volume grows meaningfully, a real
-transactional-email provider (Option B below) has headroom this doesn't.
-
-### Option B: generic HTTP provider API (SendGrid/Postmark/SES/etc.)
-Still available, unchanged, and still not bound to a specific provider —
-`httpTransport()`'s request body (`{from, to, template, variables}`) is a
-generic placeholder shape, not any real provider's actual API contract.
-Choosing a provider and adjusting that shape to match it remains open;
-not needed while SMTP is configured and sufficient.
-
-```
-EMAIL_API_URL=<the provider's send-email HTTP endpoint>
-EMAIL_API_KEY=<the provider's API key>
-```
+**Gmail-specific limits worth knowing if this is ever used somewhere
+SMTP isn't blocked**: a personal Gmail account is capped at roughly 500
+outbound messages/day, and Google may throttle or flag automated SMTP
+traffic that looks like bulk sending — one more reason Resend is the
+better default even where SMTP is technically reachable.
 
 ### What happens with neither configured
 The backend runs with `unconfiguredTransport`: every verification email,
@@ -262,20 +281,17 @@ product decision (when, and under what conditions, DLT emails a student)
 this pass did not make.
 
 ### Verified this session (real send, real inbox — not claimed)
-Sent through the real Gmail SMTP transport configured above, to
-`tristarnex@gmail.com`:
-- a real `verify-email` send (the same call `domain/auth.ts` makes on
-  signup)
-- a real `password-reset` send (the same call `domain/auth.ts` makes on
-  a forgot-password request)
-- a real `trip-cancelled` send, invoked directly through the transport
-  (proving arbitrary templates deliver correctly, since nothing in
-  `domain/` triggers this one yet — see "Templates" above)
+See the session report for exact verification results (`verify-email`,
+`resend-verification`, `password-reset`) against the real production
+Railway deployment through Resend — message IDs, timestamps, and the
+codes/tokens each email carried are intentionally NOT reproduced in this
+document.
 
-All three arrived. Exact evidence — message IDs, timestamps, and the
-codes/tokens each email carried — is intentionally NOT reproduced in this
-document; see the session report instead, which describes what was
-confirmed without repeating the sensitive values themselves.
+Earlier in this project's history, before Railway's SMTP restriction was
+identified, the same template paths were verified against real Gmail
+SMTP delivery (pre-Railway). That history is why `smtpTransport` remains
+in the codebase rather than being removed — it is genuinely useful again
+on any host that doesn't block outbound SMTP.
 
 ---
 
@@ -396,8 +412,9 @@ psql -U postgres -d dlt_prod -c "ALTER ROLE dlt_app LOGIN PASSWORD '<generated>'
 NODE_ENV=production
 PORT=3000
 DATABASE_URL=postgres://dlt_app:<password>@localhost:5432/dlt_prod
-EMAIL_API_URL=<provider endpoint>       # see §3 — needs your provider choice
-EMAIL_API_KEY=<provider key>
+RESEND_API_KEY=<re_... from resend.com>  # see §3 — required if this host
+                                          # blocks outbound SMTP (Railway does
+                                          # below the Pro plan)
 RAZORPAY_KEY_ID=<real LIVE key>         # only when actually going live
 RAZORPAY_KEY_SECRET=<real LIVE secret>
 RAZORPAY_WEBHOOK_SECRET=<real LIVE webhook secret>
