@@ -74,7 +74,16 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     const buf = await readFile(file);
-    res.writeHead(200, { 'content-type': TYPES[extname(file).toLowerCase()] || 'application/octet-stream' });
+    /* no-store on every local response. Without this devserve sent NO cache
+     * header at all, so browsers fell back to heuristic caching and happily
+     * replayed a stale .dc.html / journey.js / support.js after an edit —
+     * which reads exactly like "the fix didn't work" when the fix was fine and
+     * the browser simply never fetched it. Local dev should always show the
+     * file currently on disk; nothing here is served to real users. */
+    res.writeHead(200, {
+      'content-type': TYPES[extname(file).toLowerCase()] || 'application/octet-stream',
+      'cache-control': 'no-store, no-cache, must-revalidate',
+    });
     res.end(buf);
   } catch (e) {
     res.writeHead(502); res.end('devserve error: ' + e.message);
