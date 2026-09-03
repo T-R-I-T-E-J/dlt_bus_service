@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /DLT Dashboard.dc.html
+Disallow: /DLT Account.dc.html
+Disallow: /DLT Admin.dc.html
+Disallow: /backend/
+Disallow: /test/
+Disallow: /uploads/
+Disallow: /store-tests.html
+Disallow: /DLT Readiness Audit.dc.html
+Disallow: /DLT Second Audit.dc.html
+Disallow: /DLT Final Verification.dc.html
+
+Sitemap: https://dlt.example.com/sitemap.xml

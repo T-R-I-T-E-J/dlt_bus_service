@@ -55,9 +55,24 @@ const server = http.createServer(async (req, res) => {
     }
     let p = decodeURIComponent(url.pathname);
     if (p === '/') p = '/DLT Homepage.dc.html';
+
+    /* Mirrors deploy/nginx-dlt.conf's deny rules: backend/ holds real secrets
+     * (.env) and the full source/schema, so it — and dotfiles, .md docs, and
+     * the internal-only audit pages — must never be reachable over this
+     * static host either, even though it's meant for localhost. */
+    if (/^\/(backend|test|uploads)(\/|$)/.test(p) || /\/\./.test(p) || /\.(md|sql)$/i.test(p)
+      || /^\/DLT (Readiness|Second) Audit\.dc\.html$|^\/DLT Final Verification\.dc\.html$|^\/store-tests\.html$/.test(p)) {
+      res.writeHead(404); res.end(await readFile(join(ROOT, '404.html')).catch(() => 'not found'));
+      return;
+    }
+
     const file = join(ROOT, normalize(p).replace(/^(\.\.[/\\])+/, ''));
     const s = await stat(file).catch(() => null);
-    if (!s || !s.isFile()) { res.writeHead(404); res.end('not found: ' + p); return; }
+    if (!s || !s.isFile()) {
+      res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(await readFile(join(ROOT, '404.html')).catch(() => 'not found: ' + p));
+      return;
+    }
     const buf = await readFile(file);
     res.writeHead(200, { 'content-type': TYPES[extname(file).toLowerCase()] || 'application/octet-stream' });
     res.end(buf);

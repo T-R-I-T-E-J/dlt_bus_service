@@ -1,9 +1,10 @@
 # DLT — production deployment guide
 
 Status: the application (Homepage/3D, Booking, Dashboard, Account, Admin,
-Razorpay payments/refunds) is feature-complete and verified — 348/348
-backend tests passing, typecheck clean, every screen migrated off the
-prototype store and confirmed against the real backend in a real browser.
+Razorpay payments/refunds) is feature-complete and verified — 350/350
+backend tests passing (re-run in full during the production-completeness
+audit), typecheck clean, every screen migrated off the prototype store
+and confirmed against the real backend in a real browser.
 **Nothing has been deployed.** This document is what's left between "works
 on a dev machine" and "serving real traffic," and exactly what was
 verified this session versus what still needs a real production host to
@@ -46,6 +47,14 @@ psql -U postgres -c "DELETE FROM audit_logs;"           -> refused by the trigge
 Also verified: a real `pg_dump`/`pg_restore` round-trip of `dlt_dev` (see
 §5) preserves the same schema, triggers, and grants — this isn't a
 one-off artifact of the migrations, it survives a restore too.
+
+**Re-verified during the production-completeness audit** (two migrations
+were added since the block above was written, for two real defects found
+by pre-production load testing): a clean `node scripts/migrate.mjs`
+against a fresh throwaway database applies all **18** migrations in
+order, zero manual steps. The `dlt_app`-role/audit-trigger portion above
+was not re-run this pass — nothing since has touched `dlt_app`'s grants
+or the audit trigger, so it stands.
 
 **The password used above was generated for this local verification only
 and was discarded** (`dlt_app` was reverted to `NOLOGIN` afterward, the
@@ -145,6 +154,30 @@ via `certbot --nginx`, auto-renewing. Any CA works; nothing in the app
 cares which one issued the certificate, only that nginx terminates TLS
 before traffic reaches the Node process (the app itself only ever speaks
 plain HTTP, on loopback).
+
+### Static file exposure — found and closed during the completeness audit
+`root /opt/dlt` in `nginx-dlt.conf` points at the **whole repo checkout**,
+`backend/` included, because there is no build step that copies a
+curated frontend-only directory into place. Before this audit,
+`try_files $uri $uri/ =404` would have served *any* file under that root
+to *any* request path — `backend/.env` (real SMTP/Razorpay/DB
+credentials), `backend/src/**` (source), `backend/migrations/*.sql`
+(the schema), and every internal audit/spec document in this repo,
+publicly, with no auth. `nginx-dlt.conf` now denies `backend/`, `test/`,
+`uploads/`, dotfiles, `*.md`/`*.sql`, and the internal-only audit pages
+before the general static location; `devserve.mjs` (local dev) carries
+the same denylist. **Verified live** against `devserve.mjs` this
+session: `/backend/.env` → 404, the real Homepage/Booking pages and
+`assets/dlt-coach.glb` → unaffected, 200.
+
+### SEO / metadata, also added this session
+Every real page now sets a `<title>`, meta description, canonical link
+and favicon via its `<helmet>` block (support.js's own head-injection
+mechanism — nothing new was built). `Dashboard`/`Account` are
+`noindex`; `Admin` is `noindex, nofollow`. `robots.txt` and
+`sitemap.xml` are new files at the repo root — both use the same
+`dlt.example.com` placeholder as `nginx-dlt.conf`; **CHANGE** to the
+real domain together with the nginx `server_name`.
 
 ---
 

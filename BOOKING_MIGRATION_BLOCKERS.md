@@ -1,5 +1,13 @@
 # BOOKING MIGRATION — BLOCKED ON DATA MISMATCHES
 
+> **RESOLVED, superseded — added during the production-completeness audit.**
+> The mismatches below were decided and the booking screen WAS migrated
+> (see git history after this file's date; `DLT Booking.dc.html` calls
+> `dlt-client.js`/`DLT.boot()` like every other real screen and is covered
+> by the real-HTTP integration tests). Kept as historical record of the
+> decisions made, not as a current-state description — everything under
+> "Outcome" and "NOT MIGRATED" below is stale.
+
 **Date:** 1 September 2026
 **Phase:** 7.2 — rewire the booking screen
 **Outcome: NOT MIGRATED. Stopped at the mismatch rule, as instructed.**
