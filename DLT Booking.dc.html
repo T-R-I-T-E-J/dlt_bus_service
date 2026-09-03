@@ -358,20 +358,20 @@
           <sc-if value="{{ authIsSignUp }}" hint-placeholder-val="{{ false }}">
             <label style="display:block">
               <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Full name</span>
-              <input type="text" value="{{ authName }}" onChange="{{ onAuthName }}" autocomplete="name" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+              <input type="text" id="booking-auth-name" name="name" value="{{ authName }}" onChange="{{ onAuthName }}" autocomplete="name" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
             </label>
             <label style="display:block">
               <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Phone</span>
-              <input type="tel" value="{{ authPhone }}" onChange="{{ onAuthPhone }}" autocomplete="tel" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+              <input type="tel" id="booking-auth-phone" name="phone" value="{{ authPhone }}" onChange="{{ onAuthPhone }}" autocomplete="tel" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
             </label>
           </sc-if>
           <label style="display:block">
             <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Email</span>
-            <input type="email" value="{{ authEmail }}" onChange="{{ onAuthEmail }}" autocomplete="email" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+            <input type="email" id="booking-auth-email" name="email" value="{{ authEmail }}" onChange="{{ onAuthEmail }}" autocomplete="email" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
           </label>
           <label style="display:block">
             <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Password</span>
-            <input type="password" value="{{ authPassword }}" onChange="{{ onAuthPassword }}" autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+            <input type="password" id="booking-auth-password" name="password" value="{{ authPassword }}" onChange="{{ onAuthPassword }}" autocomplete="current-password" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
           </label>
         </div>
         <div style="margin:16px 0 0;display:flex;flex-wrap:wrap;gap:10px;align-items:center">

@@ -23,6 +23,7 @@
 
 import nodemailer from 'nodemailer';
 import { promises as dns } from 'node:dns';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport/index.js';
 import { AppError } from '../../domain/errors.ts';
 
 export interface EmailMessage {
@@ -58,21 +59,25 @@ export const memoryTransport: EmailTransport = {
  * timeout tuning. Resend speaks plain HTTPS, which Railway never blocks.
  *
  * Templates are rendered locally with the same renderTemplate() SMTP uses
- * (below) — Resend has no server-side named-template+variables API, so this
- * keeps copy and behavior identical across both transports and both live in
- * exactly one place. apiKey is read from RESEND_API_KEY only; never
- * hardcoded, never logged.
+ * (below) — Resend also has server-side templates, but rendering these
+ * code-bearing auth messages here keeps copy and behavior identical across
+ * both transports and in exactly one place. apiKey is read from
+ * RESEND_API_KEY only; never hardcoded, never logged.
  */
 export function httpTransport(cfg: {
   apiKey: string; fromAddress: string; fromName: string;
 }): EmailTransport {
   return {
-    name: 'http',
+    name: 'resend',
     async send(msg) {
       const { subject, text, html } = renderTemplate(msg.template, msg.vars);
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
-        headers: { authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
+        headers: {
+          authorization: `Bearer ${cfg.apiKey}`,
+          'content-type': 'application/json',
+          'user-agent': 'dlt-bus-service/0.1',
+        },
         body: JSON.stringify({
           from: `${cfg.fromName} <${cfg.fromAddress}>`,
           to: [msg.to],
@@ -231,7 +236,7 @@ export function smtpTransport(cfg: {
     name: 'smtp',
     async send(msg) {
       const { subject, text, html } = renderTemplate(msg.template, msg.vars);
-      const transporter = nodemailer.createTransport({
+      const smtpOptions: SMTPTransport.Options & { servername: string } = {
         host: await resolvedHost(),
         port: cfg.port,
         secure: cfg.secure,           // false + port 587 = STARTTLS (upgraded after connecting)
@@ -240,7 +245,8 @@ export function smtpTransport(cfg: {
         connectionTimeout: 10_000,
         greetingTimeout: 10_000,
         socketTimeout: 15_000,
-      });
+      };
+      const transporter = nodemailer.createTransport(smtpOptions);
       try {
         await transporter.sendMail({
           from: `"${cfg.fromName}" <${cfg.fromAddress}>`,
@@ -273,6 +279,17 @@ const unconfiguredTransport: EmailTransport = {
   },
 };
 
+const missingResendFromTransport: EmailTransport = {
+  name: 'unconfigured',
+  async send(msg) {
+    console.error('[email] RESEND_API_KEY is set but EMAIL_FROM is missing — refusing to send %s to %s. ' +
+      'Set EMAIL_FROM to an address on a domain verified in Resend.',
+      msg.template, msg.to);
+    throw new AppError('INTERNAL',
+      'Email delivery is not configured on this server. Contact support.');
+  },
+};
+
 let transport: EmailTransport = (() => {
   if (process.env.NODE_ENV === 'test' || process.env.EMAIL_TRANSPORT === 'memory')
     return memoryTransport;
@@ -280,14 +297,17 @@ let transport: EmailTransport = (() => {
    * firewalls outbound SMTP below the Pro plan (confirmed against Railway's
    * own docs), so SMTP is kept for local dev / any non-Railway host, but
    * production must go through Resend's HTTPS API. */
-  if (process.env.RESEND_API_KEY)
+  const resendApiKey = process.env.RESEND_API_KEY;
+  const emailFrom = process.env.EMAIL_FROM;
+  if (resendApiKey && !emailFrom)
+    return missingResendFromTransport;
+  if (resendApiKey)
     return httpTransport({
-      apiKey: process.env.RESEND_API_KEY,
-      /* onboarding@resend.dev is Resend's own shared sending domain — works
-       * immediately with no DNS/domain verification. Set EMAIL_FROM to an
-       * address on a domain verified in Resend once that's done; until then
-       * this default keeps delivery working. */
-      fromAddress: process.env.EMAIL_FROM ?? 'onboarding@resend.dev',
+      apiKey: resendApiKey,
+      /* EMAIL_FROM must use a domain verified in Resend. Their shared
+       * onboarding@resend.dev sender is test-only and cannot deliver to
+       * arbitrary students, so production must not silently fall back to it. */
+      fromAddress: emailFrom!,
       fromName: process.env.EMAIL_FROM_NAME ?? 'DLT',
     });
   if (process.env.EMAIL_SMTP_HOST && process.env.EMAIL_SMTP_USER && process.env.EMAIL_SMTP_PASS)

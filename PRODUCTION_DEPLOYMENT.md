@@ -207,8 +207,7 @@ provider for exactly this reason.
 
 ```
 RESEND_API_KEY=<starts with re_ — from resend.com -> API Keys>
-EMAIL_FROM=<an address on a domain verified in Resend>   # optional — defaults
-                                                           # to onboarding@resend.dev
+EMAIL_FROM=<an address on a domain verified in Resend>   # required for Resend
 EMAIL_FROM_NAME=DLT                                       # optional, has a default
 ```
 
@@ -218,12 +217,13 @@ in a test, not in a log, not in this document. It lives only in
 production, and belongs in a real secrets store rather than a plain
 `.env` file long-term.
 
-`onboarding@resend.dev` is Resend's own shared sending domain — it works
-immediately with no DNS setup, which is what production uses until
-`dltservices.tech` (or a subdomain of it) is added and verified in
-Resend's dashboard (SPF/DKIM records at whichever DNS host manages the
-domain). Switch `EMAIL_FROM` to that address once verified; no code
-change is needed for that switch, only the environment variable.
+`EMAIL_FROM` must use a domain that is already verified in Resend.
+`onboarding@resend.dev` is Resend's shared testing domain and can only send
+test mail to the Resend account address; it is not a production sender for
+student addresses. Add and verify `dltservices.tech` (or a sending subdomain)
+in Resend's dashboard first, then set `EMAIL_FROM` to an address on that exact
+verified domain. No code change is needed after that, only the environment
+variable.
 
 ### Option B: Gmail SMTP — kept for local dev / any non-Railway host
 Still available, unchanged, still real (`nodemailer`) — just unusable
@@ -412,9 +412,9 @@ psql -U postgres -d dlt_prod -c "ALTER ROLE dlt_app LOGIN PASSWORD '<generated>'
 NODE_ENV=production
 PORT=3000
 DATABASE_URL=postgres://dlt_app:<password>@localhost:5432/dlt_prod
-RESEND_API_KEY=<re_... from resend.com>  # see §3 — required if this host
-                                          # blocks outbound SMTP (Railway does
-                                          # below the Pro plan)
+RESEND_API_KEY=<re_... from resend.com>  # see §3 — required on Railway
+EMAIL_FROM=no-reply@<verified-resend-domain>
+EMAIL_FROM_NAME=DLT
 RAZORPAY_KEY_ID=<real LIVE key>         # only when actually going live
 RAZORPAY_KEY_SECRET=<real LIVE secret>
 RAZORPAY_WEBHOOK_SECRET=<real LIVE webhook secret>

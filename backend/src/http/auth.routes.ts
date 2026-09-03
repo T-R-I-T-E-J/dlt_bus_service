@@ -211,11 +211,18 @@ const STATUS: Record<string, number> = {
   VALIDATION: 400, INVALID: 400,
   UNAUTHENTICATED: 401, INVALID_CREDENTIALS: 401,
   FORBIDDEN: 403, NOT_FOUND: 404, CONFLICT: 409, RATE_LIMITED: 429,
+  INTERNAL: 500,
 };
 
 export function authErrorHandler(err: unknown, _req: Request, res: Response, next: NextFunction) {
   if (res.headersSent) return next(err);
   if (err instanceof AppError)
+    /* INTERNAL was missing from this map, so an infrastructure failure the
+     * client did nothing to cause (e.g. the email provider rejecting a send)
+     * fell through to the `?? 400` default and was reported as a client
+     * error — the browser's console and this app's own frontend error
+     * handling both read a 400 as "something you submitted was wrong",
+     * which was never true here. */
     return res.status(STATUS[err.code] ?? 400).json({ error: { code: err.code, message: err.message } });
   if (err instanceof z.ZodError)
     return res.status(400).json({ error: { code: 'VALIDATION', message: 'Check the details and try again' } });

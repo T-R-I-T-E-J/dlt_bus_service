@@ -70,31 +70,31 @@
       <sc-if value="{{ isSignUp }}" hint-placeholder-val="{{ false }}">
         <label style="display:block">
           <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Full name</span>
-          <input type="text" value="{{ name }}" onChange="{{ onName }}" autocomplete="name" placeholder="As on your student ID" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+          <input type="text" id="signup-name" name="name" value="{{ name }}" onChange="{{ onName }}" autocomplete="name" placeholder="As on your student ID" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
         </label>
         <label style="display:block">
           <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Phone</span>
-          <input type="tel" value="{{ phone }}" onChange="{{ onPhone }}" autocomplete="tel" placeholder="10-digit mobile" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+          <input type="tel" id="signup-phone" name="phone" value="{{ phone }}" onChange="{{ onPhone }}" autocomplete="tel" placeholder="10-digit mobile" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
         </label>
         <label style="display:block">
           <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Student ID</span>
-          <input type="text" value="{{ studentId }}" onChange="{{ onStudentId }}" placeholder="As printed on your card" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+          <input type="text" id="signup-student-id" name="studentId" value="{{ studentId }}" onChange="{{ onStudentId }}" placeholder="As printed on your card" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
         </label>
       </sc-if>
       <label style="display:block">
         <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Email</span>
-        <input type="email" value="{{ email }}" onChange="{{ onEmail }}" autocomplete="email" placeholder="you@woxsen.edu.in" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+        <input type="email" id="auth-email" name="email" value="{{ email }}" onChange="{{ onEmail }}" autocomplete="email" placeholder="you@woxsen.edu.in" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
       </label>
       <sc-if value="{{ needsPassword }}" hint-placeholder-val="{{ true }}">
         <label style="display:block">
           <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Password</span>
-          <input type="password" value="{{ password }}" onChange="{{ onPassword }}" autocomplete="{{ pwAutocomplete }}" placeholder="{{ pwPlaceholder }}" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
+          <input type="password" id="auth-password" name="password" value="{{ password }}" onChange="{{ onPassword }}" autocomplete="{{ pwAutocomplete }}" placeholder="{{ pwPlaceholder }}" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
         </label>
       </sc-if>
       <sc-if value="{{ isReset }}" hint-placeholder-val="{{ false }}">
         <label style="display:block">
           <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Reset code</span>
-          <input type="text" value="{{ resetToken }}" onChange="{{ onResetToken }}" placeholder="From the reset link" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
+          <input type="text" id="auth-reset-token" name="resetToken" value="{{ resetToken }}" onChange="{{ onResetToken }}" placeholder="From the reset link" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
         </label>
       </sc-if>
     </div>
