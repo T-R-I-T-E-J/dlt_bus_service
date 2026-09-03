@@ -3,6 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- THE IMPORT MAP MUST LIVE HERE, NOT IN <helmet>.
+     support.js's helmet manager re-inserts every <helmet> child into <head>
+     at runtime (support.js:1446, doc.head.appendChild). An import map cloned
+     that way arrives as a SECOND import map, and Chrome refuses to let a later
+     map change specifiers that have already been resolved — it strips the
+     conflicting rules ("removing the import-map rules for three and
+     three/addons/loaders/GLTFLoader.js"). journey.js then evaluated with no
+     mapping for `three`, failed to resolve, and never reached its final
+     customElements.define('dlt-journey', ...) — so <x-import
+     component-from-global-scope="dlt-journey"> rendered nothing, silently, with
+     no journeyfailed event to trigger the static fallback either.
+     Parsed here in the real <head> it is registered once, before any module
+     specifier can resolve, and support.js never sees it. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+    "three/addons/loaders/GLTFLoader.js": "https://unpkg.com/three@0.184.0/examples/jsm/loaders/GLTFLoader.js"
+  },
+  "integrity": {
+    "https://unpkg.com/three@0.184.0/build/three.module.js": "sha384-8FCZ1eVO6it4+pbec2aDtnTrwjWXZLJRC+MAGCIPDgsYnUrl/E0A2YlF8ioMKI/J",
+    "https://unpkg.com/three@0.184.0/build/three.core.js": "sha384-dw2ooPewaEIrAgl6oFDBmmBWCE9oW9LxRGcfwZ0hLvEprzo202wXl7vCYHRlSnOT"
+  }
+}
+</script>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -18,18 +43,9 @@
 <meta property="og:description" content="Book a seat on the DLT shuttle between Woxsen University and Miyapur.">
 <meta property="og:url" content="https://webtesters.site/DLT%20Homepage.dc.html">
 <meta name="twitter:card" content="summary">
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
-    "three/addons/loaders/GLTFLoader.js": "https://unpkg.com/three@0.184.0/examples/jsm/loaders/GLTFLoader.js"
-  },
-  "integrity": {
-    "https://unpkg.com/three@0.184.0/build/three.module.js": "sha384-8FCZ1eVO6it4+pbec2aDtnTrwjWXZLJRC+MAGCIPDgsYnUrl/E0A2YlF8ioMKI/J",
-    "https://unpkg.com/three@0.184.0/build/three.core.js": "sha384-dw2ooPewaEIrAgl6oFDBmmBWCE9oW9LxRGcfwZ0hLvEprzo202wXl7vCYHRlSnOT"
-  }
-}
-</script>
+<!-- The three.js import map is deliberately NOT here — it is in the document's
+     real <head>. See the comment there: a <helmet>-hosted import map is
+     re-inserted by support.js as a second map and has its rules stripped. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400;100,500;100,600;100,700;125,600;125,700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
