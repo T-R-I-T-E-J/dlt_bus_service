@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://api.webtesters.site/api/:path*"
+      "destination": "https://dlt-api-production.up.railway.app/api/:path*"
     },
     {
       "source": "/",
