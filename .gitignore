@@ -27,3 +27,6 @@ tc.txt
 # Build output
 dist/
 build/
+
+.vercel
+.env*.local

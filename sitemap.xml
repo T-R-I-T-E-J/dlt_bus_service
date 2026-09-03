@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Production domain: webtesters.site -->
+<!-- Production domain: dltservices.tech -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://webtesters.site/DLT%20Homepage.dc.html</loc></url>
-  <url><loc>https://webtesters.site/DLT%20Booking.dc.html</loc></url>
-  <url><loc>https://webtesters.site/DLT%20Policies.dc.html</loc></url>
+  <url><loc>https://dltservices.tech/DLT%20Homepage.dc.html</loc></url>
+  <url><loc>https://dltservices.tech/DLT%20Booking.dc.html</loc></url>
+  <url><loc>https://dltservices.tech/DLT%20Policies.dc.html</loc></url>
 </urlset>
