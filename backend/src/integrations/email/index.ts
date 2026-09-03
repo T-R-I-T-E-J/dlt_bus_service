@@ -193,6 +193,17 @@ export function smtpTransport(cfg: {
     port: cfg.port,
     secure: cfg.secure,              // false + port 587 = STARTTLS (upgraded after connecting)
     auth: { user: cfg.user, pass: cfg.pass },
+    /* Some hosts (Railway included) route containers with no IPv6 egress.
+     * Gmail's SMTP host resolves an AAAA record; without this, Node's
+     * connection attempt reaches that address and hangs until the platform's
+     * own edge timeout kills the request — the atomic signup transaction
+     * never gets a chance to fail cleanly and roll back. family:4 skips the
+     * AAAA record entirely. The timeouts bound the IPv4 attempt too, so a
+     * genuine SMTP outage surfaces as a normal error instead of a hang. */
+    family: 4,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
   });
   return {
     name: 'smtp',
