@@ -3,6 +3,9 @@ Allow: /
 Disallow: /DLT Dashboard.dc.html
 Disallow: /DLT Account.dc.html
 Disallow: /DLT Admin.dc.html
+Disallow: /my-trips
+Disallow: /account
+Disallow: /admin
 Disallow: /backend/
 Disallow: /test/
 Disallow: /uploads/

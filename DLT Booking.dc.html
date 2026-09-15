@@ -3,6 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Book DLT Services | Woxsen Miyapur Student Shuttle</title>
+<meta name="description" content="Book DLT Services student shuttle seats between Woxsen University and Miyapur Metro. Choose a departure, select seats, pay online, and get QR boarding.">
+<link rel="canonical" href="https://dltservices.tech/booking">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<meta name="robots" content="index,follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="DLT Services">
+<meta property="og:title" content="Book DLT Services | Woxsen Miyapur Student Shuttle">
+<meta property="og:description" content="Book student shuttle seats between Woxsen University and Miyapur Metro with online payment and QR boarding.">
+<meta property="og:url" content="https://dltservices.tech/booking">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "@id": "https://dltservices.tech/booking#webpage",
+  "url": "https://dltservices.tech/booking",
+  "name": "Book DLT Services Woxsen Miyapur Student Shuttle",
+  "description": "Book DLT Services student shuttle seats between Woxsen University and Miyapur Metro.",
+  "isPartOf": { "@id": "https://dltservices.tech/#website" },
+  "about": { "@id": "https://dltservices.tech/#student-shuttle" },
+  "inLanguage": "en-IN"
+}
+</script>
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
 <link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z">
 <link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1">
@@ -12,14 +36,16 @@
 <body>
 <x-dc>
 <helmet>
-<title>Book a seat — DLT</title>
-<meta name="description" content="Book a seat on the DLT shuttle between Woxsen University and Miyapur. Pick a departure, choose a seat, and pay online.">
-<link rel="canonical" href="https://dltservices.tech/DLT%20Booking.dc.html">
+<title>Book DLT Services | Woxsen Miyapur Student Shuttle</title>
+<meta name="description" content="Book DLT Services student shuttle seats between Woxsen University and Miyapur Metro. Choose a departure, select seats, pay online, and get QR boarding.">
+<link rel="canonical" href="https://dltservices.tech/booking">
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Book a seat — DLT">
-<meta property="og:description" content="Book a seat on the DLT shuttle between Woxsen University and Miyapur.">
-<meta property="og:url" content="https://dltservices.tech/DLT%20Booking.dc.html">
+<meta property="og:site_name" content="DLT Services">
+<meta property="og:title" content="Book DLT Services | Woxsen Miyapur Student Shuttle">
+<meta property="og:description" content="Book student shuttle seats between Woxsen University and Miyapur Metro with online payment and QR boarding.">
+<meta property="og:url" content="https://dltservices.tech/booking">
 <meta name="twitter:card" content="summary">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -68,12 +94,12 @@
 </helmet>
 
 <header style="position:sticky;top:0;z-index:40;height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(18px,4vw,44px);background:rgba(247,245,240,.92);backdrop-filter:blur(14px);border-bottom:1px solid rgba(14,16,20,.10)">
-  <a href="./DLT Homepage.dc.html" style="display:flex;align-items:baseline;gap:9px;color:#0E1014">
-    <span style="font-stretch:125%;font-weight:700;font-size:19px;letter-spacing:.02em">DLT</span>
+  <a href="/" style="display:flex;align-items:baseline;gap:9px;color:#0E1014">
+    <span style="font-stretch:125%;font-weight:700;font-size:19px;letter-spacing:.02em">DLT Services</span>
     <span data-m="hide" style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Book a seat</span>
   </a>
   <nav style="display:flex;align-items:center;gap:clamp(14px,2.4vw,28px);font-size:13.5px;font-weight:500">
-    <a href="./DLT Homepage.dc.html#help" style="color:#3D423C">Help</a>
+    <a href="/#help" style="color:#3D423C">Help</a>
     <a href="./DLT Dashboard.dc.html" style="color:#3D423C">My trips</a>
     <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
       <span style="display:flex;align-items:center;gap:9px">
@@ -165,7 +191,7 @@
                  phone number is asked for and no request is recorded, so the copy
                  must not imply an automatic alert. -->
             <a href="{{ whatsappUrl }}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:8px;border:1px solid rgba(14,16,20,.2);padding:11px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Message us on WhatsApp<span aria-hidden="true" style="font-size:11px;color:#5F6560">↗</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Opens WhatsApp in a new tab</span></a>
-            <a href="./DLT Homepage.dc.html#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:11px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
+            <a href="/#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:11px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
           </div>
           <p style="margin:12px 0 0;max-width:52ch;font-size:12px;line-height:1.55;color:#5F6560">Email requests are logged for operations. WhatsApp opens a conversation — we reply there, and nothing is recorded automatically.</p>
         </sc-if>
@@ -478,7 +504,7 @@
     </dl>
     <div style="margin:22px 0 0;display:flex;flex-wrap:wrap;gap:10px">
       <a href="./DLT Dashboard.dc.html" style="display:flex;align-items:center;background:#0E1014;color:#F7F5F0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;min-height:44px;box-sizing:border-box">Track it in My Trips</a>
-      <a href="./DLT Homepage.dc.html#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
+      <a href="/#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
     </div>
   </section>
   </sc-if>

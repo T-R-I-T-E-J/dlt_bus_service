@@ -1,6 +1,43 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/book",
+      "destination": "/booking",
+      "permanent": true
+    },
+    {
+      "source": "/terms",
+      "destination": "/policies",
+      "permanent": true
+    },
+    {
+      "source": "/privacy",
+      "destination": "/policies",
+      "permanent": true
+    }
+  ],
   "rewrites": [
+    {
+      "source": "/booking",
+      "destination": "/DLT Booking.dc.html"
+    },
+    {
+      "source": "/policies",
+      "destination": "/DLT Policies.dc.html"
+    },
+    {
+      "source": "/account",
+      "destination": "/DLT Account.dc.html"
+    },
+    {
+      "source": "/my-trips",
+      "destination": "/DLT Dashboard.dc.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/DLT Admin.dc.html"
+    },
     {
       "source": "/api/:path*",
       "destination": "https://dlt-api-production.up.railway.app/api/:path*"

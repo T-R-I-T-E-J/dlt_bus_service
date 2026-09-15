@@ -1,7 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Production domain: dltservices.tech -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://dltservices.tech/DLT%20Homepage.dc.html</loc></url>
-  <url><loc>https://dltservices.tech/DLT%20Booking.dc.html</loc></url>
-  <url><loc>https://dltservices.tech/DLT%20Policies.dc.html</loc></url>
+  <url>
+    <loc>https://dltservices.tech/</loc>
+    <lastmod>2026-09-16</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://dltservices.tech/booking</loc>
+    <lastmod>2026-09-16</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://dltservices.tech/policies</loc>
+    <lastmod>2026-09-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
 </urlset>
