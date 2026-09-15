@@ -99,7 +99,7 @@ export function startJobs(provider: ReturnType<typeof createRazorpayProvider>) {
   if (automaticRefundsEnabled())
     timers.push(every(60_000, 'refunds', () => dispatchPendingRefunds(provider)));
   else
-    console.warn('[dlt] automatic refund dispatch is OFF (AUTO_REFUNDS_ENABLED=false)');
+    console.log('[dlt] automatic refund dispatch is OFF (AUTO_REFUNDS_ENABLED=false)');
   return timers;
 }
 
