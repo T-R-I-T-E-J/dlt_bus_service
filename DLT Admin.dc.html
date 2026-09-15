@@ -2038,7 +2038,7 @@ class Component extends DCLogic {
       },
       overrideOpen: st.overrideOpen && !!booking,
       overrideBlurb: booking
-        ? 'The 12-hour policy would refund ₹' + policyQuote + ' on ' + booking.code + '. ₹' + overrideCap +
+        ? 'The 24-hour policy would refund ₹' + policyQuote + ' on ' + booking.code + '. ₹' + overrideCap +
           ' of the ₹' + (booking.totalAmount) + ' taken is still refundable. State the amount you are overriding to, and why.'
         : '',
       ovAmount: st.ovAmount, ovReason: st.ovReason, ovCancel: st.ovCancel,
@@ -2346,8 +2346,8 @@ class Component extends DCLogic {
       adminReason: st.adminReason,
       onAdminReason: e => this.setState({ adminReason: e.target.value }),
       adminCancelLabel: booking ? 'Cancel booking' + (booking.trip &&
-        (booking.trip.departureAt - Date.now()) >= 12 * 3600000 ? ' · full refund' : ' · no refund due') : 'Cancel',
-      adminCancelNote: 'The refund is calculated from the 12-hour policy at the moment you confirm. A reason is mandatory and is written to the audit log.',
+        (booking.trip.departureAt - Date.now()) >= 24 * 3600000 ? ' · full refund' : ' · no refund due') : 'Cancel',
+      adminCancelNote: 'The refund is calculated from the 24-hour policy at the moment you confirm. A reason is mandatory and is written to the audit log.',
       adminCancel: async () => {
         try {
           if (!st.adminReason.trim()) throw new Error('Enter a reason before cancelling');

@@ -28,7 +28,7 @@
   const FARE = 299;                          // §20
   const HOLD_MS = 10 * 60 * 1000;            // §13.2  seat hold: 10 minutes
   const CLAIM_MS = 30 * 60 * 1000;           // §18.1  waitlist claim: 30 minutes
-  const REFUND_CUTOFF_MS = 12 * 60 * 60 * 1000; // §17   full refund 12h+ out
+  const REFUND_CUTOFF_MS = 24 * 60 * 60 * 1000; // §17   full refund 24h+ out
   const MAX_PAX = 5;                         // §13.3, §14
   const SEAT_COLS = ['A', 'B', 'C', 'D'];    // §13    2 + 2
   const LOGIN_WINDOW_MS = 15 * 60 * 1000, LOGIN_MAX = 5;  // §7.1 rate limiting
@@ -280,7 +280,7 @@
     const mkTrip = (o) => {
       const tr = Object.assign({
         id: uid('t'), routeId: route.id, price: FARE, journeyMinutes: 120,
-        pickupPoint: route.pickupPoint, cancellationPolicy: 'FULL_REFUND_12H',
+        pickupPoint: route.pickupPoint, cancellationPolicy: 'FULL_REFUND_24H',
         notes: null, statusPinned: false, createdAt: now(), updatedAt: now(),
       }, o);
       tr.reportingAt = tr.departureAt - 30 * 60000;
@@ -1007,12 +1007,12 @@
           seats, hoursOut: Math.max(0, hoursOut),
           amount, refundable, whole: seats === all.length,
           reason: !refundable
-            ? 'Less than 12 hours before departure, so the fare is not refundable.'
+            ? 'Less than 24 hours before departure, so the fare is not refundable.'
             : cap === 0
               ? 'Nothing was charged for this booking, so there is nothing to refund.'
               : (tr.majorChange ? 'A major change was made to this trip, so the fare refunds in full.'
-                : 'More than 12 hours before departure, so the fare refunds in full.'),
-          policy: 'FULL_REFUND_12H',
+                : 'More than 24 hours before departure, so the fare refunds in full.'),
+          policy: 'FULL_REFUND_24H',
         };
       });
     },
@@ -1915,7 +1915,7 @@
           id: uid('t'), routeId: 'r_wox_miy', vehicleId: input.vehicleId,
           departureAt: Number(input.departureAt), journeyMinutes: Number(input.journeyMinutes || 120),
           price: Number(input.price || FARE), pickupPoint: input.pickupPoint || 'Woxsen main gate loop',
-          cancellationPolicy: 'FULL_REFUND_12H', notes: input.notes || null,
+          cancellationPolicy: 'FULL_REFUND_24H', notes: input.notes || null,
           status: 'DRAFT', statusPinned: false, createdAt: now(), updatedAt: now(),
         };
         tr.reportingAt = tr.departureAt - 30 * 60000;
@@ -1966,7 +1966,7 @@
         if (veh && seats !== veh.capacity) problems.push('Seat map has ' + seats + ' seats, vehicle has ' + veh.capacity);
         else if (veh) ok(seats + ' seats mapped, 2 + 2');
         if (!tr.cancellationPolicy) problems.push('No cancellation policy set');
-        else ok('Cancellation policy: full refund 12h+');
+        else ok('Cancellation policy: full refund 24h+');
         if (!tr.pickupPoint) problems.push('No pickup point');
         else ok('Pickup ' + tr.pickupPoint);
 
@@ -2091,7 +2091,7 @@
           assignedTo: (function () { const t = assignedTripFor(db, u.id); return t ? fmtWhen(t.departureAt) : null; })() })));
     },
     /* §17 · §43 — a REAL override. The policy path (bookings.cancel) computes the
-       refund from the 12-hour rule and is right to; this is the separate,
+       refund from the 24-hour rule and is right to; this is the separate,
        Super-Admin-only path for refunding what the policy would not. It states an
        amount, refuses zero, refuses more than the money we actually hold, and
        returns the amount it really raised so nothing can report success on ₹0. */

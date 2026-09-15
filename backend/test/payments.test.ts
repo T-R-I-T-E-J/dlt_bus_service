@@ -712,7 +712,7 @@ describe('cancellation and refunds (F-05, F-12)', () => {
     assert.equal((await seatOf('1C')).status, 'AVAILABLE');
   });
 
-  test('cancelling outside 12 hours refunds in full and frees the seat', async () => {
+  test('cancelling outside 24 hours refunds in full and frees the seat', async () => {
     const b = await confirmed(ALICE, '1D');
     const quote = await pay.cancellationQuote(b.id, A(ALICE));
     assert.equal(quote.amount, FARE);
@@ -724,9 +724,9 @@ describe('cancellation and refunds (F-05, F-12)', () => {
     assert.equal(p.status, 'VOID');
   });
 
-  test('inside 12 hours the policy refunds nothing', async () => {
+  test('inside 24 hours the policy refunds nothing', async () => {
     const b = await confirmed(ALICE, '2C');
-    await fixtureSql(`UPDATE trips SET departure_at = now() + interval '3 hours' WHERE id=$1`, [TRIP]);
+    await fixtureSql(`UPDATE trips SET departure_at = now() + interval '18 hours' WHERE id=$1`, [TRIP]);
     assert.equal((await pay.cancellationQuote(b.id, A(ALICE))).amount, 0);
     assert.equal((await pay.cancelBooking(b.id, A(ALICE))).refundAmount, 0);
   });

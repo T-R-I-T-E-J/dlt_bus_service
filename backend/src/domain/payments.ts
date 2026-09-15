@@ -28,7 +28,7 @@ import { bookingFor, paymentFor, requireOperator, type AnyActor, type Actor } fr
 import { createHash } from 'node:crypto';
 import { requireTripAction } from './trip-policy.ts';
 
-export const CANCELLATION_CUTOFF_HOURS = 12;
+export const CANCELLATION_CUTOFF_HOURS = 24;
 /** The absolute life of a seat hold, measured from booking creation. Opening
  *  checkout renews the hold up to this ceiling and no further, so reopening it
  *  repeatedly cannot hold a seat indefinitely. */

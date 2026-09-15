@@ -266,7 +266,7 @@ async function threw(fn, match) {
   ok('a receipt is produced with a reference and refunds',
     receipt && receipt.providerReference && receipt.refunds.length === 1, 'Rs ' + receipt.amount);
 
-  /* inside 12 hours there is no refund */
+  /* inside 24 hours there is no refund */
   DLT.auth.signOut();
   await DLT.auth.signIn('ops@dlt.co.in', 'dlt1234');
   const todayTrip = DLT.trips.listAll().find(t => t.status === 'BOARDING');
@@ -683,13 +683,13 @@ async function threw(fn, match) {
   ok('F-12 · the booking under test is paid and confirmed',
     DLT.bookings.get(ovB.id).status === 'CONFIRMED');
   const ovPaid = DLT.bookings.get(ovB.id).totalAmount;
-  /* put it inside the 12-hour window so the policy would refund nothing */
+  /* put it inside the 24-hour window so the policy would refund nothing */
   (function () {
     const db = rawDb();
     db.trips.find(t => t.id === ovTrip.id).departureAt = Date.now() + 3 * 3600000;
     writeRaw(db);
   })();
-  ok('F-12 · inside 12 hours the policy quotes no refund',
+  ok('F-12 · inside 24 hours the policy quotes no refund',
     DLT.bookings.cancellationQuote(ovB.id).amount === 0);
   ok('F-12 · a student cannot override the policy',
     await threw(() => DLT.admin.overrideRefund({ bookingId: ovB.id, amount: ovPaid,

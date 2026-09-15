@@ -885,7 +885,7 @@ describe('operational alerts', () => {
 describe('F-12 refund override — preserved from Phase 3/4, not reimplemented', () => {
   test('Super Admin only, explicit amount, capped by money held', async () => {
     const b = await confirmedBooking(['2A'], 'DLT-99001');
-    /* inside the 12-hour cutoff the policy refunds nothing */
+    /* inside the 24-hour cutoff the policy refunds nothing */
     await assert.rejects(admin.overrideRefund({ bookingId: b.id, amount: 0,
       reason: 'nothing at all', actorId: SUPER }), /zero-value/);
     await assert.rejects(admin.overrideRefund({ bookingId: b.id, amount: 999,

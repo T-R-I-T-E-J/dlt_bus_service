@@ -565,7 +565,7 @@ class Component extends DCLogic {
         cancelOpen: false, busy: false, error: null,
         notice: res.refundAmount > 0
           ? 'Cancelled. ₹' + res.refundAmount + ' is refunding to the original payment method — it shows as Refund pending until the acquirer settles it, normally 3 to 5 working days.'
-          : 'Cancelled. Inside 12 hours the fare is not refundable, so no refund was raised. The seat has been released.',
+          : 'Cancelled. Inside 24 hours the fare is not refundable, so no refund was raised. The seat has been released.',
       });
     } catch (e) { this.fail(e); }
   };
@@ -777,10 +777,10 @@ class Component extends DCLogic {
       ] : [],
       passCta: passes.length > 1 ? 'View boarding passes' : 'View boarding pass',
       cancelNote: upcoming ? (function () {
-        const cut = new Date(upcoming.trip.departureAt).getTime() - 12 * 3600000;
+        const cut = new Date(upcoming.trip.departureAt).getTime() - 24 * 3600000;
         return Date.now() < cut
           ? 'Free cancellation until ' + DLT.fmt.dateTime(cut) + '. After that the fare is non-refundable.'
-          : 'Inside 12 hours of departure, so the fare is no longer refundable.';
+          : 'Inside 24 hours of departure, so the fare is no longer refundable.';
       })() : '',
 
       openPass: () => this.setState({ passOpen: true, receiptOpen: false, cancelOpen: false }),
