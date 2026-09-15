@@ -13,22 +13,22 @@
      mapping for `three`, failed to resolve, and never reached its final
      customElements.define('dlt-journey', ...) — so <x-import
      component-from-global-scope="dlt-journey"> rendered nothing, silently, with
-     no journeyfailed event to trigger the static fallback either.
+     no journeyfailed event to trigger the static fallback either. The actual
+     modules are vendored locally so the journey does not depend on a third-party
+     CDN being reachable from campus or mobile networks.
      Parsed here in the real <head> it is registered once, before any module
      specifier can resolve, and support.js never sees it. -->
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
-    "three/addons/loaders/GLTFLoader.js": "https://unpkg.com/three@0.184.0/examples/jsm/loaders/GLTFLoader.js"
-  },
-  "integrity": {
-    "https://unpkg.com/three@0.184.0/build/three.module.js": "sha384-8FCZ1eVO6it4+pbec2aDtnTrwjWXZLJRC+MAGCIPDgsYnUrl/E0A2YlF8ioMKI/J",
-    "https://unpkg.com/three@0.184.0/build/three.core.js": "sha384-dw2ooPewaEIrAgl6oFDBmmBWCE9oW9LxRGcfwZ0hLvEprzo202wXl7vCYHRlSnOT"
+    "three": "./vendor/three/three.module.js",
+    "three/addons/loaders/GLTFLoader.js": "./vendor/three/addons/loaders/GLTFLoader.js"
   }
 }
 </script>
-<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="modulepreload" href="./vendor/three/three.module.js">
+<link rel="modulepreload" href="./vendor/three/three.core.js">
+<link rel="modulepreload" href="./vendor/three/addons/loaders/GLTFLoader.js">
 <link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z">
 <link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1">
 <script type="module" src="./dlt-client.js"></script>
