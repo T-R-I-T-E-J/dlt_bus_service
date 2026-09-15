@@ -125,7 +125,7 @@
   <!-- LOADING -->
   <sc-if value="{{ atLoading }}" hint-placeholder-val="{{ true }}">
   <section aria-busy="true" aria-live="polite">
-    <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Woxsen → Miyapur</div>
+    <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Woxsen ⇄ Miyapur</div>
     <h1 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1.04;letter-spacing:-.02em">Loading departures</h1>
     <div style="margin:26px 0 0;border-top:1px solid rgba(14,16,20,.16)">
       <sc-for list="{{ skeletons }}" as="s" hint-placeholder-count="3">
@@ -143,9 +143,9 @@
   <!-- STEP · CHOOSE TRIP -->
   <sc-if value="{{ atTrips }}" hint-placeholder-val="{{ false }}">
   <section aria-labelledby="trips-h">
-    <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Woxsen → Miyapur</div>
+    <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Woxsen ⇄ Miyapur</div>
     <h1 id="trips-h" style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1.04;letter-spacing:-.02em">Choose your departure</h1>
-    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹259 per seat, up to five passengers on one booking. Seats are held for 10 minutes once you pick them.</p>
+    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹299 per seat, up to five passengers on one booking. Seats are held for 10 minutes once you pick them.</p>
 
     <sc-if value="{{ noTrips }}" hint-placeholder-val="{{ false }}">
       <div style="margin:28px 0 0;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(22px,4vw,38px)">
@@ -183,7 +183,7 @@
             <div style="margin-top:6px;font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ tr.date }}</div>
           </div>
           <div>
-            <div style="font-size:15px;font-weight:600">Woxsen main gate → Miyapur metro</div>
+            <div style="font-size:15px;font-weight:600">{{ tr.route }}</div>
             <div style="margin-top:5px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">Report {{ tr.report }} · arrives ≈{{ tr.arrive }} · {{ tr.vehicle }}</div>
           </div>
           <div style="font-size:12.5px;font-weight:600;color:{{ tr.availFg }};font-variant-numeric:tabular-nums">{{ tr.avail }}</div>
@@ -571,7 +571,7 @@
 <aside data-m="aside" aria-label="Booking summary" style="position:sticky;top:84px;border:1px solid rgba(14,16,20,.14);background:#FFFFFF">
   <div data-m="asidefull" style="padding:16px 18px;border-bottom:1px solid rgba(14,16,20,.12)">
     <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Your booking</div>
-    <div style="margin-top:9px;font-size:15px;font-weight:600">Woxsen → Miyapur</div>
+    <div style="margin-top:9px;font-size:15px;font-weight:600">{{ routeLabel }}</div>
     <div style="margin-top:5px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">{{ tripSummary }}</div>
   </div>
 
@@ -604,10 +604,10 @@
 
   <div data-m="asidefull" style="padding:16px 18px;border-bottom:1px solid rgba(14,16,20,.12);display:flex;flex-direction:column;gap:9px;font-variant-numeric:tabular-nums">
     <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;color:#3D423C">
-      <span>{{ seatCountLabel }} × ₹{{ unitPrice }}</span><span>₹{{ total }}</span>
+      <span>{{ summaryLineLabel }}</span><span>{{ summaryLineAmount }}</span>
     </div>
     <div style="display:flex;justify-content:space-between;gap:10px;font-size:16px;font-weight:700;padding-top:9px;border-top:1px solid rgba(14,16,20,.12)">
-      <span>Total payable</span><span>₹{{ total }}</span>
+      <span>Total payable</span><span>{{ summaryTotal }}</span>
     </div>
   </div>
 
@@ -615,7 +615,7 @@
     <div data-m="hide" style="display:none"></div>
     <div style="display:none;flex-direction:column;gap:2px;min-width:0" data-m="barfacts">
       <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;white-space:nowrap">{{ barLine }}</span>
-      <span style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums">₹{{ total }}</span>
+      <span style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums">{{ summaryTotal }}</span>
     </div>
     <button type="button" onClick="{{ primary }}" disabled="{{ primaryDisabled }}" style="width:100%;background:{{ primaryBg }};color:{{ primaryFg }};border:0;padding:14px 18px;border-radius:2px;font-size:14px;font-weight:600;cursor:{{ primaryCursor }};min-height:48px">{{ primaryLabel }}</button>
     <sc-if value="{{ primaryHint }}" hint-placeholder-val="{{ true }}">
@@ -673,6 +673,7 @@ class Component extends DCLogic {  state = {
        afterwards, so renderVals is unchanged in shape - the reason this flow was
        built against a single DLT object. */
     DLT.setUnauthenticatedHandler(() => this.setState({ authRequired: true }));
+    this._primeDepartures();
     try {
       await DLT.boot();
     } catch (e) {
@@ -717,6 +718,19 @@ class Component extends DCLogic {  state = {
   componentWillUnmount() {
     clearInterval(this._timer);
     DLT.stopPolling();
+  }
+
+  async _primeDepartures() {
+    try {
+      const openTrips = await DLT.trips.listPublic(3);
+      this.setState(st => ({
+        ready: true,
+        step: st.step === 'loading' ? 'trips' : st.step,
+        data: { ...st.data, openTrips, trip: st.tripId ? st.data.trip : (openTrips[0] || null) },
+      }));
+    } catch (e) {
+      /* Full _load() after boot owns the visible error state. */
+    }
   }
 
   /* Every server read for the current step, in one place. Called after any
@@ -1074,13 +1088,27 @@ class Component extends DCLogic {  state = {
     this.startPayment();
   };
 
+  routeFor(trip) {
+    return ((trip && trip.origin) || 'Woxsen University') + ' -> ' +
+      ((trip && trip.destination) || 'Miyapur Metro');
+  }
+
+  pickupFor(trip) {
+    const origin = String((trip && trip.origin) || '').toLowerCase();
+    if (origin.includes('miyapur')) return 'Miyapur Metro';
+    if (origin.includes('woxsen')) return 'Woxsen main gate loop';
+    return (trip && trip.origin) || 'the pickup point';
+  }
+
   renderVals() {
     const st = this.state;
     if (!st.ready) {
       return { atLoading: true, skeletons: [{}, {}, {}], showStepper: false,
         primaryLabel: 'Loading', primaryDisabled: true, primaryBg: '#E4E1D8', primaryFg: '#7A7F77',
         primaryCursor: 'wait', primary: () => {}, noSeats: true, total: 0, unitPrice: null,
-        seatCountLabel: '0 seats', tripSummary: 'Reading live departures', primaryHint: '',
+        seatCountLabel: '0 seats', summaryLineLabel: 'Fare after departure',
+        summaryLineAmount: '—', summaryTotal: '—',
+        routeLabel: 'Woxsen <-> Miyapur', tripSummary: 'Reading live departures', primaryHint: '',
         notice: null, clearNotice: () => {}, barLine: '', repriced: false,
         signedOut: true, signedIn: false };
     }
@@ -1101,6 +1129,10 @@ class Component extends DCLogic {  state = {
       ? booking.passengers.length : held.length;
     const total = booking && ['done', 'pending', 'discrepancy', 'processing'].indexOf(step) >= 0
       ? booking.totalAmount : (unitPrice === null ? null : n * unitPrice);
+    const money = value => value === null || value === undefined ? '—' : '₹' + value;
+    const summaryLineLabel = n && unitPrice !== null ? (n === 1 ? '1 seat' : n + ' seats') + ' x ₹' + unitPrice : 'Fare after departure';
+    const summaryLineAmount = n && total !== null ? money(total) : '—';
+    const summaryTotal = n && total !== null ? money(total) : '—';
 
     /* The clock runs off the SERVER's holdExpiresAt. The client starts no timer
        of its own and never decides a hold has lapsed. */
@@ -1112,6 +1144,7 @@ class Component extends DCLogic {  state = {
     const trips = openTrips.map(t => ({
       id: t.id,
       depart: DLT.fmt.time(t.departureAt), date: DLT.fmt.date(t.departureAt),
+      route: this.routeFor(t),
       report: DLT.fmt.time(t.reportingAt), arrive: DLT.fmt.time(t.arrivalEstimateAt),
       vehicle: t.vehicle ? t.vehicle.name + ' · ' + t.capacity + ' seats' : '',
       dim: t.soldOut ? 0.72 : 1,
@@ -1313,9 +1346,10 @@ class Component extends DCLogic {  state = {
       busy: st.busy,
 
       tripLabel: trip ? DLT.fmt.when(trip.departureAt) : '—',
-      tripSummary: trip ? DLT.fmt.when(trip.departureAt) + ' · report ' + DLT.fmt.time(trip.reportingAt) : 'No departure chosen',
+      routeLabel: trip ? this.routeFor(trip) : 'Woxsen <-> Miyapur',
+      tripSummary: trip ? this.routeFor(trip) + ' · ' + DLT.fmt.when(trip.departureAt) + ' · report ' + DLT.fmt.time(trip.reportingAt) : 'No departure chosen',
       reportTime: trip ? DLT.fmt.time(trip.reportingAt) : '—',
-      pickupPoint: trip ? trip.pickupPoint : 'Woxsen main gate loop',
+      pickupPoint: trip ? this.pickupFor(trip) : 'the pickup point',
       vehicleLabel: trip && trip.vehicle ? trip.vehicle.name : '—',
       seatCount: trip ? trip.capacity : 44,
       availableCount: trip ? trip.available : 0,
@@ -1387,6 +1421,7 @@ class Component extends DCLogic {  state = {
       seatCountLabel: n === 1 ? '1 seat' : n + ' seats',
       seatList: (booking ? booking.passengers.map(p => p.seatNumber) : held.map(s => s.seatNumber)).join(', ') || '—',
       unitPrice, total,
+      summaryLineLabel, summaryLineAmount, summaryTotal,
       holdActive: holdLeft > 0, holdClock: DLT.fmt.countdown(holdLeft),
       holdBg: lowHold ? '#FFFDF6' : '#F4F7F3', holdFg: lowHold ? '#8A5A0E' : '#0E4B34',
 

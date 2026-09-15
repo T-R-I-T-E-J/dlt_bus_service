@@ -176,6 +176,14 @@
             <input type="time" value="{{ ntTime }}" onChange="{{ onNtTime }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
           </label>
           <label style="display:block">
+            <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Route</span>
+            <select value="{{ ntRoute }}" onChange="{{ onNtRoute }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px">
+              <sc-for list="{{ routeOptions }}" as="r" hint-placeholder-count="2">
+                <option value="{{ r.id }}">{{ r.label }}</option>
+              </sc-for>
+            </select>
+          </label>
+          <label style="display:block">
             <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Vehicle</span>
             <select value="{{ ntVehicle }}" onChange="{{ onNtVehicle }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px">
               <sc-for list="{{ vehicleOptions }}" as="v" hint-placeholder-count="2">
@@ -189,19 +197,20 @@
           </label>
         </div>
         <button type="button" onClick="{{ createDraft }}" style="margin:16px 0 0;background:#0E4B34;color:#F7F5F0;border:0;padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Create draft</button>
-        <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:#5F6560">Reporting time is set 20 minutes before departure and booking closes an hour before, per the launch policy. Seat rows come from the vehicle.</p>
+        <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:#5F6560">Reporting time is set 30 minutes before departure, each route is estimated at about 2 hours, and booking closes an hour before. Seat rows come from the vehicle.</p>
       </div>
     </sc-if>
 
     <div data-m="wide" style="margin:20px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
       <div style="min-width:900px">
-        <div style="display:grid;grid-template-columns:120px 84px minmax(0,1fr) 96px 96px 130px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
-          <span>Date</span><span>Depart</span><span>Vehicle</span><span>Seats</span><span>Revenue</span><span>Status</span><span>Action</span>
+        <div style="display:grid;grid-template-columns:120px 84px minmax(160px,1fr) minmax(0,1fr) 96px 96px 130px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+          <span>Date</span><span>Depart</span><span>Route</span><span>Vehicle</span><span>Seats</span><span>Revenue</span><span>Status</span><span>Action</span>
         </div>
         <sc-for list="{{ tripRows }}" as="t" hint-placeholder-count="6">
-          <div style="display:grid;grid-template-columns:120px 84px minmax(0,1fr) 96px 96px 130px auto;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px">
+          <div style="display:grid;grid-template-columns:120px 84px minmax(160px,1fr) minmax(0,1fr) 96px 96px 130px auto;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px">
             <span style="font-weight:600">{{ t.date }}</span>
             <span style="font-variant-numeric:tabular-nums">{{ t.depart }}</span>
+            <span style="color:#3D423C">{{ t.route }}</span>
             <span style="color:#3D423C">{{ t.vehicle }}</span>
             <span style="font-variant-numeric:tabular-nums">{{ t.seats }}</span>
             <span style="font-variant-numeric:tabular-nums">{{ t.revenue }}</span>
@@ -1230,7 +1239,7 @@ class Component extends DCLogic {
     boardTripId: null, manualToken: '', manifestQuery: '', scan: null, choose: null,
     cameraOn: false, cameraSupported: false, cameraError: null, engine: null,
     payFilter: 'All', wlTripId: null, auditQuery: '',
-    newTripOpen: false, ntDate: '', ntTime: '17:30', ntVehicle: '', ntPrice: 259,
+    newTripOpen: false, ntDate: '', ntTime: '17:30', ntRoute: '', ntVehicle: '', ntPrice: 299,
     validation: null, validationTripId: null,
     cancelTripId: null, cancelReason: '', template: null,
     repTripId: '', repFrom: '', repTo: '', preview: null,
@@ -1592,7 +1601,7 @@ class Component extends DCLogic {
       bkPassengers: [], payFacts: [], bkTrail: [], boardList: [], payRows: [],
       payFilters: [], auditRows: [], vehicles: [], students: [], reviews: [],
       requests: [], wlRows: [], reportButtons: [], postTripRows: [], validLines: [],
-      pollMetrics: [], pollTimes: [], pollResponses: [], previewRows: [], previewCols: [], vehicleOptions: [], boardTripOptions: [],
+      pollMetrics: [], pollTimes: [], pollResponses: [], previewRows: [], previewCols: [], routeOptions: [], vehicleOptions: [], boardTripOptions: [],
       wlTripOptions: [], repTripOptions: [], results: [] };
     if (!st.ready) return EMPTY;
 
@@ -2122,18 +2131,23 @@ class Component extends DCLogic {
       newTripOpen: st.newTripOpen,
       newTripCta: st.newTripOpen ? 'Close' : 'New trip',
       toggleNewTrip: () => this.setState({ newTripOpen: !st.newTripOpen }),
-      ntDate: st.ntDate, ntTime: st.ntTime, ntVehicle: st.ntVehicle || (vehiclesRaw[0] ? vehiclesRaw[0].id : ''),
+      ntDate: st.ntDate, ntTime: st.ntTime,
+      ntRoute: st.ntRoute || (routes[0] ? routes[0].id : ''),
+      ntVehicle: st.ntVehicle || (vehiclesRaw[0] ? vehiclesRaw[0].id : ''),
       ntPrice: st.ntPrice,
       onNtDate: e => this.setState({ ntDate: e.target.value }),
       onNtTime: e => this.setState({ ntTime: e.target.value }),
+      onNtRoute: e => this.setState({ ntRoute: e.target.value }),
       onNtVehicle: e => this.setState({ ntVehicle: e.target.value }),
       onNtPrice: e => this.setState({ ntPrice: e.target.value }),
+      routeOptions: routes.map(r => ({ id: r.id,
+        label: r.origin + ' -> ' + r.destination + ' · about ' + Math.round(r.durationMin / 60 * 10) / 10 + ' h' })),
       vehicleOptions: vehiclesRaw.map(v => ({ id: v.id, label: v.name + ' · ' + v.capacity + ' seats · ' + v.status.toLowerCase() })),
       createDraft: async () => {
         try {
           const vid = st.ntVehicle || (vehiclesRaw[0] || {}).id;
           if (!vid) throw new Error('Add a vehicle before creating a trip');
-          const rid = (routes[0] || {}).id;
+          const rid = st.ntRoute || (routes[0] || {}).id;
           if (!rid) throw new Error('No route is configured');
           const when = new Date(st.ntDate + 'T' + st.ntTime + ':00');
           if (isNaN(when.getTime())) throw new Error('Choose a date and time');
@@ -2153,6 +2167,7 @@ class Component extends DCLogic {
           : t.waitlistCount ? 'Waitlist' : 'View';
         return {
           date: DLT.fmt.date(t.departureAt), depart: DLT.fmt.time(t.departureAt),
+          route: (t.origin || 'Route') + ' -> ' + (t.destination || 'Destination'),
           vehicle: t.vehicle ? t.vehicle.name + ' · ' + t.vehicle.registration : '—',
           seats: t.booked + '/' + t.capacity,
           revenue: DLT.fmt.money(t.revenue),

@@ -21,7 +21,7 @@ export const HOLD_TTL_MIN = 10;
  * to it, and the prototype derived it in the browser where the server and the
  * screens could silently disagree. One constant, server-side, projected into
  * every TripView so no client ever computes it. */
-export const REPORTING_LEAD_MIN = Number(process.env.REPORTING_LEAD_MIN ?? 15);
+export const REPORTING_LEAD_MIN = Number(process.env.REPORTING_LEAD_MIN ?? 30);
 /* Master Specification and the PRD both say five ("Up to 5 passengers per
  * booking", "Maximum 5 passengers per booking"), and the booking screen has
  * always offered five. The backend enforced four, here and in

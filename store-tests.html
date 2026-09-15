@@ -102,7 +102,7 @@ async function threw(fn, match) {
   const booking = DLT.bookings.create({ tripId: trip.id, passengers: pax,
     contactPhone: '9876543210', idempotencyKey: 'test-booking-1' });
   ok('booking is created in PAYMENT_PENDING, not CONFIRMED', booking.status === 'PAYMENT_PENDING', booking.code);
-  ok('total is seats x fare', booking.totalAmount === 2 * 259, 'Rs ' + booking.totalAmount);
+  ok('total is seats x fare', booking.totalAmount === 2 * 299, 'Rs ' + booking.totalAmount);
   ok('no boarding pass exists before payment',
     booking.passengers.every(p => p.passStatus === 'NOT_ISSUED' || p.passStatus === 'PENDING'));
   const again = DLT.bookings.create({ tripId: trip.id, passengers: pax, idempotencyKey: 'test-booking-1' });
@@ -219,7 +219,7 @@ async function threw(fn, match) {
   ok('a failing draft cannot be published',
     await threw(() => DLT.admin.publishTrip(draft.id), 'cannot publish'));
   const newDraft = DLT.admin.createDraft({ vehicleId: DLT.admin.vehicles()[0].id,
-    departureAt: Date.now() + 6 * 86400000, price: 259 });
+    departureAt: Date.now() + 6 * 86400000, price: 299 });
   const check2 = DLT.admin.validateDraft(newDraft.id);
   ok('a sound draft validates', check2.valid, check2.checks.length + ' checks passed');
   const published = DLT.admin.publishTrip(newDraft.id);
@@ -248,9 +248,9 @@ async function threw(fn, match) {
   const quote = DLT.bookings.cancellationQuote(booking.id);
   ok('the refund quote is exact and policy-driven', quote.refundable && quote.amount === 518, quote.reason);
   const partial = DLT.bookings.cancellationQuote(booking.id, [confirmed.passengers[1].id]);
-  ok('a partial cancellation quotes one seat', partial.amount === 259 && !partial.whole);
+  ok('a partial cancellation quotes one seat', partial.amount === 299 && !partial.whole);
   const res = DLT.bookings.cancel(booking.id, [confirmed.passengers[1].id], 'Friend cannot travel');
-  ok('partial cancellation releases only that seat', res.refundAmount === 259 &&
+  ok('partial cancellation releases only that seat', res.refundAmount === 299 &&
     res.booking.passengers.filter(p => p.boardingStatus === 'CANCELLED').length === 1);
   ok('the released seat is available again',
     [].concat.apply([], DLT.trips.seatMap(trip.id).map(r => r.seats))
@@ -293,7 +293,7 @@ async function threw(fn, match) {
   DLT.provider.settle(i2.id, 'PAID', 200);          // short payment
   await wait(1400);
   const r2 = DLT.payments.reconcile(i2.id);
-  ok('a short payment becomes a DISCREPANCY', r2.status === 'DISCREPANCY', 'Rs 200 against Rs 259');
+  ok('a short payment becomes a DISCREPANCY', r2.status === 'DISCREPANCY', 'Rs 200 against Rs 299');
   ok('a mismatched payment never confirms the booking',
     DLT.bookings.get(b2.id).status === 'PAYMENT_HELD');
 
@@ -697,12 +697,12 @@ async function threw(fn, match) {
   DLT.auth.signOut();
   await DLT.auth.signIn('ops@dlt.co.in', 'dlt1234');
   ok('F-12 · an operations admin cannot override the policy either',
-    await threw(() => DLT.admin.overrideRefund({ bookingId: ovB.id, amount: 259,
+    await threw(() => DLT.admin.overrideRefund({ bookingId: ovB.id, amount: 299,
       reason: 'Goodwill for a late coach' }), 'Super Admin'));
   DLT.auth.signOut();
   await DLT.auth.signIn('super@dlt.co.in', 'dlt1234');
   ok('F-12 · an override without a reason is refused',
-    await threw(() => DLT.admin.overrideRefund({ bookingId: ovB.id, amount: 259, reason: '' }), 'reason'));
+    await threw(() => DLT.admin.overrideRefund({ bookingId: ovB.id, amount: 299, reason: '' }), 'reason'));
   ok('F-12 · a zero-value override is refused rather than reported as applied',
     await threw(() => DLT.admin.overrideRefund({ bookingId: ovB.id, amount: 0,
       reason: 'Departure retimed by 90 minutes' }), 'zero-value'));
@@ -846,7 +846,7 @@ async function threw(fn, match) {
     compB.payment.provider === 'NONE_COMPLIMENTARY', compB.code);
   ok('F-13 · a complimentary booking still cannot produce a refund',
     DLT.bookings.cancellationQuote(compB.id).amount === 0 &&
-    await threw(() => DLT.admin.overrideRefund({ bookingId: compB.id, amount: 259,
+    await threw(() => DLT.admin.overrideRefund({ bookingId: compB.id, amount: 299,
       reason: 'Trying to refund a free seat' }), 'Nothing is left to refund'));
   const extB = DLT.admin.createManualBooking({ tripId: blkTrip.id, type: 'PAID_EXTERNALLY',
     reason: 'Paid in cash at the university office', contactPhone: '9876500888',

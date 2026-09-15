@@ -30,13 +30,13 @@ Against a **throwaway** local database, torn down afterward:
 ```
 CREATE DATABASE dlt_prodcheck;
 DATABASE_URL=postgres://postgres:postgres@<host>/dlt_prodcheck node scripts/migrate.mjs
-  -> all 23 migrations applied cleanly from zero, no manual intervention
+  -> all 24 migrations applied cleanly from zero, no manual intervention
 
 ALTER ROLE dlt_app LOGIN PASSWORD '<generated>';
 
 DATABASE_URL=postgres://dlt_app:<generated>@<host>/dlt_prodcheck \
   NODE_ENV=production node --experimental-strip-types src/app.ts
-GET /api/health -> {"ok":true,"db":{"version":160014,"migrations":23,"auditAppendOnly":true}, ...}
+GET /api/health -> {"ok":true,"db":{"version":160015,"migrations":24,"auditAppendOnly":true}, ...}
   -> the app boots and serves against the LEAST-PRIVILEGED role, not a superuser
 
 psql -U dlt_app -c "DELETE FROM audit_logs;"           -> permission denied for table audit_logs
@@ -50,7 +50,7 @@ one-off artifact of the migrations, it survives a restore too.
 
 **Re-verified during the production-readiness pass**: a clean
 `node scripts/migrate.mjs` against a fresh throwaway database applies all
-**23** migrations in order, zero manual steps. The full backend database
+**24** migrations in order, zero manual steps. The full backend database
 suite then passed 378/378 tests against that migrated schema.
 
 **The password used above was generated for this local verification only
@@ -348,7 +348,7 @@ pg_dump -Fc dlt_dev -> dlt_dev_verify.dump (199 KB)
 CREATE DATABASE dlt_restore_verify
 pg_restore --no-owner -d dlt_restore_verify dlt_dev_verify.dump
   -> users: 10, trips: 15, bookings: 3, audit_logs: 75   — identical to source
-  -> schema_migrations: 23                                — every migration intact
+  -> schema_migrations: 24                                — every migration intact
   -> DELETE FROM audit_logs on the RESTORED copy -> refused by the trigger
      — the append-only protection survives a restore, not just fresh migrations
 ```

@@ -57,9 +57,16 @@ await client.query('BEGIN');
 
 const { rows: [route] } = await client.query(
   `INSERT INTO routes (code, origin, destination, duration_min)
-   VALUES ('WX-MYP', 'Woxsen University', 'Miyapur Metro', 75)
-   ON CONFLICT (code) DO UPDATE SET origin = EXCLUDED.origin
+   VALUES ('WX-MYP', 'Woxsen University', 'Miyapur Metro', 120)
+   ON CONFLICT (code) DO UPDATE SET origin = EXCLUDED.origin,
+     destination = EXCLUDED.destination, duration_min = EXCLUDED.duration_min
    RETURNING id`);
+
+await client.query(
+  `INSERT INTO routes (code, origin, destination, duration_min)
+   VALUES ('MYP-WX', 'Miyapur Metro', 'Woxsen University', 120)
+   ON CONFLICT (code) DO UPDATE SET origin = EXCLUDED.origin,
+     destination = EXCLUDED.destination, duration_min = EXCLUDED.duration_min`);
 
 const vehicles = [];
 for (const [name, reg, rows] of [
@@ -79,7 +86,7 @@ for (let d = 1; d <= 7; d++) {
   for (const [hour, vehicle] of [[8, vehicles[0]], [17, vehicles[1]]]) {
     const { rows: [t] } = await client.query(
       `INSERT INTO trips (route_id, vehicle_id, departure_at, price, status)
-       VALUES ($1, $2, (current_date + $3::int) + ($4::int || ' hours')::interval, 259, 'OPEN')
+       VALUES ($1, $2, (current_date + $3::int) + ($4::int || ' hours')::interval, 299, 'OPEN')
        RETURNING id`, [route.id, vehicle.id, d, hour]);
     await client.query('SELECT materialise_trip_seats($1)', [t.id]);
     made++;
@@ -87,6 +94,6 @@ for (let d = 1; d <= 7; d++) {
 }
 
 await client.query('COMMIT');
-console.log(`Done: 1 route, ${vehicles.length} vehicles, ${made} open trips with seat maps.`);
+console.log(`Done: 2 routes, ${vehicles.length} vehicles, ${made} open trips with seat maps.`);
 console.log('Create accounts via POST /auth/signup — no seeded credentials exist.');
 await client.end();

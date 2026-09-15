@@ -25,7 +25,7 @@
   const KEY = 'dlt.db.v6';
   const SESSION_KEY = 'dlt.session.v6';
   const GUEST_KEY = 'dlt.guest.v6';
-  const FARE = 259;                          // §20
+  const FARE = 299;                          // §20
   const HOLD_MS = 10 * 60 * 1000;            // §13.2  seat hold: 10 minutes
   const CLAIM_MS = 30 * 60 * 1000;           // §18.1  waitlist claim: 30 minutes
   const REFUND_CUTOFF_MS = 12 * 60 * 60 * 1000; // §17   full refund 12h+ out
@@ -283,7 +283,7 @@
         pickupPoint: route.pickupPoint, cancellationPolicy: 'FULL_REFUND_12H',
         notes: null, statusPinned: false, createdAt: now(), updatedAt: now(),
       }, o);
-      tr.reportingAt = tr.departureAt - 20 * 60000;
+      tr.reportingAt = tr.departureAt - 30 * 60000;
       if (tr.bookingOpenAt == null) tr.bookingOpenAt = tr.departureAt - 14 * 86400000;
       if (tr.bookingCloseAt == null) tr.bookingCloseAt = tr.departureAt - 60 * 60000;
       db.trips.push(tr);
@@ -375,7 +375,7 @@
       [{ name: 'Aarav Menon', sid: 'WU204118', phone: '9876543210', seat: '9A' }], {});
     db.passes.filter(p => p.bookingId === bCan.id).forEach(p => { p.status = 'VOID'; });
     db.refunds.push({ id: uid('ref'), bookingId: bCan.id, paymentId: db.payments.find(p => p.bookingId === bCan.id).id,
-      amount: 259, status: 'REFUNDED', reason: 'Trip cancelled by DLT',
+      amount: FARE, status: 'REFUNDED', reason: 'Trip cancelled by DLT',
       providerReference: 'SBXR' + Math.floor(1e8 + Math.random() * 8e8),
       createdAt: tCancelled.departureAt, updatedAt: tCancelled.departureAt + 3 * 86400000 });
 
@@ -440,11 +440,11 @@
         status, createdAt: b.createdAt, updatedAt: now(), idempotencyKey: uid('idem') }, extra || {}));
       return b;
     };
-    orphan('Rohit Bhatia', 259, 'PENDING');
+    orphan('Rohit Bhatia', FARE, 'PENDING');
     orphan('Meera Nair', 518, 'DUPLICATE', { duplicateOf: 'earlier successful charge' });
     orphan('Ishaan Kulkarni', 500, 'DISCREPANCY', { expectedAmount: 518 });
-    orphan('Priya Deshmukh', 259, 'FAILED');
-    const ext = orphan('Kabir Shah', 259, 'SUCCESS', { provider: 'MANUAL_EXTERNAL', providerReference: null });
+    orphan('Priya Deshmukh', FARE, 'FAILED');
+    const ext = orphan('Kabir Shah', FARE, 'SUCCESS', { provider: 'MANUAL_EXTERNAL', providerReference: null });
     db.bookings.find(b => b.id === ext.id).bookingType = 'MANUAL_EXTERNAL';
 
     audit(db, superAdmin, 'system.seed', 'system', 'db', null, 'seeded', 'Initial reference data');
@@ -692,7 +692,7 @@
   /* §17 · how much money actually reached us on this booking, and how much of
      it is already spoken for. A refund can never exceed the difference: a
      complimentary booking (unitPrice 0, nothing charged) used to refund the
-     ₹259 launch fare because `unitPrice || FARE` treats a free seat as unset. */
+     launch fare because `unitPrice || FARE` treats a free seat as unset. */
   function moneyIn(db, bookingId) {
     return db.payments
       .filter(p => p.bookingId === bookingId && ['SUCCESS', 'DUPLICATE'].indexOf(p.status) >= 0)
@@ -1918,7 +1918,7 @@
           cancellationPolicy: 'FULL_REFUND_12H', notes: input.notes || null,
           status: 'DRAFT', statusPinned: false, createdAt: now(), updatedAt: now(),
         };
-        tr.reportingAt = tr.departureAt - 20 * 60000;
+        tr.reportingAt = tr.departureAt - 30 * 60000;
         tr.bookingOpenAt = Number(input.bookingOpenAt || (tr.departureAt - 14 * 86400000));
         tr.bookingCloseAt = Number(input.bookingCloseAt || (tr.departureAt - 3600000));
         const veh = db.vehicles.find(v => v.id === tr.vehicleId);

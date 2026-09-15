@@ -533,7 +533,7 @@ const admin = {
   /** Every status — DRAFT and CANCELLED included. trips.listPublic (above) is
    *  deliberately narrower: only what a student may book. */
   listAllTrips: () => GET('/admin/trips').then((r) => r.trips),
-  /** The single-route picker a new trip draft needs. */
+  /** Route picker for new trip drafts; supports both directions. */
   routes: () => GET('/admin/routes').then((r) => r.routes),
   saveTrip: (input) => POST('/admin/trips', input).then((r) => r.trip),
   validateDraft: (id) => GET(`/admin/trips/${id}/validate`),

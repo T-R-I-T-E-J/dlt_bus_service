@@ -110,7 +110,7 @@
     <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
       <a href="./DLT Dashboard.dc.html" style="color:#3D423C" data-m="hide">My trips</a>
     </sc-if>
-    <a href="./DLT Booking.dc.html" style="background:#0E1014;color:#F7F5F0;padding:12px 17px;border-radius:2px;font-weight:600;font-size:13px;min-height:44px;display:flex;align-items:center;box-sizing:border-box">Book a seat</a>
+    <a href="{{ primaryHref }}" style="background:#0E1014;color:#F7F5F0;padding:12px 17px;border-radius:2px;font-weight:600;font-size:13px;min-height:44px;display:flex;align-items:center;box-sizing:border-box">{{ primaryCta }}</a>
   </nav>
 </header>
 
@@ -174,7 +174,7 @@
       <article style="--in:min(clamp(0, calc((var(--journey-t, 0) - 0.20) * 18), 1), clamp(0, calc((0.455 - var(--journey-t, 0)) * 18), 1));opacity:var(--in);transform:translateY(calc((1 - var(--in)) * 22px));position:absolute;right:clamp(18px,4vw,44px);bottom:clamp(112px,19vh,190px);width:min(390px,84vw);background:#FFFFFF;border:1px solid rgba(14,16,20,.12);border-top:2px solid #0E4B34;padding:22px 24px 20px;box-shadow:0 18px 44px -28px rgba(14,16,20,.34)">
         <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:#0E4B34">Stop 01 · Boarding point</div>
         <h2 style="margin:10px 0 0;font-stretch:125%;font-weight:700;font-size:29px;line-height:1;letter-spacing:-.015em">Woxsen University</h2>
-        <p style="margin:11px 0 0;font-size:13.5px;line-height:1.55;color:#3D423C">Kamkole, Sadasivpet. The coach waits at the main gate loop — be there twenty minutes early and you'll board without hurrying.</p>
+        <p style="margin:11px 0 0;font-size:13.5px;line-height:1.55;color:#3D423C">Kamkole, Sadasivpet. The coach waits at the main gate loop — be there 30 minutes early and you'll board without hurrying.</p>
         <dl style="margin:18px 0 0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;font-variant-numeric:tabular-nums">
           <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:9px">
             <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Report</dt>
@@ -275,7 +275,7 @@
           <div style="margin-top:6px;font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ t.date }}</div>
         </div>
         <div data-m="route">
-          <div style="font-size:15px;font-weight:600;letter-spacing:-.005em">Woxsen main gate → Miyapur metro</div>
+          <div style="font-size:15px;font-weight:600;letter-spacing:-.005em">{{ t.route }}</div>
           <div style="margin-top:5px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">Report {{ t.report }} · arrives ≈{{ t.arrive }}</div>
         </div>
         <div data-m="seats" style="display:flex;align-items:center;gap:9px">
@@ -381,10 +381,10 @@
     </div>
     <div style="border-top:1px solid rgba(14,16,20,.16);padding:12px 0 0">
       <dt style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:5px">Report by</dt>
-      <dd style="margin:0;font-size:15px;font-weight:600">20 min before</dd>
+      <dd style="margin:0;font-size:15px;font-weight:600">30 min before</dd>
     </div>
   </dl>
-  <p style="margin:16px 0 0;font-size:12.5px;color:#4A4F49">Arrival times are approximate — traffic on the ORR decides the last twenty minutes, so we publish a window rather than a promise.</p>
+  <p style="margin:16px 0 0;font-size:12.5px;color:#4A4F49">Arrival times are approximate — traffic on the ORR decides the last stretch, so we publish a window rather than a promise.</p>
 </section>
 
 <section id="how" data-screen-label="How it works" style="border-top:1px solid rgba(14,16,20,.16);padding:clamp(34px,6vh,72px) clamp(18px,4vw,44px)">
@@ -446,9 +446,8 @@
       <h2 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(22px,2.4vw,30px);line-height:1.06;letter-spacing:-.018em">Getting to the city shouldn't be the hardest part of the week</h2>
     </div>
     <div style="display:flex;flex-direction:column;gap:14px;max-width:62ch">
-      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">Woxsen sits an hour and a half outside Hyderabad. Students who need to get to the city have been left with whatever turns up: shared cabs settled by argument at the gate, buses that leave when they are full rather than when they are due, and no way to know in advance whether there will be a seat at all.</p>
-      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">DLT is the opposite of that. One route, published departures, a named pickup point, a numbered seat and a fixed fare of ₹{{ fare }}. You know before you leave your room that you have a seat, which coach it is on, and when it goes.</p>
-      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">We are starting with a single route on purpose. Woxsen to Miyapur, done properly, is worth more than five routes done approximately — and everything here is built so the second route changes nothing about how the first one works.</p>
+      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">DLT gives Woxsen students a predictable way to reach Miyapur: published departures, a named pickup point, a numbered seat and a fixed launch fare of ₹{{ fare }}.</p>
+      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">We are starting with Woxsen to Miyapur and adding Miyapur to Woxsen when the schedule is ready. The booking system already supports both directions, so each new trip works the same way.</p>
     </div>
   </div>
 </section>
@@ -490,8 +489,8 @@
       </sc-if>
       <sc-if value="{{ noSupportContact }}" hint-placeholder-val="{{ true }}">
         <div style="border:1px solid rgba(184,115,10,.34);background:#FFFDF6;padding:15px 18px">
-          <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#8A5A0E">Support channel pending</div>
-          <p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#3D423C">The WhatsApp and phone numbers for student support are not yet provisioned, so no number is shown here rather than a placeholder that would not connect. Until they are live, use the contact form your university has for DLT.</p>
+          <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#8A5A0E">Support temporarily unavailable</div>
+          <p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:#3D423C">WhatsApp support is temporarily unavailable. Use the booking notification form and operations will follow up when trips open.</p>
         </div>
       </sc-if>
       <a href="./DLT Policies.dc.html" style="display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid rgba(14,16,20,.18);padding:15px 18px;border-radius:2px;font-size:14px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Policies &amp; travel rules <span aria-hidden="true" style="color:#5F6560">→</span></a>
@@ -499,7 +498,7 @@
     </div>
     <div style="margin:26px 0 0;border-top:1px solid rgba(14,16,20,.16);padding-top:14px;display:grid;gap:11px">
       <div><h3 style="margin:0;font-size:13.5px;font-weight:600">Cancellation &amp; refunds</h3><p style="margin:5px 0 0;font-size:12.5px;line-height:1.55;color:#4A4F49">Full refund over 12 h before departure. No refund inside 12 h. Refunds return to the original payment method. <a href="./DLT Policies.dc.html#refunds" style="border-bottom:1px solid rgba(14,75,52,.4)">Read the policy</a></p></div>
-      <div><h3 style="margin:0;font-size:13.5px;font-weight:600">Boarding &amp; travel rules</h3><p style="margin:5px 0 0;font-size:12.5px;line-height:1.55;color:#4A4F49">Report 20 minutes before departure with your QR pass and student ID. <a href="./DLT Policies.dc.html#rules" style="border-bottom:1px solid rgba(14,75,52,.4)">Read the rules</a></p></div>
+      <div><h3 style="margin:0;font-size:13.5px;font-weight:600">Boarding &amp; travel rules</h3><p style="margin:5px 0 0;font-size:12.5px;line-height:1.55;color:#4A4F49">Report 30 minutes before departure with your QR pass and student ID. <a href="./DLT Policies.dc.html#rules" style="border-bottom:1px solid rgba(14,75,52,.4)">Read the rules</a></p></div>
       <div><h3 style="margin:0;font-size:13.5px;font-weight:600">Privacy &amp; eligibility</h3><p style="margin:5px 0 0;font-size:12.5px;line-height:1.55;color:#4A4F49">Open to enrolled students with a valid student ID. Passes carry a token, never your details. <a href="./DLT Policies.dc.html#privacy" style="border-bottom:1px solid rgba(14,75,52,.4)">Read the notice</a></p></div>
     </div>
   </div>
@@ -513,10 +512,10 @@
   <a href="#help">Help &amp; FAQ</a>
   <a href="#contact">Contact</a>
   <a href="./DLT Policies.dc.html">Policies</a>
-  <a href="./DLT Booking.dc.html">Book a seat</a>
+  <a href="{{ primaryHref }}">{{ primaryCta }}</a>
   <a href="./DLT Dashboard.dc.html">My trips</a>
   <span style="flex:1"></span>
-  <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase">Woxsen → Miyapur · INR</span>
+  <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase">Woxsen ⇄ Miyapur · INR</span>
 </footer>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{
@@ -531,32 +530,26 @@
 }">
 const FAQ = [
   ['Booking', [
-    ['Can one booking carry my friends?', 'Up to five passengers on one payment. Everyone gets their own seat, boarding pass and QR, and the person who paid can see the whole booking.'],
-    ['Do I need an account to look?', 'No. You can browse departures and pick seats without signing in. An account is needed before payment, because the booking, the passes and any refund have to belong to someone.'],
-    ['How long are my seats held?', 'Ten minutes from the moment you tap the first seat. The clock is shown in the summary, and the seats go back on sale when it runs out.'],
+    ['What if no trips are open?', 'Use Get notified on the booking page. We log your email and tell you when bookings open.'],
+    ['Can one booking carry my friends?', 'Yes. Up to five passengers can travel on one payment, and every passenger gets their own seat, pass and QR.'],
+    ['How long are seats held?', 'Ten minutes from the first seat you pick. The clock is shown in the summary and the seats reopen when it runs out.'],
   ]],
   ['Payment & refunds', [
-    ['Can I cancel after paying?', 'Yes. Cancel more than 12 hours before departure for a full refund; inside 12 hours the fare is non-refundable. You can cancel the whole booking or single passengers, and the exact refund is shown before you confirm.'],
-    ['My payment went through but I saw an error.', 'Don\u2019t pay again. We verify every payment on our own side and finish the booking from the verified result — it appears in My Trips with the passes attached. If anything is unresolved, it goes to our team, not back to you.'],
-    ['When does a refund arrive?', 'Refunds are returned to the original payment method. The status shows as refund pending until the acquirer settles it, normally three to five working days.'],
+    ['What is the fare?', 'The launch fare is ₹299 per seat. No booking fee, coupon or tax line is added in this release.'],
+    ['Can I cancel after paying?', 'Cancel more than 12 hours before departure for a full refund. Inside 12 hours the fare is non-refundable.'],
+    ['My payment went through but I saw an error.', 'Do not pay again. We verify every payment on our server and finish or review the booking from that result.'],
   ]],
   ['Boarding & QR', [
-    ['What do I show at the door?', 'The QR on your boarding pass, and your student ID. Each passenger scans their own pass — one scan each.'],
-    ['What if my QR won\u2019t scan?', 'Operations staff can board you by hand after checking your student ID against the manifest. It is recorded with a reason, so nothing goes missing.'],
-    ['Can someone else use my pass?', 'No. A pass is tied to one passenger and one trip, and a second scan of the same pass reads ALREADY BOARDED.'],
+    ['What do I show at the door?', 'Show the QR on your boarding pass and your student ID. Each passenger scans their own pass.'],
+    ['When should I arrive?', 'Report 30 minutes before departure. The coach leaves at the published time.'],
   ]],
   ['Trips & pickup', [
-    ['Where exactly is the pickup?', 'The main gate loop at Woxsen. Report twenty minutes before departure — the coach does not wait past its departure time.'],
-    ['What if the trip is full?', 'Join the waitlist. If a seat is released you get a 30-minute window to claim and pay for it before it passes to the next student.'],
-    ['What time will I actually arrive?', 'About two hours, and we publish it as a window rather than a promise. Traffic on the ORR decides the last twenty minutes.'],
+    ['Where is the pickup?', 'For Woxsen to Miyapur, board at the Woxsen main gate loop. Reverse-route pickups will show Miyapur Metro when those trips open.'],
+    ['What time will I arrive?', 'About two hours after departure. Arrival is approximate because traffic can change the last stretch.'],
   ]],
   ['Student account', [
-    ['Can I change my student ID?', 'You can request a change, and operations review it. The old ID stays active until they approve, because your bookings and boarding checks depend on it.'],
-    ['What happens if I delete my account?', 'Deletion is reviewed, the account is deactivated and personal information is removed where the law allows. Payment, booking and boarding records are kept, because we are required to keep them.'],
-  ]],
-  ['General', [
-    ['Who can travel with DLT?', 'Enrolled students with a valid student ID. IDs are checked at the door; automatic university verification is not part of this release.'],
-    ['Why only one route?', 'Because one route done properly is worth more than five done approximately. Everything is built so adding the second route changes nothing about the first.'],
+    ['Who can travel with DLT?', 'Enrolled students with a valid student ID. IDs are checked at boarding.'],
+    ['Can I change my student ID?', 'You can request a change and operations reviews it before it affects bookings or boarding checks.'],
   ]],
 ];
 
@@ -767,12 +760,13 @@ class Component extends DCLogic {
     const me = st.ready && api ? api.auth.current() : null;
 
     /* the next three open departures, live — pure read of state.data, filled
-       only by _load(). No request and no fare arithmetic here: while trips
-       are loading, fare and the schedule labels render '—' (DLT.fmt.time's
-       own convention for "no value yet"), never a fabricated number. */
+       only by _load(). No request and no fare arithmetic here: when no trips
+       are active, the page shows the launch fare and policy timing instead
+       of empty placeholders. */
     const trips = st.data.trips;
-    const fare = trips.length ? String(trips[0].price) : '—';
+    const fare = trips.length ? String(trips[0].price) : '299';
     const first = trips[0] || null;
+    const noActiveTrips = st.data.tripsLoaded && trips.length === 0;
 
     /* the signed-in student's next trip, if they have one */
     const next = st.data.nextBooking;
@@ -784,34 +778,33 @@ class Component extends DCLogic {
         .map(([qq, aa]) => ({ q: qq, a: aa })),
     })).filter(g => g.items.length);
 
-    /* Master §34 requires a support number; none has been provisioned, so we
-       show the gap rather than a placeholder that would not connect. */
-    const SUPPORT_WHATSAPP = null;
+    const SUPPORT_WHATSAPP = 'https://wa.me/message/SIRNC3QVOEFLO1';
 
     return {
       reduced, motion: !reduced,
       sceneLoading: !reduced && st.scene === 'loading',
       signedIn: !!me, signedOut: !me,
+      primaryCta: noActiveTrips ? 'Get notified' : 'Book a seat',
+      primaryHref: noActiveTrips ? './DLT Booking.dc.html?notify=1' : './DLT Booking.dc.html',
 
       hasNextTrip: !!next,
-      nextTripWhen: next ? fmt.when(next.trip.departureAt) + ' · Woxsen → Miyapur' : '',
+      nextTripWhen: next ? fmt.when(next.trip.departureAt) + ' · ' +
+        next.trip.origin + ' -> ' + next.trip.destination : '',
       nextTripSeats: next
         ? 'Seat ' + next.passengers.map(p => p.seatNumber).join(', ') + ' · report ' + fmt.time(next.trip.reportingAt)
         : '',
 
       fare,
-      /* DLT.fmt.time already renders '—' for a falsy input, so first === null
-         (still loading, or genuinely no open departures) needs no separate
-         fallback literal — and never shows a time the server did not send. */
-      departLabel: fmt.time(first && first.departureAt),
-      reportLabel: fmt.time(first && first.reportingAt),
-      arriveLabel: fmt.time(first && first.arrivalEstimateAt),
+      departLabel: first ? fmt.time(first.departureAt) : 'by schedule',
+      reportLabel: first ? fmt.time(first.reportingAt) : '30 min before',
+      arriveLabel: first ? fmt.time(first.arrivalEstimateAt) : '2 h',
 
       trips: trips.map(t => {
         const pct = t.capacity ? Math.round(((t.capacity - t.available) / t.capacity) * 100) : 0;
         const low = t.available > 0 && t.available <= 8;
         return {
           time: fmt.time(t.departureAt), date: fmt.date(t.departureAt),
+          route: t.origin + ' -> ' + t.destination,
           report: fmt.time(t.reportingAt), arrive: fmt.time(t.arrivalEstimateAt),
           price: t.price, dim: t.soldOut ? 0.72 : 1,
           showBar: !t.soldOut,

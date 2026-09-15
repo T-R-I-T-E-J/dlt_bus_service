@@ -53,13 +53,13 @@
     <sc-for list="{{ toc }}" as="t" hint-placeholder-count="7">
       <a href="{{ t.href }}" style="padding:9px 10px;border-left:2px solid rgba(14,16,20,.14);font-size:13px;color:#3D423C">{{ t.label }}</a>
     </sc-for>
-    <p style="margin:16px 10px 0;font-size:11.5px;line-height:1.6;color:#5F6560">These are the operating rules as built. Final legal wording is a separate review and is not yet complete.</p>
+    <p style="margin:16px 10px 0;font-size:11.5px;line-height:1.6;color:#5F6560">These are the launch operating rules shown to students before booking.</p>
   </nav>
 
   <div>
-    <div style="border:1px solid rgba(184,115,10,.34);background:#FFFDF6;padding:16px 18px">
-      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#8A5A0E">Not yet legally reviewed</div>
-      <p style="margin:8px 0 0;max-width:70ch;font-size:13px;line-height:1.65;color:#3D423C">The Master Specification requires the final wording of these policies to be reviewed separately before launch. What follows describes exactly how the product behaves today, in plain language, so students are not misled in the meantime — it is not a substitute for the reviewed text.</p>
+    <div style="border:1px solid rgba(14,75,52,.28);background:#EEF3EE;padding:16px 18px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#0E4B34">Launch policy</div>
+      <p style="margin:8px 0 0;max-width:70ch;font-size:13px;line-height:1.65;color:#25322B">These rules describe how DLT works today in plain language: fares, refunds, boarding, eligibility and data handling. If a legal or accounting review later requires different wording, this page should be updated before accepting further bookings.</p>
     </div>
 
     <sc-for list="{{ sections }}" as="s" hint-placeholder-count="7">
@@ -97,7 +97,7 @@
 }">
 const SECTIONS = [
   ['terms', 'Terms', 'Terms of service', [
-    'DLT sells a seat on a specific departure of a specific coach on the Woxsen University to Miyapur route. Booking a seat is an agreement between you and DLT for that journey only.',
+    'DLT sells a seat on a specific departure of a specific coach. The launch route is Woxsen University to Miyapur Metro, and the system also supports Miyapur Metro to Woxsen University when those trips are published.',
     'A booking is confirmed when we have verified the payment on our own side. Until then the seats are held, not sold, and nothing is guaranteed. What a payment page shows you in your browser is never what confirms a booking.',
     'You must travel on the departure you booked, with the passenger details you gave us. Bookings are not transferable between people, and a pass belongs to one named passenger.',
   ], [
@@ -117,13 +117,14 @@ const SECTIONS = [
   ], null],
 
   ['payment', 'Payment', 'Payment information', [
-    'Fares are charged in Indian rupees. The launch fare is ₹259 per seat, and checkout itemises it: seats multiplied by the fare, then the total payable. There are no booking fees or taxes added today.',
+    'Fares are charged in Indian rupees. The launch fare is ₹299 per seat, and checkout itemises it: seats multiplied by the fare, then the total payable.',
+    'No booking fee, convenience fee, coupon, discount, tax line or GST invoice is added in this release. If any fee, tax or discount is introduced later, it must be shown before payment and reflected in the receipt.',
     'Payment is taken through a payment provider; DLT never sees or stores your card details. Your booking is created only against a payment we have verified, and a payment record is never deleted.',
     'If a payment succeeds but something goes wrong before your seats are issued, the money stays with us against your booking and we finish the job — you are never asked to pay a second time. The same applies if we receive a different amount from the one due: the payment is held and resolved by our team.',
-  ], [], 'Taxes, convenience fees and any discount or coupon structure are not part of this release and have not been decided. GST invoicing is also out of scope; what you get today is a basic receipt.'],
+  ], [], null],
 
   ['rules', 'Boarding', 'Boarding and travel rules', [
-    'Report at the pickup point 20 minutes before departure. The coach leaves at its published departure time and does not wait.',
+    'Report at the pickup point 30 minutes before departure. The coach leaves at its published departure time and does not wait.',
     'Bring the QR on your boarding pass and your student ID. Every passenger scans their own pass — one scan each. A second scan of the same pass is refused at the door.',
     'Arrival time is approximate. We publish an expected journey of about two hours and a window rather than a promise, because traffic decides the last stretch.',
   ], [
@@ -134,8 +135,9 @@ const SECTIONS = [
 
   ['eligibility', 'Eligibility', 'Student eligibility', [
     'DLT is for enrolled students. Every passenger needs a full name, a student ID and an Indian mobile number on the booking, and the student ID is checked against the passenger at the door.',
+    'The booking form accepts the student ID exactly as printed on the card. We do not enforce one pattern at launch because valid university IDs may use different formats.',
     'We do not yet verify student IDs automatically against university records, so the check is a human one at boarding. Travelling on someone else\u2019s pass, or giving details that do not match the person travelling, means boarding can be refused.',
-  ], [], 'The exact student ID format is not yet fixed with the university, so the booking form accepts the ID as printed on your card rather than enforcing a pattern that might reject a valid student.'],
+  ], [], null],
 
   ['privacy', 'Privacy', 'Privacy notice', [
     'We collect what a booking needs and little else: your name, email, phone, student ID and university, the passenger details on each booking, and the records of payments, refunds and boarding.',
@@ -145,13 +147,14 @@ const SECTIONS = [
   ], [
     'You can change your own name, phone and emergency contact at any time from your account.',
     'A student ID change is reviewed by operations before it takes effect, because bookings and boarding checks depend on it.',
-    'You can request account deletion. The account is deactivated and personal information is removed where the law allows; payment, booking and boarding records are retained because we are required to retain them.',
-  ], 'Exact retention periods for each kind of record are pending legal and accounting review.'],
+    'You can request account deletion. The account is deactivated and personal information is removed or anonymised within 30 days where the law allows; payment, booking and boarding records are retained for the periods listed below.',
+  ], null],
 
   ['data', 'Data', 'What we keep and for how long', [
-    'Operational records — trips, bookings, passengers and boarding events — are kept as long-term history so a journey can always be reconstructed.',
-    'Financial records, meaning payments and refunds, are kept for the periods accounting and tax rules require, and are never deleted from the system. Where a record must stop being used it is marked cancelled, archived or anonymised rather than removed.',
-  ], [], 'The specific retention period for each category is not yet set, and is the one part of this notice that will change once legal and accounting review is complete.'],
+    'Operational trip, booking, passenger and boarding records are kept for 7 years from the journey date so a completed journey, refund or dispute can be reconstructed.',
+    'Payment, refund and audit records are kept for 8 financial years, or longer if a dispute, investigation or law requires it. They are marked cancelled, archived or anonymised rather than deleted.',
+    'Notification requests are kept for 12 months unless you ask us to remove them earlier. Account profile data is kept while the account is active, then deactivated immediately and removed or anonymised within 30 days except for records tied to bookings, payments, refunds, boarding or audit.',
+  ], [], null],
 ];
 
 class Component extends DCLogic {

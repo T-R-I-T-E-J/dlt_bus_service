@@ -728,10 +728,9 @@ export async function dashboardSummary(actor: Actor) {
     occupancy, revenue, refundToday, boarded, alerts, activity };
 }
 
-/** The route picker a new trip draft needs. This is a single-route product
- *  today (Woxsen → Miyapur) but saveTrip's contract takes a routeId, and
- *  nothing previously exposed one — the console's "New trip" form has no
- *  route selector at all because there has only ever been the one row. */
+/** The route picker a new trip draft needs. The launch schedule can publish
+ *  Woxsen -> Miyapur first while the same API supports Miyapur -> Woxsen
+ *  whenever operations adds those departures. */
 export async function listRoutes(actor: Actor) {
   await requirePermission(actor.role, 'trip.read');
   const { rows } = await query(

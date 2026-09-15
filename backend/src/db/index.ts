@@ -74,8 +74,8 @@ export async function assertReady(): Promise<{ version: number; migrations: numb
   if (!m.n) throw new Error('Database has no schema_migrations table — run the migrations first');
 
   const { rows: [applied] } = await query('SELECT count(*)::int AS n FROM schema_migrations');
-  if (applied.n < 23)
-    throw new Error(`Only ${applied.n} of 23 migrations applied — run the migrations first`);
+  if (applied.n < 24)
+    throw new Error(`Only ${applied.n} of 24 migrations applied — run the migrations first`);
 
   /* H-3 layer 3 · FAIL CLOSED on audit-log privilege.
    *
