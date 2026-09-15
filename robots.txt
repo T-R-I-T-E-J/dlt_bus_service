@@ -14,4 +14,4 @@ Disallow: /DLT Readiness Audit.dc.html
 Disallow: /DLT Second Audit.dc.html
 Disallow: /DLT Final Verification.dc.html
 
-Sitemap: https://dltservices.tech/sitemap.xml
+Sitemap: https://www.dltservices.tech/sitemap.xml
