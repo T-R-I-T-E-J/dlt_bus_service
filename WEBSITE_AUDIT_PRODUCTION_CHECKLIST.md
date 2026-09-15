@@ -24,8 +24,13 @@ Updated: 15 September 2026
 - [x] Backend typecheck: `npm run typecheck` passed in `backend`.
 - [x] Production DB migration tested on Neon snapshot branch `br-bitter-union-azc4c3fu`.
 - [x] Production DB migrated to 24 migrations with both active route directions at 120 minutes.
+- [x] Railway production API deployed successfully from commit `4b3abc7` with 24 migrations.
+- [x] Vercel production site deployed successfully from commit `4b3abc7`.
+- [x] Live API health check passed on `https://dltservices.tech/api/health`.
+- [x] Live public trips check returned zero active trips, so no-trip CTAs are expected.
+- [x] Live homepage browser check: top CTA, no-trip CTA and footer CTA show "Get notified".
+- [x] Live booking browser check: no-trip screen shows the notify form and clean dash totals.
 
 ## Remaining Risk
 
 - [ ] Full backend DB test suite could not run locally because `DATABASE_URL` was unset and Docker Desktop was not running. The test harness correctly refused destructive fixtures without a disposable `dlt_phase1_test` database.
-- [ ] Final browser/live production verification must be done after Vercel and Railway finish deploying this commit.
