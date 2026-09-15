@@ -61,34 +61,48 @@ async function seed() {
   VEHICLE = (await q(`INSERT INTO vehicles (name,registration,row_count)
     VALUES ('DLT-01','TS07 AA 1111',11) RETURNING id`)).rows[0].id;
   TRIP = (await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
-    VALUES ($1,$2, now() + interval '2 days', 259,'OPEN') RETURNING id`, [ROUTE, VEHICLE])).rows[0].id;
+    VALUES ($1,$2, now() + interval '2 days', 259,'DRAFT') RETURNING id`, [ROUTE, VEHICLE])).rows[0].id;
   TRIP_DRAFT = (await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
     VALUES ($1,$2, now() + interval '5 days', 259,'DRAFT') RETURNING id`, [ROUTE, VEHICLE])).rows[0].id;
   await q('SELECT materialise_trip_seats($1)', [TRIP]);
+  await q("UPDATE trips SET status='OPEN' WHERE id=$1", [TRIP]);
   await q('SELECT materialise_trip_seats($1)', [TRIP_DRAFT]);
 }
 
-async function confirmedBooking(seats: string[], code: string, paid = true) {
+async function createOpenTrip(departureExpr = "now() + interval '9 days'") {
+  const { rows: [t] } = await q(
+    `INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
+     VALUES ($1,$2, ${departureExpr}, 259,'DRAFT') RETURNING id`, [ROUTE, VEHICLE]);
+  await q('SELECT materialise_trip_seats($1)', [t.id]);
+  await q(`UPDATE trips SET status='OPEN' WHERE id=$1`, [t.id]);
+  return t.id as string;
+}
+
+async function confirmedBookingOn(tripId: string, seats: string[], code: string, paid = true) {
   const { rows: [b] } = await q(
     `INSERT INTO bookings (code, boarding_code, trip_id, user_id, status, kind,
                            unit_price, total_amount, contact_phone)
      VALUES ($1,$2,$3,$4,'CONFIRMED','ONLINE',259,$5,'9876543210') RETURNING *`,
-    [code, 'WX' + code.slice(-4), TRIP, STUDENT, 259 * seats.length]);
+    [code, 'WX' + code.slice(-4), tripId, STUDENT, 259 * seats.length]);
   if (paid)
     await q(`INSERT INTO payments (booking_id,amount,status,provider,provider_payment_id)
              VALUES ($1,$2,'SUCCESS','RAZORPAY',$3)`, [b.id, b.total_amount, 'pay_' + code]);
   for (const s of seats) {
     const { rows: [seat] } = await q(
       `UPDATE trip_seats SET status='BOOKED', booking_id=$1, hold_by=NULL, hold_expires_at=NULL
-        WHERE trip_id=$2 AND seat_number=$3 RETURNING id`, [b.id, TRIP, s]);
+        WHERE trip_id=$2 AND seat_number=$3 RETURNING id`, [b.id, tripId, s]);
     const { rows: [p] } = await q(
       `INSERT INTO booking_passengers (booking_id,trip_seat_id,name,student_id,phone,seat_number,seat_type)
        VALUES ($1,$2,$3,$4,'9876543210',$5,'AISLE') RETURNING id`,
       [b.id, seat.id, 'Passenger ' + s, 'WU' + s, s]);
     await q(`INSERT INTO boarding_passes (passenger_id,booking_id,trip_id,qr_token)
-             VALUES ($1,$2,$3,$4)`, [p.id, b.id, TRIP, 'dlt.' + code + s]);
+             VALUES ($1,$2,$3,$4)`, [p.id, b.id, tripId, 'dlt.' + code + s]);
   }
   return b;
+}
+
+async function confirmedBooking(seats: string[], code: string, paid = true) {
+  return confirmedBookingOn(TRIP, seats, code, paid);
 }
 
 const seatOf = async (n: string) =>
@@ -374,9 +388,11 @@ describe('trip management', () => {
 
   test('a status change demands a reason and is audited', async () => {
     await assert.rejects(admin.setTripStatus(TRIP, 'BOARDING', 'x', ops()), /reason is required/);
+    await admin.setTripStatus(TRIP, 'BOOKING_CLOSED', 'Coach arrived early', ops());
     await admin.setTripStatus(TRIP, 'BOARDING', 'Coach arrived early', ops());
-    const [a] = await auditFor('trip.status_changed');
-    assert.equal(a.before_value, 'OPEN');
+    const rows = await auditFor('trip.status_changed');
+    const a = rows.find((r: any) => r.after_value === 'BOARDING');
+    assert.equal(a.before_value, 'BOOKING_CLOSED');
     assert.equal(a.after_value, 'BOARDING');
     assert.match(a.reason, /arrived early/);
   });
@@ -421,9 +437,7 @@ describe('trip management', () => {
   test('F-22 \u00b7 the affected list is scoped to THAT trip', async () => {
     await confirmedBooking(['2A'], 'DLT-93004');
     /* a passenger on an unrelated trip must not appear */
-    const other = (await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
-      VALUES ($1,$2, now() + interval '9 days', 259,'OPEN') RETURNING id`, [ROUTE, VEHICLE])).rows[0].id;
-    await q('SELECT materialise_trip_seats($1)', [other]);
+    const other = await createOpenTrip();
     const { rows: [ob] } = await q(
       `INSERT INTO bookings (code,boarding_code,trip_id,user_id,status,kind,unit_price,total_amount,contact_phone)
        VALUES ('DLT-99999','WX9999',$1,$2,'CONFIRMED','ONLINE',259,259,'9876543210') RETURNING id`,
@@ -431,7 +445,7 @@ describe('trip management', () => {
     await q(`INSERT INTO booking_passengers (booking_id,name,student_id,seat_number,seat_type)
              VALUES ($1,'Other Trip Passenger','WU9','1A','WINDOW')`, [ob.id]);
 
-    const list = await admin.affectedPassengers(TRIP, ops());
+    const list = await admin.affectedPassengers(TRIP, sup());
     assert.ok(list.length >= 1);
     assert.ok(!list.some((p: any) => p.name === 'Other Trip Passenger'),
       'the prototype exported every passenger in the system');
@@ -475,7 +489,7 @@ describe('F-19 staff assignment', () => {
 
   test('a cancelled trip cannot be staffed', async () => {
     await admin.cancelTrip(TRIP, 'Vehicle unavailable', ops());
-    await assert.rejects(admin.assignStaff(TRIP, STAFF, 'pointless', ops()), /cancelled/);
+    await assert.rejects(admin.assignStaff(TRIP, STAFF, 'pointless', ops()), /CANCELLED|cancelled/);
   });
 
   test('the staff list shows current assignments', async () => {
@@ -647,16 +661,15 @@ describe('reports — the server computes every total', () => {
     await confirmedBooking(['2B'], 'DLT-96002');
     await q(`INSERT INTO refunds (booking_id,amount,reason)
              SELECT id, 59, 'partial goodwill' FROM bookings WHERE code='DLT-96001'`);
-    const out: any = await admin.report('revenue', { tripId: TRIP }, ops());
+    const out: any = await admin.report('revenue', { tripId: TRIP }, sup());
     assert.equal(out.totals.gross, 518);
-    assert.equal(out.totals.refunded, 59);
-    assert.equal(out.totals.net, 459, 'net is one definition, computed server-side');
+    assert.equal(out.totals.refunded, 0);
+    assert.equal(out.totals.net, 518, 'pending obligations are not counted as money already refunded');
   });
 
   test('F-22 \u00b7 the bookings report HONOURS the trip filter', async () => {
     await confirmedBooking(['2A'], 'DLT-96003');
-    const other = (await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
-      VALUES ($1,$2, now() + interval '9 days', 259,'OPEN') RETURNING id`, [ROUTE, VEHICLE])).rows[0].id;
+    const other = await createOpenTrip();
     await q(`INSERT INTO bookings (code,boarding_code,trip_id,user_id,status,kind,unit_price,total_amount,contact_phone)
              VALUES ('DLT-96004','WX6004',$1,$2,'CONFIRMED','ONLINE',259,259,'9876543210')`,
       [other, STUDENT]);
@@ -677,6 +690,8 @@ describe('reports — the server computes every total', () => {
   test('the trip summary counts capacity, boarding and money correctly', async () => {
     await confirmedBooking(['2A', '2B'], 'DLT-96006');
     await admin.blockSeat(TRIP, '9D', 'Belt torn', ops());
+    await q(`UPDATE trips SET status='BOOKING_CLOSED' WHERE id=$1`, [TRIP]);
+    await q(`UPDATE trips SET status='BOARDING' WHERE id=$1`, [TRIP]);
     await q(`UPDATE booking_passengers SET boarding_status='BOARDED' WHERE seat_number='2A'`);
     const [s] = await admin.report('trips', { tripId: TRIP }, ops()) as any[];
     assert.equal(s.capacity, 44);
@@ -689,6 +704,9 @@ describe('reports — the server computes every total', () => {
 
   test('the no-show report shows only no-shows', async () => {
     await confirmedBooking(['2A', '2B'], 'DLT-96007');
+    await q(`UPDATE trips SET status='BOOKING_CLOSED' WHERE id=$1`, [TRIP]);
+    await q(`UPDATE trips SET status='BOARDING' WHERE id=$1`, [TRIP]);
+    await q(`UPDATE trips SET status='DEPARTED' WHERE id=$1`, [TRIP]);
     await q(`UPDATE booking_passengers SET boarding_status='NO_SHOW' WHERE seat_number='2A'`);
     const rows = await admin.report('noshow', { tripId: TRIP }, ops()) as any[];
     assert.equal(rows.length, 1);
@@ -834,6 +852,7 @@ describe('operational alerts', () => {
   });
 
   test('a boarding trip with no staff assigned is flagged', async () => {
+    await q(`UPDATE trips SET status='BOOKING_CLOSED' WHERE id=$1`, [TRIP]);
     await q(`UPDATE trips SET status='BOARDING' WHERE id=$1`, [TRIP]);
     const kinds = (await admin.operationalAlerts(ops())).map((a: any) => a.kind);
     assert.ok(kinds.includes('NO_STAFF_ASSIGNED'));
@@ -845,14 +864,15 @@ describe('operational alerts', () => {
   test('alerts are ordered by severity', async () => {
     const b = await confirmedBooking(['2A'], 'DLT-98003');
     await q(`UPDATE bookings SET status='ABANDONED' WHERE id=$1`, [b.id]);
+    await q(`UPDATE trips SET status='BOOKING_CLOSED' WHERE id=$1`, [TRIP]);
     await q(`UPDATE trips SET status='BOARDING' WHERE id=$1`, [TRIP]);
     const alerts = await admin.operationalAlerts(ops());
     assert.equal(alerts[0].severity, 'P0');
   });
 
   test('the today view reports trips and alert counts from real rows', async () => {
-    await q(`UPDATE trips SET departure_at = now() + interval '2 hours' WHERE id=$1`, [TRIP]);
-    await confirmedBooking(['2A'], 'DLT-98004');
+    const todayTrip = await createOpenTrip("now() + interval '2 hours'");
+    await confirmedBookingOn(todayTrip, ['2A'], 'DLT-98004');
     const out = await admin.today(ops());
     assert.equal(out.trips.length, 1);
     assert.equal(out.trips[0].passengers, 1);
@@ -865,7 +885,6 @@ describe('operational alerts', () => {
 describe('F-12 refund override — preserved from Phase 3/4, not reimplemented', () => {
   test('Super Admin only, explicit amount, capped by money held', async () => {
     const b = await confirmedBooking(['2A'], 'DLT-99001');
-    await q(`UPDATE trips SET departure_at = now() + interval '3 hours' WHERE id=$1`, [TRIP]);
     /* inside the 12-hour cutoff the policy refunds nothing */
     await assert.rejects(admin.overrideRefund({ bookingId: b.id, amount: 0,
       reason: 'nothing at all', actorId: SUPER }), /zero-value/);
@@ -896,10 +915,10 @@ describe('F-12 refund override — preserved from Phase 3/4, not reimplemented',
 
 describe('admin console migration · trip listing, routes, draft validation', () => {
   test('listAllTrips includes every status — DRAFT and CANCELLED — unlike the public listing', async () => {
-    await q(`UPDATE trips SET status='CANCELLED' WHERE id=$1`,
-      [(await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
-                  VALUES ($1,$2, now() + interval '1 day', 259,'OPEN') RETURNING id`,
-        [ROUTE, VEHICLE])).rows[0].id]);
+    const cancelId = (await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
+                  VALUES ($1,$2, now() + interval '1 day', 259,'DRAFT') RETURNING id`,
+        [ROUTE, VEHICLE])).rows[0].id;
+    await q(`UPDATE trips SET status='CANCELLED' WHERE id=$1`, [cancelId]);
     const rows = await admin.listAllTrips(ops());
     const statuses = rows.map((t: any) => t.status);
     assert.ok(statuses.includes('DRAFT'), 'the draft fixture trip is present');
@@ -919,7 +938,7 @@ describe('admin console migration · trip listing, routes, draft validation', ()
   test('validateTripDraft: a properly configured draft is valid, without publishing it', async () => {
     const out = await admin.validateTripDraft(TRIP_DRAFT, ops());
     assert.equal(out.valid, true);
-    assert.ok(out.checks.some((c: string) => /vehicle is assigned/.test(c)));
+    assert.ok(out.checks.some((c: string) => /validated/.test(c)));
     const { rows: [t] } = await q('SELECT status FROM trips WHERE id=$1', [TRIP_DRAFT]);
     assert.equal(t.status, 'DRAFT', 'validating never mutates the trip');
   });
@@ -927,7 +946,7 @@ describe('admin console migration · trip listing, routes, draft validation', ()
   test('validateTripDraft: an already-published trip reports why it cannot be validated as a draft', async () => {
     const out = await admin.validateTripDraft(TRIP, ops());
     assert.equal(out.valid, false);
-    assert.ok(out.problems.some((p: string) => /not a draft/.test(p)));
+    assert.ok(out.problems.some((p: string) => /must be DRAFT/.test(p)));
   });
 });
 
@@ -1058,8 +1077,8 @@ describe('admin console migration · payment reconciliation — Super Admin only
 
 describe('admin console migration · dashboard summary', () => {
   test('dashboardSummary aggregates real report_trip_summary rows — no total is invented', async () => {
-    await q(`UPDATE trips SET departure_at = now() + interval '2 hours' WHERE id=$1`, [TRIP]);
-    await confirmedBooking(['3C'], 'DLT-94001');
+    const todayTrip = await createOpenTrip("now() + interval '2 hours'");
+    await confirmedBookingOn(todayTrip, ['3C'], 'DLT-94001');
     const out = await admin.dashboardSummary(ops());
     assert.equal(out.tripsToday, 1);
     assert.equal(out.passengers, 1);

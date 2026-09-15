@@ -260,14 +260,22 @@ class DLTJourney extends HTMLElement {
       if (span <= 0) return;
       const top = scrollY + r.top;
       const here = scrollY - top;
-      if (here < -1 || here > span + 1) return;                 // outside the pin
+      if (here < -1 || here > span + 1) {                        // outside the pin
+        this._cancelWheelStep();
+        return;
+      }
       const notch = span / WHEEL_NOTCHES;
       const dy = Math.abs(e.deltaY) >= 40                       // wheel vs trackpad
         ? Math.sign(e.deltaY) * notch
         : e.deltaY * (e.deltaMode === 1 ? 16 : 1);
       const base = this._wTarget != null ? this._wTarget - top : here;
       const next = Math.min(span, Math.max(0, base + dy));
-      if ((here <= 0 && dy < 0) || (here >= span && dy > 0)) return;
+      const leavingAtTop = dy < 0 && next <= 0;
+      const leavingAtBottom = dy > 0 && next >= span;
+      if (leavingAtTop || leavingAtBottom) {
+        this._cancelWheelStep();
+        return;
+      }
       e.preventDefault();
       /* one notch glides over ~100 ms and lands: smoother than a hard step,
          and short enough that the coach still stops with the wheel. */
@@ -301,10 +309,18 @@ class DLTJourney extends HTMLElement {
   disconnectedCallback() {
     removeEventListener('scroll', this._onScroll);
     removeEventListener('wheel', this._onWheel);
-    cancelAnimationFrame(this._wRaf);
+    this._cancelWheelStep();
     this._ro?.disconnect(); this._io?.disconnect();
     cancelAnimationFrame(this._raf);
     this._renderer?.dispose();
+  }
+
+  _cancelWheelStep() {
+    this._wTarget = null;
+    if (this._wRaf) {
+      cancelAnimationFrame(this._wRaf);
+      this._wRaf = 0;
+    }
   }
 
   _initScene() {

@@ -104,6 +104,11 @@ function validateSignup(i: SignupInput) {
     throw new AppError('VALIDATION', 'Enter a valid Indian mobile number');
 }
 
+function isUniqueViolation(e: unknown, constraint: string): boolean {
+  const dbError = e as { code?: string; constraint?: string };
+  return dbError.code === '23505' && dbError.constraint === constraint;
+}
+
 export interface SignupInput {
   name: string; email: string; password: string; phone: string;
   studentId?: string | null;
@@ -114,6 +119,7 @@ export interface SignupInput {
 export async function signUp(input: SignupInput, ctx: { ip?: string }): Promise<PublicUser> {
   validateSignup(input);
   const email = input.email.trim().toLowerCase();
+  const studentId = input.studentId?.trim() || null;
   const passwordHash = await argon2.hash(input.password, ARGON2);
 
   return tx(async (c) => {
@@ -129,10 +135,16 @@ export async function signUp(input: SignupInput, ctx: { ip?: string }): Promise<
       'INSERT INTO user_credentials (user_id, password_hash, kdf) VALUES ($1,$2,$3)',
       [u.id, passwordHash, 'argon2id']
     );
-    await c.query(
-      'INSERT INTO student_profiles (user_id, student_id) VALUES ($1,$2)',
-      [u.id, input.studentId ?? null]
-    );
+    try {
+      await c.query(
+        'INSERT INTO student_profiles (user_id, student_id) VALUES ($1,$2)',
+        [u.id, studentId]
+      );
+    } catch (e) {
+      if (isUniqueViolation(e, 'student_profiles_student_id_key'))
+        throw new AppError('CONFLICT', 'That student ID is already attached to an account');
+      throw e;
+    }
 
     /* F-15: verification is reachable. The prototype generated a token and then
      * offered no route to it, so an account read "not verified" forever. */

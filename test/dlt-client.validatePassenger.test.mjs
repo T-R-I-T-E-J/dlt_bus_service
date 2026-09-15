@@ -76,3 +76,28 @@ describe('DLT.bookings.validatePassenger — per-field result shape', () => {
     assert.deepEqual(v, { name: false, studentId: false, phone: false });
   });
 });
+
+test('DLT.admin.overrideRefund keeps the object-shaped admin API and sends an idempotency key', async () => {
+  let seen;
+  globalThis.fetch = async (url, options) => {
+    seen = { url, options };
+    return new Response(JSON.stringify({ amount: 150, refundId: 'refund-1' }), { status: 200 });
+  };
+
+  const out = await DLT.admin.overrideRefund({
+    bookingId: 'booking-1',
+    amount: 150,
+    reason: 'operator approved correction',
+    cancelBooking: true,
+  });
+
+  assert.equal(out.amount, 150);
+  assert.equal(seen.url, '/api/admin/bookings/booking-1/override-refund');
+  assert.equal(seen.options.method, 'POST');
+  assert.match(seen.options.headers['Idempotency-Key'], /^[a-f0-9]{32}$/);
+  assert.deepEqual(JSON.parse(seen.options.body), {
+    amount: 150,
+    reason: 'operator approved correction',
+    cancelBooking: true,
+  });
+});

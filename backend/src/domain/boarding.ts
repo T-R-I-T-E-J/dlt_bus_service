@@ -26,6 +26,7 @@ import { requirePermission } from './auth.ts';
 import { REPORTING_LEAD_MIN } from './seats.ts';
 import { boardingScopeFor, requireTripScope, passengerFor, bookingFor } from './authz.ts';
 import type { Actor } from './authz.ts';
+import { requireTripAction } from './trip-policy.ts';
 
 export type ScanResult = 'VALID' | 'INVALID' | 'ALREADY BOARDED' | 'DENIED' | 'NO_SHOW' | 'CHOOSE';
 
@@ -62,9 +63,13 @@ export async function scannerContext(actor: Actor) {
   const { rows: [r] } = await query(
     `SELECT t.id, t.departure_at AS "departureAt", t.status,
             r.origin, r.destination,
+            /* 019: a CONFIRMED booking can now carry a CANCELLED passenger —
+             * a seat lost at settlement and refunded. Staff must not be told to
+             * expect somebody who was refunded and is not coming. */
             (SELECT count(*)::int FROM booking_passengers bp
                JOIN bookings b ON b.id = bp.booking_id
-              WHERE b.trip_id = t.id AND b.status = 'CONFIRMED') AS expected,
+              WHERE b.trip_id = t.id AND b.status = 'CONFIRMED'
+                AND bp.boarding_status <> 'CANCELLED') AS expected,
             (SELECT count(*)::int FROM booking_passengers bp
                JOIN bookings b ON b.id = bp.booking_id
               WHERE b.trip_id = t.id AND b.status = 'CONFIRMED'
@@ -221,6 +226,11 @@ export async function manualBoard(passengerId: string, reason: string, actor: Ac
     /* L-1: when the caller names a trip, the passenger must be on it — so a
      * mistyped id fails instead of acting on a stranger on another departure. */
     await passengerFor(actor, passengerId, { permission: 'boarding.manual', tripId, client: c });
+    const { rows: [candidate] } = await c.query(
+      `SELECT b.trip_id FROM booking_passengers bp
+         JOIN bookings b ON b.id = bp.booking_id WHERE bp.id = $1`, [passengerId]);
+    if (!candidate) throw new AppError('NOT_FOUND', 'Passenger not found');
+    await requireTripAction(c, candidate.trip_id, 'board');
     const { rows: [p] } = await c.query(
       `SELECT bp.*, b.trip_id FROM booking_passengers bp
          JOIN bookings b ON b.id = bp.booking_id WHERE bp.id = $1 FOR UPDATE OF bp`, [passengerId]);
@@ -242,6 +252,12 @@ export async function denyBoarding(passengerId: string, reason: string, actor: A
   await requirePermission(actor.role, 'boarding.deny');
   const why = needReason(reason, 'to deny boarding');
   return tx(async (c) => {
+    await passengerFor(actor, passengerId, { permission: 'boarding.deny', tripId, client: c });
+    const { rows: [candidate] } = await c.query(
+      `SELECT b.trip_id FROM booking_passengers bp
+         JOIN bookings b ON b.id = bp.booking_id WHERE bp.id = $1`, [passengerId]);
+    if (!candidate) throw new AppError('NOT_FOUND', 'Passenger not found');
+    await requireTripAction(c, candidate.trip_id, 'board');
     const { rows: [p] } = await c.query(
       `SELECT bp.*, b.trip_id FROM booking_passengers bp
          JOIN bookings b ON b.id = bp.booking_id WHERE bp.id = $1 FOR UPDATE OF bp`, [passengerId]);
@@ -262,6 +278,12 @@ export async function confirmNoShow(passengerId: string, reason: string, actor: 
   await requirePermission(actor.role, 'boarding.noshow');
   const why = needReason(reason, 'to record a no-show');
   return tx(async (c) => {
+    await passengerFor(actor, passengerId, { permission: 'boarding.noshow', tripId, client: c });
+    const { rows: [candidate] } = await c.query(
+      `SELECT b.trip_id FROM booking_passengers bp
+         JOIN bookings b ON b.id = bp.booking_id WHERE bp.id = $1`, [passengerId]);
+    if (!candidate) throw new AppError('NOT_FOUND', 'Passenger not found');
+    await requireTripAction(c, candidate.trip_id, 'noshow');
     const { rows: [p] } = await c.query(
       `SELECT bp.*, b.trip_id FROM booking_passengers bp
          JOIN bookings b ON b.id = bp.booking_id WHERE bp.id = $1 FOR UPDATE OF bp`, [passengerId]);
@@ -329,7 +351,7 @@ export async function manifest(tripIdInput: string | null | undefined, actor: Ac
  * assigned trip, but this took a tripId and did not — so a staff member could
  * read the scan log of any departure. Same scope rule now, from the same
  * function, so the two can never disagree again. */
-export async function boardingEvents(tripId: string, actor: Actor, limit = 200) {
+export async function boardingEvents(tripId: string, actor: Actor) {
   await requirePermission(actor.role, 'boarding.read');
   await requireTripScope(actor, tripId);
   const { rows } = await query(
@@ -339,7 +361,7 @@ export async function boardingEvents(tripId: string, actor: Actor, limit = 200) 
        FROM boarding_events e
        LEFT JOIN users u ON u.id = e.staff_user_id
        LEFT JOIN booking_passengers bp ON bp.id = e.passenger_id
-      WHERE e.trip_id = $1 ORDER BY e.occurred_at DESC LIMIT $2`, [tripId, limit]);
+      WHERE e.trip_id = $1 ORDER BY e.occurred_at DESC`, [tripId]);
   return rows;
 }
 

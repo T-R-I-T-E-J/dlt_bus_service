@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z">
+<link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1">
+<script type="module" src="./dlt-client.js"></script>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -41,7 +45,6 @@
   }
 </style>
 <script src="./dlt-qr.js"></script>
-<script type="module" src="./dlt-client.js"></script>
 </helmet>
 
 <header data-m="noprint" style="position:sticky;top:0;z-index:40;height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(18px,4vw,44px);background:rgba(247,245,240,.92);backdrop-filter:blur(14px);border-bottom:1px solid rgba(14,16,20,.10)">
@@ -382,15 +385,18 @@ class Component extends DCLogic {
           { bookings: [], waitlist: [], waitTrip: null, passes: [] }) });
         return;
       }
-      data.bookings = await DLT.bookings.mine();
-      data.openTrips = await DLT.trips.listPublic(3);
-
+      await Promise.all([
+        DLT.bookings.mine().then(bookings => { data.bookings = bookings; }),
+        DLT.trips.listPublic(3).then(trips => { data.openTrips = trips; }),
+        (async () => {
       try {
         data.waitlist = await DLT.waitlist.mine();
         const offer = data.waitlist.filter(w => w.status === 'CLAIM_OFFERED')[0]
           || data.waitlist[0] || null;
         data.waitTrip = offer ? await DLT.trips.get(offer.tripId) : null;
       } catch (e) { data.waitlist = []; data.waitTrip = null; }
+        })()
+      ]);
 
       this.setState({ data: data, loading: false, offline: false }, () => {
         this._loadPasses();

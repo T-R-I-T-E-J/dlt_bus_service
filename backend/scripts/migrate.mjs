@@ -6,7 +6,7 @@
  * down-migrations: a mistake in production is fixed by a new forward migration,
  * never by reversing one.
  *
- *   DATABASE_URL=postgres://localhost/dlt_dev node scripts/migrate.mjs
+ *   MIGRATION_DATABASE_URL=postgres://localhost/dlt_dev node scripts/migrate.mjs
  *   node scripts/migrate.mjs --dry-run     # list what would run
  *
  * WRITTEN, NOT EXECUTED.
@@ -21,12 +21,15 @@ const here = dirname(fileURLToPath(import.meta.url));
 const dir = join(here, '..', 'migrations');
 const dryRun = process.argv.includes('--dry-run');
 
-if (!process.env.DATABASE_URL) {
-  console.error('DATABASE_URL is not set.');
+const connectionString = process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
+if (!connectionString) {
+  console.error('MIGRATION_DATABASE_URL or DATABASE_URL is not set.');
   process.exit(1);
 }
 
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+/* Production keeps DATABASE_URL on the least-privileged dlt_app role. Schema
+ * changes use a separate owner connection and never weaken the running app. */
+const client = new pg.Client({ connectionString });
 await client.connect();
 
 const { rows: [v] } = await client.query('SHOW server_version_num');

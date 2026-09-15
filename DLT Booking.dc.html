@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z">
+<link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1">
+<script type="module" src="./dlt-client.js"></script>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -55,7 +59,6 @@
     [data-m="main"] { padding-bottom: 132px !important; }
   }
 </style>
-<script type="module" src="./dlt-client.js"></script>
 <!-- Razorpay Checkout. Loaded from Razorpay's own origin because they require
      it (a self-hosted copy is unsupported and would break on their updates), so
      no SRI hash is available or appropriate here. This script only OPENS the
@@ -724,20 +727,27 @@ class Component extends DCLogic {  state = {
     if (!quiet) this.setState({ loading: true });
     const data = Object.assign({}, st.data);
     try {
-      data.openTrips = await DLT.trips.listPublic(3);
+      await Promise.all([
+        DLT.trips.listPublic(3).then(trips => { data.openTrips = trips; }),
+        (async () => {
       if (st.tripId) {
-        data.trip = await DLT.trips.get(st.tripId);
-        const map = await DLT.trips.seatMap(st.tripId);
+        const [trip, map] = await Promise.all([
+          DLT.trips.get(st.tripId), DLT.trips.seatMap(st.tripId)
+        ]);
+        data.trip = trip;
         data.seatRows = map.rows || [];
         data.held = map.held || [];
       } else {
-        data.trip = data.openTrips[0] || null;
         data.seatRows = []; data.held = [];
       }
+        })(),
+        (async () => {
       data.booking = null;
       if (st.bookingId) {
         try { data.booking = await DLT.bookings.get(st.bookingId); } catch (e) {}
       }
+        })(),
+        (async () => {
       if (DLT.auth.current()) {
         try {
           data.waits = await DLT.waitlist.mine();
@@ -746,6 +756,9 @@ class Component extends DCLogic {  state = {
           data.waitTrip = offer ? await DLT.trips.get(offer.tripId) : null;
         } catch (e) { data.waits = []; data.waitTrip = null; }
       } else { data.waits = []; data.waitTrip = null; }
+        })()
+      ]);
+      if (!st.tripId) data.trip = data.openTrips[0] || null;
       this.setState({ data: data, loading: false, offline: false });
     } catch (e) {
       this.setState({ loading: false });
@@ -896,7 +909,35 @@ class Component extends DCLogic {  state = {
           : { pax: pax, error: null, busy: false, step: 'seats', bookingId: null, paymentId: null,
               notice: 'Seat ' + seatNumber + ' removed. Nothing has been charged - pick the seats you want.' };
       });
-    } catch (e) { this.fail(e); }
+    } catch (e) {
+      /* The server refuses to free a seat that the booking already started still
+         owns, because releasing it would leave that booking payable but
+         seatless - which can only ever end in a refund. That refusal is correct,
+         but the student must be told what to do about it in words that name a
+         control actually on this screen. Without this they got the raw server
+         sentence and no way forward. */
+      if (e.isConflict) {
+        await this._load({ quiet: true });
+        return this.setState({ busy: false,
+          error: 'Seat ' + seatNumber + ' is part of the booking you have already started. '
+               + 'Choose "Change seats" to start the selection again - nothing has been charged.' });
+      }
+      this.fail(e);
+    }
+  };
+
+  /* 019: release_all_held deliberately SKIPS seats a live pending booking owns,
+     so releasing holds is no longer enough to free them. The booking itself has
+     to go. It is unpaid, so cancelling raises no refund - cancellationQuote
+     returns 0 - and release_booking_seats returns the seats properly, clearing
+     booking_id with them. Fire-and-forget, like the releaseMine it accompanies:
+     a booking that is already gone is not an error worth stopping the student
+     for. */
+  _discardBooking = async (bookingId) => {
+    if (!bookingId) return;
+    try { await DLT.bookings.cancel(bookingId, 'Changed seats before paying'); }
+    catch (e) { /* already cancelled, expired, or never created - nothing owed */ }
+    try { DLT.bookings.clearAttempt(this.state.tripId); } catch (e) {}
   };
 
   setField = (seat, key, v) => this.setState(s => ({
@@ -1402,23 +1443,37 @@ class Component extends DCLogic {  state = {
       },
       backToTrips: () => {
         this._watchSeats(false);
-        const trip = st.tripId;
+        const trip = st.tripId, had = st.bookingId;
         this.setState({ step: 'trips', tripId: null, error: null }, () => {
-          if (trip) DLT.seats.releaseMine(trip).catch(() => {});
-          this._load({ quiet: true });
+          /* Discard first: releaseMine cannot free seats this booking owns. */
+          this._discardBooking(had).then(() => {
+            if (trip) DLT.seats.releaseMine(trip).catch(() => {});
+            this._load({ quiet: true });
+          });
         });
       },
-      editSeats: () => this.setState({ step: 'seats', bookingId: null, paymentId: null, error: null }),
+      /* "Change seats" is the control the removeSeat conflict now points at, so
+         it has to genuinely release the seats rather than just forget the
+         booking id locally. Dropping the id alone left a PAYMENT_PENDING
+         booking still holding them, and the student met the same refusal again
+         on the next tap - and, per 018, a refusal to rebook those seats too. */
+      editSeats: () => {
+        const had = st.bookingId;
+        this.setState({ step: 'seats', bookingId: null, paymentId: null, error: null },
+          () => { this._discardBooking(had).then(() => this._load({ quiet: true })); });
+      },
       editPax: () => this.setState({ step: 'passengers', error: null }),
       /* Nothing to clear in the page any more: the hold lives on the server and
          the guest cookie is HttpOnly. Starting over just resets local view state
          and reloads from the server. */
       restart: () => {
         this._watchSeats(false);
+        const had = st.bookingId;
         this._attempt = (this._attempt || 0) + 1;
         this.setState({ step: 'trips', tripId: null, pax: {}, touched: false,
           bookingId: null, paymentId: null, orderId: null, error: null, notice: null,
-          reprice: null, waitlist: null }, () => this._load());
+          reprice: null, waitlist: null },
+          () => { this._discardBooking(had).then(() => this._load()); });
       },
     };
   }

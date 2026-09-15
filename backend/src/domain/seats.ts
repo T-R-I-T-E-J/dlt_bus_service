@@ -224,28 +224,44 @@ export async function holdSeat(tripId: string, seatNumber: string, holder: Holde
      * aggregate), then count them. A concurrent hold from the same holder blocks
      * on those locked rows, so two parallel requests cannot both see three and
      * both add a fourth — the §12 cap holds under a race. */
-    const { rows: [n] } = await c.query(
-      `SELECT count(*)::int AS held FROM (
-         SELECT 1 FROM trip_seats
-          WHERE trip_id = $1 AND status = 'HELD' AND hold_expires_at > now()
-            AND (($2::uuid IS NOT NULL AND hold_by = $2::uuid)
-              OR ($3::text IS NOT NULL AND hold_guest_token = $3::text))
-          FOR UPDATE
-       ) locked`,
-      [tripId, ...holderArgs(holder)]);
+    /* CANONICAL LOCK ORDER (019). ONE statement locks the target seat AND every
+     * seat this holder already holds, ascending by seat_number — the order
+     * every other multi-seat path now uses.
+     *
+     * THE DEADLOCK THIS REMOVES: the cap check used to lock the holder's rows
+     * in scan order, and hold_seat() then locked the target row separately. Two
+     * concurrent requests could therefore take the same rows in opposite
+     * orders. Production logged four deadlocks on trip_seats in two hours, in
+     * exactly this pair of statements. Locking every row this transaction needs
+     * in one ordered statement is what makes that impossible — a partial order
+     * per statement was never enough. */
+    const { rows: locked } = await c.query(
+      `SELECT seat_number, status, hold_expires_at,
+              (($2::uuid IS NOT NULL AND hold_by = $2::uuid)
+            OR ($3::text IS NOT NULL AND hold_guest_token = $3::text)) AS mine
+         FROM trip_seats
+        WHERE trip_id = $1
+          AND (seat_number = $4
+               OR (status = 'HELD' AND hold_expires_at > now()
+                   AND (($2::uuid IS NOT NULL AND hold_by = $2::uuid)
+                     OR ($3::text IS NOT NULL AND hold_guest_token = $3::text))))
+        ORDER BY seat_number
+        FOR UPDATE`,
+      [tripId, ...holderArgs(holder), seatNumber]);
 
-    const already = await c.query(
-      `SELECT 1 FROM trip_seats WHERE trip_id=$1 AND seat_number=$2 AND status='HELD'
-        AND (($3::uuid IS NOT NULL AND hold_by=$3::uuid)
-          OR ($4::text IS NOT NULL AND hold_guest_token=$4::text))`,
-      [tripId, seatNumber, ...holderArgs(holder)]);
+    /* §12 basket cap, computed from the rows just locked, so two parallel
+     * requests cannot both see three seats and both add a fourth. */
+    const now = Date.now();
+    const mineHeld = locked.filter((r: any) =>
+      r.mine && r.status === 'HELD' && new Date(r.hold_expires_at).getTime() > now);
+    const already = mineHeld.some((r: any) => r.seat_number === seatNumber);
 
-    if (!already.rowCount && n.held >= MAX_SEATS_PER_BOOKING)
+    if (!already && mineHeld.length >= MAX_SEATS_PER_BOOKING)
       throw new AppError('VALIDATION', `You can hold up to ${MAX_SEATS_PER_BOOKING} seats in one booking`);
 
     /* H-2: the two guest ceilings, checked inside this transaction so parallel
      * requests cannot both pass. Signed-in students are exempt from both. */
-    if (!already.rowCount && !holder.userId) {
+    if (!already && !holder.userId) {
       await enforceGuestLimits(c, tripId, holder);
     }
 
@@ -298,17 +314,27 @@ async function enforceGuestLimits(c: Client, tripId: string, holder: Holder) {
       'Too many seat selections from this network. Sign in to continue holding seats.');
 }
 
-/** F-20: a deliberate release, reported as a release and not as an expiry. */
+/** F-20: a deliberate release, reported as a release and not as an expiry.
+ *
+ *  019 gave release_seat a reason to RAISE: a seat still owned by a live
+ *  pending booking is refused rather than orphaning that booking. Without
+ *  mapSeatError the raised unique_violation reached the global handler as an
+ *  unmapped database error and the student got a 500 — the same 500 019 set
+ *  out to remove, from a different cause. It is a 409 CONFLICT. */
 export async function releaseSeat(tripId: string, seatNumber: string, holder: Holder): Promise<boolean> {
-  const { rows: [r] } = await query(
-    'SELECT release_seat($1,$2,$3::uuid,$4::text) AS ok', [tripId, seatNumber, ...holderArgs(holder)]);
-  return !!r.ok;
+  try {
+    const { rows: [r] } = await query(
+      'SELECT release_seat($1,$2,$3::uuid,$4::text) AS ok', [tripId, seatNumber, ...holderArgs(holder)]);
+    return !!r.ok;
+  } catch (e) { mapSeatError(e); }
 }
 
 export async function releaseAll(tripId: string, holder: Holder): Promise<number> {
-  const { rows: [r] } = await query(
-    'SELECT release_all_held($1,$2::uuid,$3::text) AS n', [tripId, ...holderArgs(holder)]);
-  return r.n;
+  try {
+    const { rows: [r] } = await query(
+      'SELECT release_all_held($1,$2::uuid,$3::text) AS n', [tripId, ...holderArgs(holder)]);
+    return r.n;
+  } catch (e) { mapSeatError(e); }
 }
 
 /* ---------------------------------------------------------------- sweep */

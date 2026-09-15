@@ -20,6 +20,8 @@ import { audit, readAudit } from './audit.ts';
 import { requirePermission } from './auth.ts';
 import { TRIP_SQL, decorateTrip } from './seats.ts';
 import type { Actor } from './authz.ts';
+import { requireTripAction, publishValidation } from './trip-policy.ts';
+import { presentRefund, safeCsvCell } from './refund-presentation.ts';
 
 /* One canonical Actor for the whole backend. Two local definitions would drift,
  * and a drifted actor type is how an authorization argument gets dropped. */
@@ -129,6 +131,7 @@ export async function saveTrip(input: {
 
   return tx(async (c) => {
     if (input.id) {
+      await requireTripAction(c, input.id, 'edit');
       const { rows: [before] } = await c.query(
         'SELECT * FROM trips WHERE id=$1 FOR UPDATE', [input.id]);
       if (!before) throw new AppError('NOT_FOUND', 'Trip not found');
@@ -165,6 +168,9 @@ export async function publishTrip(tripId: string, actor: Actor) {
     const { rows: [t] } = await c.query('SELECT * FROM trips WHERE id=$1 FOR UPDATE', [tripId]);
     if (!t) throw new AppError('NOT_FOUND', 'Trip not found');
     if (t.status !== 'DRAFT') throw new AppError('CONFLICT', `That trip is already ${t.status}`);
+    await c.query('SELECT id FROM vehicles WHERE id=$1 FOR UPDATE', [t.vehicle_id]);
+    const validation = await publishValidation(c, tripId);
+    if (!validation.valid) throw new AppError('VALIDATION', validation.problems.join('; '));
     if (!t.vehicle_id) throw new AppError('VALIDATION', 'Assign a vehicle before publishing');
     const { rows: [seats] } = await c.query(
       'SELECT count(*)::int n FROM trip_seats WHERE trip_id=$1', [tripId]);
@@ -204,15 +210,21 @@ export async function cancelTrip(tripId: string, reason: string, actor: Actor) {
     const { rows: [t] } = await c.query('SELECT * FROM trips WHERE id=$1 FOR UPDATE', [tripId]);
     if (!t) throw new AppError('NOT_FOUND', 'Trip not found');
     if (t.status === 'CANCELLED') throw new AppError('CONFLICT', 'That departure is already cancelled');
+    await requireTripAction(c, tripId, 'cancel');
+    const boarded = await c.query(`SELECT 1 FROM booking_passengers bp JOIN bookings b ON b.id=bp.booking_id
+      WHERE b.trip_id=$1 AND bp.boarding_status='BOARDED' LIMIT 1`, [tripId]);
+    if (boarded.rowCount) throw new AppError('CONFLICT', 'Passengers have boarded; cancellation is unavailable');
 
     const { rows: bookings } = await c.query(
-      `SELECT b.id, b.code, m.refundable FROM bookings b
+      `SELECT b.id, b.code, b.status, m.refundable FROM bookings b
          JOIN booking_money m ON m.booking_id = b.id
-        WHERE b.trip_id = $1 AND b.status = 'CONFIRMED'`, [tripId]);
+        WHERE b.trip_id = $1
+          AND b.status IN ('PENDING','PAYMENT_PENDING','CONFIRMED')
+        ORDER BY b.created_at`, [tripId]);
 
     let refunded = 0, affected = 0;
     for (const b of bookings) {
-      if (b.refundable > 0) {
+      if (b.status === 'CONFIRMED' && b.refundable > 0) {
         await c.query(
           `INSERT INTO refunds (booking_id, amount, reason, requested_by)
            VALUES ($1,$2,$3,$4)`,
@@ -222,6 +234,10 @@ export async function cancelTrip(tripId: string, reason: string, actor: Actor) {
       await c.query('SELECT release_booking_seats($1,$2)', [b.id, 'CANCELLED_BY_DLT']);
       affected++;
     }
+    await c.query(
+      `UPDATE trip_seats SET status='AVAILABLE', hold_by=NULL, hold_guest_token=NULL,
+              hold_expires_at=NULL, booking_id=NULL, updated_at=now()
+        WHERE trip_id=$1 AND status='HELD' AND booking_id IS NULL`, [tripId]);
 
     await c.query(
       `UPDATE trips SET status='CANCELLED', cancel_reason=$2, pinned_status='CANCELLED',
@@ -241,6 +257,7 @@ export async function cancelTrip(tripId: string, reason: string, actor: Actor) {
  *  the system. */
 export async function affectedPassengers(tripId: string, actor: Actor) {
   await requirePermission(actor.role, 'report.export');
+  await requirePermission(actor.role, 'payment.admin');
   const { rows } = await query(
     `SELECT bp.name, bp.student_id AS "studentId", bp.phone, bp.seat_number AS "seatNumber",
             b.code AS "bookingCode", b.contact_phone AS "contactPhone",
@@ -267,10 +284,7 @@ export async function assignStaff(
     if (u.role !== 'BOARDING_STAFF')
       throw new AppError('VALIDATION', 'Choose a boarding staff account');
     if (u.status !== 'ACTIVE') throw new AppError('VALIDATION', 'That staff account is not active');
-    const { rows: [t] } = await c.query('SELECT id, status FROM trips WHERE id=$1', [tripId]);
-    if (!t) throw new AppError('NOT_FOUND', 'Trip not found');
-    if (t.status === 'CANCELLED')
-      throw new AppError('CONFLICT', 'That departure is cancelled');
+    await requireTripAction(c, tripId, 'staff');
 
     await c.query(
       `INSERT INTO trip_staff (trip_id, user_id, assigned_by, reason)
@@ -287,6 +301,7 @@ export async function assignStaff(
 export async function unassignStaff(tripId: string, staffUserId: string, actor: Actor) {
   await requirePermission(actor.role, 'staff.assign');
   return tx(async (c) => {
+    await requireTripAction(c, tripId, 'staff');
     const { rowCount } = await c.query(
       'DELETE FROM trip_staff WHERE trip_id=$1 AND user_id=$2', [tripId, staffUserId]);
     if (!rowCount) throw new AppError('NOT_FOUND', 'That staff member is not assigned to this trip');
@@ -320,6 +335,10 @@ export async function updateBookingContact(
     throw new AppError('VALIDATION', 'Enter a valid Indian mobile number');
 
   return tx(async (c) => {
+    const { rows: [candidate] } = await c.query(
+      'SELECT trip_id FROM bookings WHERE id=$1', [bookingId]);
+    if (!candidate) throw new AppError('NOT_FOUND', 'Booking not found');
+    await requireTripAction(c, candidate.trip_id, 'settle');
     const { rows: [b] } = await c.query(
       'SELECT id, code, contact_phone FROM bookings WHERE id=$1 FOR UPDATE', [bookingId]);
     if (!b) throw new AppError('NOT_FOUND', 'Booking not found');
@@ -347,7 +366,10 @@ export async function findBookings(f: {
             b.created_at AS "createdAt", t.departure_at AS "departureAt",
             u.name AS "ownerName",
             m.received, m.returned, m.refundable,
-            (SELECT count(*)::int FROM booking_passengers bp WHERE bp.booking_id = b.id) AS seats
+            /* 019: exclude a passenger whose seat was lost at settlement and
+             * refunded — the booking holds fewer seats than it was created for. */
+            (SELECT count(*)::int FROM booking_passengers bp
+              WHERE bp.booking_id = b.id AND bp.boarding_status <> 'CANCELLED') AS seats
        FROM bookings b
        JOIN trips t ON t.id = b.trip_id
        JOIN booking_money m ON m.booking_id = b.id
@@ -520,6 +542,7 @@ export interface ReportFilter { tripId?: string | null; from?: string | null; to
 
 export async function report(kind: ReportKind, f: ReportFilter, actor: Actor) {
   await requirePermission(actor.role, 'report.read');
+  if (['revenue', 'refunds'].includes(kind)) await requirePermission(actor.role, 'payment.admin');
   const args = [f.tripId ?? null, f.from ?? null, f.to ?? null];
   const scope = `($1::uuid IS NULL OR t.id = $1)
              AND ($2::timestamptz IS NULL OR t.departure_at >= $2)
@@ -552,7 +575,8 @@ export async function report(kind: ReportKind, f: ReportFilter, actor: Actor) {
         `SELECT b.code, b.status, b.kind, b.total_amount AS "totalAmount",
                 b.created_at AS "createdAt", t.departure_at AS "departureAt",
                 m.received, m.returned,
-                (SELECT count(*)::int FROM booking_passengers bp WHERE bp.booking_id=b.id) AS seats
+                (SELECT count(*)::int FROM booking_passengers bp
+                  WHERE bp.booking_id=b.id AND bp.boarding_status <> 'CANCELLED') AS seats
            FROM bookings b JOIN trips t ON t.id = b.trip_id
            JOIN booking_money m ON m.booking_id = b.id
           WHERE ${scope} AND ($4::text IS NULL OR b.status::text = $4)
@@ -568,6 +592,7 @@ export async function report(kind: ReportKind, f: ReportFilter, actor: Actor) {
            JOIN bookings b ON b.id = bp.booking_id
            JOIN trips t ON t.id = b.trip_id
           WHERE ${scope} AND b.status = 'CONFIRMED'
+            AND bp.boarding_status <> 'CANCELLED'   /* 019: refunded seat */
           ORDER BY t.departure_at DESC, bp.seat_row_order`, [...args, actor.role])).rows;
 
     case 'boarding':
@@ -620,10 +645,7 @@ export async function exportReport(kind: ReportKind, f: ReportFilter, actor: Act
   if (!rows.length) return { filename: `dlt-${kind}.csv`, csv: '' };
 
   const cols = Object.keys(rows[0]);
-  const esc = (v: unknown) => {
-    const s = v == null ? '' : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
+  const esc = safeCsvCell;
   const csv = [cols.join(','), ...rows.map(r => cols.map(c => esc(r[c])).join(','))].join('\n');
   await tx(c => audit(c, actor, 'report.exported', 'report', kind, null,
     `${rows.length} rows`, null));
@@ -696,7 +718,7 @@ export async function dashboardSummary(actor: Actor) {
       cta: 'Review', section: ALERT_LABELS[a.kind]?.section ?? 'Dashboard',
     }));
 
-  const { entries } = await readAudit({ limit: 8 });
+  const { entries } = await readAudit({ limit: 500 });
   const activity = entries.map((e: any) => ({
     at: e.occurredAt,
     text: `${e.actorName ?? 'system'} · ${e.action}${e.reason ? ' — ' + e.reason : ''}`,
@@ -743,6 +765,7 @@ export async function listAllTrips(actor: Actor) {
     const t = decorateTrip(r);
     const e = byId.get(t.id) ?? { revenue: 0, waitlistCount: 0 };
     return { ...t, revenue: e.revenue, waitlistCount: e.waitlistCount,
+      needsCloseout: !['DRAFT','COMPLETED','CANCELLED'].includes(t.status) && new Date(t.departureAt).getTime() < Date.now(),
       staffUserIds: t.assignedStaff.map((s: any) => s.id) };
   });
 }
@@ -753,27 +776,7 @@ export async function listAllTrips(actor: Actor) {
  *  on the actual transition — this is a preview, never the authority. */
 export async function validateTripDraft(tripId: string, actor: Actor) {
   await requirePermission(actor.role, 'trip.read');
-  const { rows: [t] } = await query('SELECT * FROM trips WHERE id = $1', [tripId]);
-  if (!t) throw new AppError('NOT_FOUND', 'Trip not found');
-  const problems: string[] = [];
-  const checks: string[] = [];
-
-  if (t.status !== 'DRAFT') problems.push(`This trip is ${t.status}, not a draft.`);
-  else checks.push('Status is DRAFT.');
-
-  if (!t.vehicle_id) problems.push('No vehicle is assigned.');
-  else checks.push('A vehicle is assigned.');
-
-  const { rows: [seats] } = await query(
-    'SELECT count(*)::int n FROM trip_seats WHERE trip_id = $1', [tripId]);
-  if (!seats.n) problems.push('The trip has no seat map.');
-  else checks.push(`${seats.n} seats mapped.`);
-
-  if (new Date(t.departure_at).getTime() < Date.now())
-    problems.push('The departure time is in the past.');
-  else checks.push('The departure time is in the future.');
-
-  return { valid: problems.length === 0, problems, checks };
+  return tx(c => publishValidation(c, tripId));
 }
 
 /* ---------------------------------------------------------------- booking detail
@@ -791,38 +794,49 @@ export async function bookingDetail(id: string, actor: Actor) {
     `SELECT b.id, b.code, b.boarding_code AS "boardingCode", b.status,
             b.kind AS "bookingType", b.total_amount AS "totalAmount",
             b.contact_phone AS "contactPhone", b.created_at AS "createdAt",
-            json_build_object('id', u.id, 'name', u.name, 'studentId', sp.student_id) AS owner,
+            CASE WHEN u.id IS NULL THEN NULL ELSE
+              json_build_object('id', u.id, 'name', u.name, 'studentId', sp.student_id)
+            END AS owner,
             json_build_object(
               'departureAt', t.departure_at, 'status', t.status,
               'vehicle', CASE WHEN v.id IS NULL THEN NULL ELSE
                 json_build_object('name', v.name, 'registration', v.registration) END) AS trip,
             m.received, m.returned, m.refundable,
             COALESCE(rf.rows, '[]'::json) AS refunds,
-            (SELECT row_to_json(x) FROM (
-               SELECT p.id, p.status, p.amount, p.provider,
-                      p.provider_reference AS "providerReference",
-                      p.updated_at AS "updatedAt"
-                 FROM payments p WHERE p.booking_id = b.id
-                ORDER BY CASE p.status WHEN 'SUCCESS' THEN 0 ELSE 1 END, p.created_at DESC
-                LIMIT 1) x) AS payment,
+            COALESCE(pay.rows, '[]'::json) AS payments,
+            pay.rows->0 AS payment,
             COALESCE(pax.rows, '[]'::json) AS passengers
        FROM bookings b
        JOIN trips t ON t.id = b.trip_id
        LEFT JOIN vehicles v ON v.id = t.vehicle_id
-       JOIN users u ON u.id = b.user_id
+       LEFT JOIN users u ON u.id = b.user_id
        LEFT JOIN student_profiles sp ON sp.user_id = u.id
        JOIN booking_money m ON m.booking_id = b.id
        LEFT JOIN LATERAL (
-         SELECT json_agg(json_build_object('amount', r.amount, 'status', r.status,
-                'createdAt', r.created_at) ORDER BY r.created_at) AS rows
+         SELECT json_agg(json_build_object(
+                'id', r.id, 'amount', r.amount, 'status', r.status,
+                'providerRefundId', r.provider_refund_id, 'providerStatus', r.provider_status,
+                'reason', r.reason, 'createdAt', r.created_at, 'updatedAt', r.updated_at)
+                ORDER BY r.created_at DESC) AS rows
            FROM refunds r WHERE r.booking_id = b.id) rf ON true
+       LEFT JOIN LATERAL (
+         SELECT json_agg(json_build_object(
+                'id', p.id, 'status', p.status, 'amount', p.amount, 'provider', p.provider,
+                'providerReference', p.provider_reference,
+                'providerOrderId', p.provider_order_id,
+                'providerPaymentId', p.provider_payment_id,
+                'failureReason', p.failure_reason,
+                'createdAt', p.created_at, 'updatedAt', p.updated_at)
+                ORDER BY CASE p.status WHEN 'SUCCESS' THEN 0 ELSE 1 END, p.created_at DESC) AS rows
+           FROM payments p WHERE p.booking_id = b.id) pay ON true
        LEFT JOIN LATERAL (
          SELECT json_agg(json_build_object(
               'id', bp.id, 'name', bp.name, 'studentId', bp.student_id, 'phone', bp.phone,
               'seatNumber', bp.seat_number, 'boardingStatus', bp.boarding_status,
               'boardedAt', ev.occurred_at, 'boardingMethod', ev.method,
               'boardedBy', su.name, 'boardingReason', ev.reason,
-              'passStatus', pass.status)
+              'passStatus', pass.status,
+              'boardingEvents', COALESCE(evs.rows, '[]'::json))
             ORDER BY bp.seat_row_order, bp.seat_number) AS rows
            FROM booking_passengers bp
            LEFT JOIN boarding_passes pass ON pass.passenger_id = bp.id
@@ -830,12 +844,21 @@ export async function bookingDetail(id: string, actor: Actor) {
              SELECT * FROM boarding_events e WHERE e.passenger_id = bp.id
               ORDER BY e.occurred_at DESC LIMIT 1) ev ON true
            LEFT JOIN users su ON su.id = ev.staff_user_id
+           LEFT JOIN LATERAL (
+             SELECT json_agg(json_build_object(
+                    'id', e.id, 'result', e.result, 'method', e.method,
+                    'reason', e.reason, 'tokenPrefix', e.token_prefix,
+                    'occurredAt', e.occurred_at, 'staffName', eu.name)
+                    ORDER BY e.occurred_at DESC) AS rows
+               FROM boarding_events e
+               LEFT JOIN users eu ON eu.id = e.staff_user_id
+              WHERE e.passenger_id = bp.id) evs ON true
           WHERE bp.booking_id = b.id) pax ON true
       WHERE b.id = $1`, [id]);
   if (!b) throw new AppError('NOT_FOUND', 'Booking not found');
 
   const refundedTotal = (b.refunds as { amount: number; status: string }[])
-    .filter(r => r.status !== 'REFUND_FAILED')
+    .filter(r => r.status === 'REFUNDED')
     .reduce((n, r) => n + r.amount, 0);
 
   /* The console's own copy calls this "Super Admin only" — a narrower gate
@@ -845,10 +868,26 @@ export async function bookingDetail(id: string, actor: Actor) {
    * also holds; this only keeps them out of the inline per-booking view. */
   let auditTrail: unknown[] = [];
   if (actor.role === 'SUPER_ADMIN') {
-    auditTrail = (await readAudit({ entityId: id, limit: 50 })).entries;
+    const relatedIds = [
+      id,
+      ...(b.passengers as any[]).map(p => p.id),
+      ...(b.payments as any[]).map(p => p.id),
+      ...(b.refunds as any[]).map(r => r.id),
+    ].filter(Boolean);
+    auditTrail = (await query(
+      `SELECT id, actor_id AS "actorId", actor_name AS "actorName", actor_role AS "actorRole",
+              action, entity_type AS "entityType", entity_id AS "entityId",
+              before_value AS "before", after_value AS "after", reason,
+              occurred_at AS "occurredAt"
+         FROM audit_logs
+        WHERE entity_id = ANY($1::text[])
+        ORDER BY id DESC
+        LIMIT 500`,
+      [relatedIds],
+    )).rows;
   }
 
-  return { ...b, refundedTotal, auditTrail };
+  return { ...b, refunds: b.refunds.map(presentRefund), refundedTotal, auditTrail };
 }
 
 /* ---------------------------------------------------------------- students
@@ -869,11 +908,11 @@ export async function listStudents(actor: Actor, q?: string | null) {
             (sp.emergency_contact_name IS NOT NULL) AS "emergencyContactAvailable",
             (SELECT count(*)::int FROM bookings b
               WHERE b.user_id = u.id AND b.status <> 'ABANDONED') AS bookings
-       FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id
-      WHERE u.role = 'STUDENT' AND u.status = 'ACTIVE'
-        AND ($1::text IS NULL OR u.name ILIKE '%' || $1 || '%' OR u.email ILIKE '%' || $1 || '%'
-                              OR sp.student_id ILIKE '%' || $1 || '%' OR u.phone LIKE '%' || $1 || '%')
-      ORDER BY u.name LIMIT 200`, [needle]);
+      FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id
+     WHERE u.role = 'STUDENT' AND u.status = 'ACTIVE'
+       AND ($1::text IS NULL OR u.name ILIKE '%' || $1 || '%' OR u.email ILIKE '%' || $1 || '%'
+                             OR sp.student_id ILIKE '%' || $1 || '%' OR u.phone LIKE '%' || $1 || '%')
+      ORDER BY u.name`, [needle]);
   return rows;
 }
 
@@ -973,16 +1012,23 @@ export async function listPaymentsForReconciliation(actor: Actor) {
   await requirePermission(actor.role, 'payment.admin');
   const { rows } = await query(
     `SELECT p.id, p.status, p.amount, p.provider, p.provider_reference AS "providerReference",
-            p.failure_reason AS "failureReason", p.updated_at AS "updatedAt",
+            p.provider_order_id AS "providerOrderId", p.provider_payment_id AS "providerPaymentId",
+            p.failure_reason AS "failureReason", p.created_at AS "createdAt", p.updated_at AS "updatedAt",
             b.id AS "bookingId", b.code AS "bookingCode", b.kind AS "bookingType",
             u.name AS student,
             COALESCE(rf.rows, '[]'::json) AS refunds
        FROM payments p
        JOIN bookings b ON b.id = p.booking_id
-       JOIN users u ON u.id = b.user_id
+       LEFT JOIN users u ON u.id = b.user_id
        LEFT JOIN LATERAL (
-         SELECT json_agg(json_build_object('amount', r.amount, 'status', r.status)) AS rows
+         SELECT json_agg(json_build_object(
+                'amount', r.amount, 'status', r.status,
+                'providerRefundId', r.provider_refund_id,
+                'providerStatus', r.provider_status,
+                'reason', r.reason,
+                'createdAt', r.created_at)
+                ORDER BY r.created_at DESC) AS rows
            FROM refunds r WHERE r.booking_id = b.id) rf ON true
-      ORDER BY p.updated_at DESC LIMIT 300`);
-  return rows;
+      ORDER BY p.updated_at DESC`);
+  return rows.map(r => ({ ...r, refunds: (r.refunds || []).map(presentRefund) }));
 }

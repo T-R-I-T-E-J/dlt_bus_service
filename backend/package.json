@@ -13,6 +13,7 @@
     "test": "node --test --test-concurrency=1 --experimental-strip-types \"test/**/*.test.ts\"",
     "test:db": "npm run migrate && npm run test",
     "verify": "npm run typecheck && npm run test:db",
+    "preflight:prod": "node --experimental-strip-types scripts/production-preflight.mjs",
     "dev": "node --experimental-strip-types --watch src/app.ts",
     "start": "node --experimental-strip-types src/app.ts"
   },

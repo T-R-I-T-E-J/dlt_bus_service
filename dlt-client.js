@@ -105,6 +105,13 @@ const qs = (obj) => {
   return s ? '?' + s : '';
 };
 
+/* ---------------------------------------------------------------- public schedule poll */
+
+const polls = {
+  busTime: () => GET('/polls/bus-time').then((r) => r.poll),
+  saveBusTime: (input) => POST('/polls/bus-time', input).then((r) => r.vote),
+};
+
 /* ---------------------------------------------------------------- session
  *
  * THE ONE PIECE OF STATE THIS FILE HOLDS, and it holds it only so that
@@ -535,8 +542,10 @@ const admin = {
   cancelTrip: (id, reason) => POST(`/admin/trips/${id}/cancel`, { reason }),
   affectedPassengers: (id) => GET(`/admin/trips/${id}/affected`).then((r) => r.passengers),
 
-  blockSeat: (tripId, seat, reason) => POST(`/admin/trips/${tripId}/seats/${seat}/block`, { reason }),
-  unblockSeat: (tripId, seat) => DEL(`/admin/trips/${tripId}/seats/${seat}/block`),
+  blockSeat: (tripId, seat, reason) =>
+    POST(`/admin/trips/${tripId}/seats/${seat}/block`, { reason }).then((r) => r.seat),
+  unblockSeat: (tripId, seat) =>
+    DEL(`/admin/trips/${tripId}/seats/${seat}/block`).then((r) => r.seat),
 
   vehicles: () => GET('/admin/vehicles').then((r) => r.vehicles),
   saveVehicle: (input) => POST('/admin/vehicles', input).then((r) => r.vehicle),
@@ -573,6 +582,9 @@ const admin = {
    *  full; there is no pending state left for an operator to resolve. */
   payments: () => GET('/admin/payments').then((r) => r.payments),
 
+  busTimePoll: () => GET('/admin/polls/bus-time').then((r) => r.poll),
+  busTimePollExportUrl: () => `${BASE}/admin/polls/bus-time/export`,
+
   /* Reports are computed SERVER-SIDE, every total. The prototype recomputed
    * every report on every render on a six-second timer (F-21); nothing here
    * aggregates anything. */
@@ -584,9 +596,15 @@ const admin = {
 
   audit: (filter) => GET('/admin/audit' + qs(filter)),
 
-  overrideRefund: (bookingId, { amount, reason, cancelBooking }) =>
-    POST(`/admin/bookings/${bookingId}/override-refund`, { amount, reason, cancelBooking }),
-  createManualBooking: (input) => POST('/admin/bookings/manual', input).then((r) => r.booking),
+  overrideRefund: (bookingIdOrInput, maybeInput) => {
+    const input = maybeInput || bookingIdOrInput;
+    const bookingId = maybeInput ? bookingIdOrInput : input.bookingId;
+    const { amount, reason, cancelBooking } = input;
+    return POST(`/admin/bookings/${bookingId}/override-refund`, { amount, reason, cancelBooking },
+      { idempotencyKey: idempotencyKeyFor(JSON.stringify(['override', bookingId, amount, reason, cancelBooking])) });
+  },
+  createManualBooking: (input) => POST('/admin/bookings/manual', input,
+    { idempotencyKey: idempotencyKeyFor(JSON.stringify(['manual', input])) }).then((r) => r.booking),
 };
 
 /* ================================================================= export
@@ -597,7 +615,7 @@ const admin = {
  */
 
 export const DLT = {
-  auth, trips, seats, bookings, payments, checkout, waitlist, boarding, admin,
+  auth, trips, seats, bookings, payments, checkout, waitlist, boarding, polls, admin,
   notifications, fmt, seatType, roleLabel, can,
   subscribe, startPolling, stopPolling,
   boot, isReady, setUnauthenticatedHandler,

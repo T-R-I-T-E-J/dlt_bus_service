@@ -14,6 +14,7 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
 import * as admin from '../domain/admin.ts';
+import * as polls from '../domain/polls.ts';
 import { readAudit } from '../domain/audit.ts';
 import { requireAuth, requirePermission } from './auth.routes.ts';
 
@@ -298,6 +299,22 @@ router.post('/admin/reviews/:id/moderate', requirePermission('feedback.moderate'
 router.get('/admin/payments', requirePermission('payment.admin'), async (req, res, next) => {
   try { res.json({ payments: await admin.listPaymentsForReconciliation(actorOf(req)) }); }
   catch (e) { next(e); }
+});
+
+/* ---------------------------------------------------------------- schedule poll */
+
+router.get('/admin/polls/bus-time', requirePermission('poll.read'), async (req, res, next) => {
+  try { res.json({ poll: await polls.busTimePollResults(actorOf(req)) }); }
+  catch (e) { next(e); }
+});
+
+router.get('/admin/polls/bus-time/export', requirePermission('poll.read'), async (req, res, next) => {
+  try {
+    const out = await polls.exportBusTimePoll(actorOf(req));
+    res.setHeader('content-type', 'text/csv; charset=utf-8');
+    res.setHeader('content-disposition', `attachment; filename="${out.filename}"`);
+    res.send(out.csv);
+  } catch (e) { next(e); }
 });
 
 /* ---------------------------------------------------------------- audit */

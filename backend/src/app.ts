@@ -15,11 +15,12 @@ import { currentTransport } from './integrations/email/index.ts';
 import authRoutes, { attachSession, authErrorHandler } from './http/auth.routes.ts';
 import { noStoreForAuthenticated, retryAfterHeader } from './http/security-headers.ts';
 import tripRoutes from './http/trips.routes.ts';
+import pollRoutes from './http/polls.routes.ts';
 import bookingRoutes from './http/bookings.routes.ts';
 import boardingRoutes from './http/boarding.routes.ts';
 import adminRoutes from './http/admin.routes.ts';
 import { sweepExpiredHolds } from './domain/seats.ts';
-import { processPendingEvents, dispatchPendingRefunds } from './domain/payments.ts';
+import { processPendingEvents, dispatchPendingRefunds, automaticRefundsEnabled } from './domain/payments.ts';
 
 export function createApp() {
   const app = express();
@@ -57,6 +58,7 @@ export function createApp() {
 
   app.use('/api', authRoutes);
   app.use('/api', tripRoutes);
+  app.use('/api', pollRoutes);
   app.use('/api', boardingRoutes);
   app.use('/api', adminRoutes);
 
@@ -90,11 +92,15 @@ export function startJobs(provider: ReturnType<typeof createRazorpayProvider>) {
   const every = (ms: number, name: string, fn: () => Promise<unknown>) =>
     setInterval(() => { void fn().catch(e => console.error('[job:%s]', name, e.message)); }, ms);
 
-  return [
+  const timers = [
     every(30_000, 'sweep', sweepExpiredHolds),
     every(20_000, 'events', () => processPendingEvents(provider)),
-    every(60_000, 'refunds', () => dispatchPendingRefunds(provider)),
   ];
+  if (automaticRefundsEnabled())
+    timers.push(every(60_000, 'refunds', () => dispatchPendingRefunds(provider)));
+  else
+    console.warn('[dlt] automatic refund dispatch is OFF (AUTO_REFUNDS_ENABLED=false)');
+  return timers;
 }
 
 /* ---------------------------------------------------------------- entry */

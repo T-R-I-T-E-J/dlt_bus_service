@@ -71,8 +71,9 @@ async function seed() {
   const v = (await q(`INSERT INTO vehicles (name,registration,row_count)
     VALUES ('DLT-01','TS07 AA 1111',11) RETURNING id`)).rows[0].id;
   TRIP = (await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
-    VALUES ($1,$2, now() + interval '2 days', 259, 'OPEN') RETURNING id`, [r, v])).rows[0].id;
+    VALUES ($1,$2, now() + interval '2 days', 259, 'DRAFT') RETURNING id`, [r, v])).rows[0].id;
   await q('SELECT materialise_trip_seats($1)', [TRIP]);
+  await q("UPDATE trips SET status='OPEN' WHERE id=$1", [TRIP]);
 }
 
 const seatRow = (n: string) =>
@@ -410,14 +411,17 @@ describe('allocation and the late-settlement defect (F-01)', () => {
     assert.equal(n.n, 1, 'never two allocations of one seat');
   });
 
-  test('the unique index is a backstop even if a code path forgets the function', async () => {
+  test('the database guard refuses direct inventory writes after publish', async () => {
     const seat = (await q('SELECT * FROM hold_seat($1,$2,$3::uuid,NULL)', [TRIP, '2A', ALICE])).rows[0];
     const bk = await bookingFor(ALICE, 'DLT-2005');
     await q('SELECT allocate_seat_to_booking($1,$2)', [seat.id, bk]);
     await assert.rejects(q(
       `INSERT INTO trip_seats (trip_id,seat_number,seat_row,seat_type,status,booking_id)
        VALUES ($1,'2A',2,'WINDOW','BOOKED',$2)`, [TRIP, bk]),
-      (e: any) => e.code === '23505');
+      (e: any) => {
+        assert.match(e.message, /Inventory can only be generated for drafts/);
+        return true;
+      });
   });
 
   test('two bookings settling for the same seat at once: one wins', async () => {

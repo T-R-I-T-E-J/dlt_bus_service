@@ -14,6 +14,9 @@
 import type { Pool } from 'pg';
 
 export async function resetTables(pool: Pool, tableList: string): Promise<void> {
+  const target = new URL(process.env.DATABASE_URL || 'postgresql://invalid/invalid');
+  if (!['127.0.0.1', 'localhost'].includes(target.hostname) || !/^\/dlt_phase1_test/.test(target.pathname))
+    throw new Error('Destructive fixtures require the disposable local dlt_phase1_test database');
   const c = await pool.connect();
   try {
     /* Defensive: a test that left its connection in an aborted transaction

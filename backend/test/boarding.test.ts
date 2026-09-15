@@ -40,28 +40,44 @@ const student = () => ({ userId: STUDENT, role: 'STUDENT', name: 'Aarav' });
 
 /** A confirmed booking with N passengers on `trip`, returning tokens+codes. */
 async function confirmedBooking(trip: string, seats: string[], code: string) {
-  const { rows: [b] } = await q(
-    `INSERT INTO bookings (code, boarding_code, trip_id, user_id, status, kind,
-                           unit_price, total_amount, contact_phone)
-     VALUES ($1,$2,$3,$4,'CONFIRMED','ONLINE',259,$5,'9876543210') RETURNING *`,
-    [code, 'WX' + code.slice(-4), trip, STUDENT, 259 * seats.length]);
-  await q(`INSERT INTO payments (booking_id, amount, status, provider, provider_payment_id)
-           VALUES ($1,$2,'SUCCESS','RAZORPAY',$3)`, [b.id, b.total_amount, 'pay_' + code]);
-  const out: any = { booking: b, passengers: [] as any[] };
-  for (const s of seats) {
-    const { rows: [seat] } = await q(
-      `UPDATE trip_seats SET status='BOOKED', booking_id=$1, hold_by=NULL, hold_expires_at=NULL
-        WHERE trip_id=$2 AND seat_number=$3 RETURNING id`, [b.id, trip, s]);
-    const { rows: [p] } = await q(
-      `INSERT INTO booking_passengers (booking_id, trip_seat_id, name, student_id, phone,
-                                       seat_number, seat_type)
-       VALUES ($1,$2,$3,$4,'9876543210',$5,'AISLE') RETURNING *`,
-      [b.id, seat.id, `Passenger ${s}`, 'WU' + s, s]);
-    const token = `dlt.${code}${s}`.toLowerCase();
-    await q(`INSERT INTO boarding_passes (passenger_id, booking_id, trip_id, qr_token)
-             VALUES ($1,$2,$3,$4)`, [p.id, b.id, trip, token]);
-    out.passengers.push({ ...p, token });
+  const c = await pool.connect();
+  const out: any = { booking: null, passengers: [] as any[] };
+  try {
+    await c.query('BEGIN');
+    /* Historical fixture: the ticket existed before the trip entered BOARDING.
+     * The operation under test still runs with all Phase 1 guards enabled. */
+    await c.query(`SET LOCAL session_replication_role = replica`);
+    const { rows: [b] } = await c.query(
+      `INSERT INTO bookings (code, boarding_code, trip_id, user_id, status, kind,
+                             unit_price, total_amount, contact_phone)
+       VALUES ($1,$2,$3,$4,'CONFIRMED','ONLINE',259,$5,'9876543210') RETURNING *`,
+      [code, 'WX' + code.slice(-4), trip, STUDENT, 259 * seats.length]);
+    out.booking = b;
+    await c.query(`INSERT INTO payments (booking_id, amount, status, provider, provider_payment_id)
+             VALUES ($1,$2,'SUCCESS','RAZORPAY',$3)`, [b.id, b.total_amount, 'pay_' + code]);
+    for (const s of seats) {
+      const { rows: [seat] } = await c.query(
+        `UPDATE trip_seats SET status='BOOKED', booking_id=$1, hold_by=NULL, hold_expires_at=NULL
+          WHERE trip_id=$2 AND seat_number=$3 RETURNING id`, [b.id, trip, s]);
+      const { rows: [p] } = await c.query(
+        `INSERT INTO booking_passengers (booking_id, trip_seat_id, name, student_id, phone,
+                                         seat_number, seat_type)
+         VALUES ($1,$2,$3,$4,'9876543210',$5,'AISLE') RETURNING *`,
+        [b.id, seat.id, `Passenger ${s}`, 'WU' + s, s]);
+      const token = `dlt.${code}${s}`.toLowerCase();
+      await c.query(`INSERT INTO boarding_passes (passenger_id, booking_id, trip_id, qr_token)
+               VALUES ($1,$2,$3,$4)`, [p.id, b.id, trip, token]);
+      out.passengers.push({ ...p, token });
+    }
+    await c.query('COMMIT');
+  } catch (e) {
+    await c.query('ROLLBACK');
+    throw e;
+  } finally {
+    c.release();
   }
+  await q(`UPDATE trips SET status='BOOKING_CLOSED' WHERE id=$1 AND status='OPEN'`, [trip]);
+  await q(`UPDATE trips SET status='BOARDING' WHERE id=$1 AND status='BOOKING_CLOSED'`, [trip]);
   return out;
 }
 
@@ -83,11 +99,15 @@ async function seed() {
   const v = (await q(`INSERT INTO vehicles (name,registration,row_count)
     VALUES ('DLT-01','TS07 AA 1111',11) RETURNING id`)).rows[0].id;
   TRIP_A = (await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
-    VALUES ($1,$2, now() + interval '30 minutes', 259,'BOARDING') RETURNING id`, [r, v])).rows[0].id;
+    VALUES ($1,$2, now() + interval '30 minutes', 259,'DRAFT') RETURNING id`, [r, v])).rows[0].id;
   TRIP_B = (await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
-    VALUES ($1,$2, now() + interval '4 hours', 259,'OPEN') RETURNING id`, [r, v])).rows[0].id;
+    VALUES ($1,$2, now() + interval '4 hours', 259,'DRAFT') RETURNING id`, [r, v])).rows[0].id;
   await q('SELECT materialise_trip_seats($1)', [TRIP_A]);
   await q('SELECT materialise_trip_seats($1)', [TRIP_B]);
+  await q("UPDATE trips SET status='OPEN' WHERE id=$1", [TRIP_A]);
+  await q("UPDATE trips SET status='BOOKING_CLOSED' WHERE id=$1", [TRIP_A]);
+  await q("UPDATE trips SET status='BOARDING' WHERE id=$1", [TRIP_A]);
+  await q("UPDATE trips SET status='OPEN' WHERE id=$1", [TRIP_B]);
   await q(`INSERT INTO trip_staff (trip_id,user_id,assigned_by) VALUES ($1,$2,$3)`,
     [TRIP_A, STAFF_A, OPS]);
 }
@@ -212,6 +232,7 @@ describe('the validation chain, in its documented order', () => {
      * contract is "the single trip you may act on" — a bad trade for a nicer
      * message. Fail closed, and refuse. */
     const bk = await confirmedBooking(TRIP_A, ['2B'], 'DLT-10008');
+    await q(`UPDATE trips SET status='DEPARTED' WHERE id=$1`, [TRIP_A]);
     await q(`UPDATE trips SET status='COMPLETED', pinned_status='COMPLETED' WHERE id=$1`, [TRIP_A]);
     await assert.rejects(
       boarding.scan({ code: bk.passengers[0].token }, staffA()),
@@ -227,6 +248,7 @@ describe('the validation chain, in its documented order', () => {
      * assignment, so they DO reach the chain and get the actionable verdict.
      * This is what keeps the completed-journey check covered. */
     const bk = await confirmedBooking(TRIP_A, ['2B'], 'DLT-10009');
+    await q(`UPDATE trips SET status='DEPARTED' WHERE id=$1`, [TRIP_A]);
     await q(`UPDATE trips SET status='COMPLETED', pinned_status='COMPLETED' WHERE id=$1`, [TRIP_A]);
     const out = await boarding.scan({ code: bk.passengers[0].token, tripId: TRIP_A }, ops());
     assert.equal(out.result, 'INVALID');
@@ -248,7 +270,7 @@ describe('the validation chain, in its documented order', () => {
     await boarding.denyBoarding(bk.passengers[0].id, 'No student ID at the door', ops());
     const out = await boarding.scan({ code: bk.passengers[0].token }, staffA());
     assert.equal(out.result, 'INVALID');
-    assert.match(out.detail, /was denied boarding/);
+    assert.match(out.detail, /voided/);
   });
 
   test('ORDER MATTERS \u00b7 a cancelled booking on the wrong trip reports the trip first', async () => {
@@ -504,10 +526,11 @@ describe('manual boarding, denial and no-show', () => {
 
   test('a no-show is recorded without a refund, and cannot follow boarding', async () => {
     const bk = await confirmedBooking(TRIP_A, ['2A', '2B'], 'DLT-70004');
+    await boarding.scan({ code: bk.passengers[1].token }, staffA());
+    await q(`UPDATE trips SET status='DEPARTED' WHERE id=$1`, [TRIP_A]);
     await boarding.confirmNoShow(bk.passengers[0].id, 'Did not arrive by departure', ops());
     assert.equal(await statusOf(bk.passengers[0].id), 'NO_SHOW');
     assert.equal((await q('SELECT count(*)::int n FROM refunds')).rows[0].n, 0);
-    await boarding.scan({ code: bk.passengers[1].token }, staffA());
     await assert.rejects(boarding.confirmNoShow(bk.passengers[1].id, 'mistake', ops()),
       /boarded \u2014 that is not a no-show/);
   });

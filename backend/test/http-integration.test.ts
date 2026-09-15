@@ -92,7 +92,7 @@ async function truncateAll() {
   await resetTables(pool, `users, sessions, user_credentials, student_profiles,
     routes, vehicles, trips, trip_seats, bookings, booking_passengers,
     payments, refunds, provider_events, boarding_passes, boarding_events,
-    waitlist_entries, idempotency_keys, notification_requests, audit_logs`);
+    waitlist_entries, idempotency_keys, notification_requests, bus_time_poll_responses, audit_logs`);
 }
 
 const STUDENT = { name: 'Http Test', email: 'http-test@woxsen.edu.in',
@@ -104,8 +104,9 @@ async function seedTrip() {
   const v = (await q(`INSERT INTO vehicles (name,registration,row_count)
     VALUES ('DLT-01','TS07 AA 1111',14) RETURNING id`)).rows[0].id;
   const t = (await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
-    VALUES ($1,$2, now() + interval '3 days', 259,'OPEN') RETURNING id`, [r, v])).rows[0].id;
+    VALUES ($1,$2, now() + interval '3 days', 259,'DRAFT') RETURNING id`, [r, v])).rows[0].id;
   await q('SELECT materialise_trip_seats($1)', [t]);
+  await q("UPDATE trips SET status='OPEN' WHERE id=$1", [t]);
   return t;
 }
 
@@ -253,6 +254,32 @@ describe('HTTP integration — real Express, real middleware, real fetch', () =>
       const { rows } = await q(`SELECT signature_ok FROM provider_events WHERE provider_event_id='evt-http-raw-test'`);
       assert.equal(rows.length, 1);
       assert.equal(rows[0].signature_ok, true);
+    });
+  });
+
+  describe('schedule poll: public cookie identity over real HTTP', () => {
+    test('no sign-in is needed and a second read returns the saved response', async () => {
+      const jar = new Jar();
+      const first = await call(jar, 'GET', '/api/polls/bus-time');
+      assert.equal(first.status, 200, JSON.stringify(first.body));
+      assert.equal(first.body.poll.options.length, 12);
+      assert.equal(first.body.poll.vote, null);
+      assert.equal(jar.has('dlt_poll'), true, 'the anonymous browser receives an HttpOnly poll identity');
+
+      const saved = await call(jar, 'POST', '/api/polls/bus-time', {
+        choices: ['10:00', '13:00'], name: 'HTTP poll student', phone: '9876543210',
+      });
+      assert.equal(saved.status, 201, JSON.stringify(saved.body));
+      assert.deepEqual(saved.body.vote.choices, ['10:00', '13:00']);
+
+      const again = await call(jar, 'GET', '/api/polls/bus-time');
+      assert.deepEqual(again.body.poll.vote.choices, ['10:00', '13:00']);
+      assert.equal((await q('SELECT count(*)::int n FROM bus_time_poll_responses')).rows[0].n, 1);
+    });
+
+    test('aggregate results remain behind staff authentication', async () => {
+      const res = await call(new Jar(), 'GET', '/api/admin/polls/bus-time');
+      assert.equal(res.status, 401);
     });
   });
 

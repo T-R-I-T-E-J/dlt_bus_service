@@ -350,9 +350,10 @@ describe('authentication', () => {
 
     test('two accounts still cannot share one real studentId', async () => {
       await auth.signUp(STUDENT, {});
-      await assert.rejects(
+      await rejectsWith(
         auth.signUp({ ...STUDENT, email: 'diya@woxsen.edu.in' }, {}),
-        /./, 'a duplicate real studentId must still be refused by the unique index');
+        'CONFLICT',
+        /student ID/);
     });
   });
 
@@ -482,8 +483,9 @@ async function seedGuestHeldSeat(guestToken: string): Promise<string> {
        RETURNING id`);
     const { rows: [t] } = await c.query(
       `INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
-       VALUES ($1,$2, now() + interval '2 days', 259,'OPEN') RETURNING id`, [r.id, v.id]);
+       VALUES ($1,$2, now() + interval '2 days', 259,'DRAFT') RETURNING id`, [r.id, v.id]);
     await c.query('SELECT materialise_trip_seats($1)', [t.id]);
+    await c.query("UPDATE trips SET status='OPEN' WHERE id=$1", [t.id]);
     const { rows: [s] } = await c.query(
       `UPDATE trip_seats SET status='HELD', hold_guest_token=$1,
               hold_expires_at = now() + interval '10 minutes'

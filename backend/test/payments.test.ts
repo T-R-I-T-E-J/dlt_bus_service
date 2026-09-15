@@ -38,7 +38,9 @@ import pg from 'pg';
 import { createHmac } from 'node:crypto';
 import { createFakeRazorpay } from '../src/integrations/razorpay/index.ts';
 import * as pay from '../src/domain/payments.ts';
+import * as seats from '../src/domain/seats.ts';
 import type { Actor } from '../src/domain/authz.ts';
+import type { PaymentProvider } from '../src/domain/payment-provider.ts';
 import { resetTables } from './_reset.ts';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
@@ -53,6 +55,49 @@ const FARE = 259;
  * wraps one for the guard. Ownership is by userId; role only drives the
  * permission fallback, so STUDENT is the right default for the owners. */
 const A = (userId: string, role = 'STUDENT'): Actor => ({ userId, role });
+
+async function fixtureSql(sql: string, args: unknown[] = []) {
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    await c.query(`SET LOCAL session_replication_role = replica`);
+    const out = await c.query(sql, args);
+    await c.query('COMMIT');
+    return out;
+  } catch (e) {
+    await c.query('ROLLBACK');
+    throw e;
+  } finally {
+    c.release();
+  }
+}
+
+function nonIdempotentOrderProvider(): PaymentProvider & { orderCalls: () => number } {
+  let calls = 0;
+  return {
+    name: 'RAZORPAY',
+    orderCalls: () => calls,
+    async createOrder(i) {
+      calls += 1;
+      const id = `order_LIVE_LIKE_${calls}`;
+      return { providerOrderId: id, checkoutHandle: id, providerStatus: 'created' };
+    },
+    async fetchOrder(providerOrderId) {
+      return {
+        providerOrderId,
+        kind: 'IGNORED',
+        providerStatus: 'created',
+        amountRupees: FARE,
+        paymentId: null,
+      };
+    },
+    async createRefund() {
+      return { providerRefundId: 'rfnd_unused', providerStatus: 'pending', kind: 'IGNORED', acquirerReference: null };
+    },
+    verifyAndParseWebhook() { throw new Error('not used'); },
+    verifyCheckoutHandback() { return false; },
+  };
+}
 
 async function seed() {
   await resetTables(pool, `users, trips, routes, vehicles, trip_seats, bookings, booking_passengers,
@@ -70,8 +115,9 @@ async function seed() {
   const v = (await q(`INSERT INTO vehicles (name,registration,row_count)
     VALUES ('DLT-01','TS07 AA 1111',14) RETURNING id`)).rows[0].id;
   TRIP = (await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
-    VALUES ($1,$2, now() + interval '3 days', $3,'OPEN') RETURNING id`, [r, v, FARE])).rows[0].id;
+    VALUES ($1,$2, now() + interval '3 days', $3,'DRAFT') RETURNING id`, [r, v, FARE])).rows[0].id;
   await q('SELECT materialise_trip_seats($1)', [TRIP]);
+  await q("UPDATE trips SET status='OPEN' WHERE id=$1", [TRIP]);
   rp.orders.clear();
 }
 
@@ -246,6 +292,18 @@ describe('payment success [provider-simulated]', () => {
     const a1 = await pay.createCheckout(b.id, A(ALICE), rp) as any;
     const a2 = await pay.createCheckout(b.id, A(ALICE), rp) as any;
     assert.equal(a1.paymentId, a2.paymentId);
+  });
+
+  test('THE REPRODUCED DEFECT · a second checkout call reuses the stored provider order id', async () => {
+    const b = await booked(ALICE, ['6D']);
+    const liveLike = nonIdempotentOrderProvider();
+    const a1 = await pay.createCheckout(b.id, A(ALICE), liveLike) as any;
+    const a2 = await pay.createCheckout(b.id, A(ALICE), liveLike) as any;
+
+    assert.equal(a1.paymentId, a2.paymentId);
+    assert.equal(a1.providerOrderId, a2.providerOrderId);
+    assert.equal(a1.checkoutHandle, a2.checkoutHandle);
+    assert.equal(liveLike.orderCalls(), 1);
   });
 
   test('another student cannot pay for a booking that is not theirs', async () => {
@@ -423,7 +481,8 @@ describe('failure, timeout and stale intents [provider-simulated]', () => {
     await deliver(co.paymentId, 'captured', { amountRupees: 100 });
     const m = await money(b.id);
     assert.equal(m.received, 100);
-    assert.equal(m.returned, 100, 'the wrong amount goes straight back');
+    assert.equal(m.returned, 0, 'the pending obligation is not money returned yet');
+    assert.equal(m.refundable, 0, 'the obligation consumes the refundable balance');
     assert.notEqual((await pay.bookingViewById(b.id)).status, 'CONFIRMED');
   });
 
@@ -459,7 +518,7 @@ describe('failure, timeout and stale intents [provider-simulated]', () => {
     const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
     await deliver(co.paymentId, 'captured', { amountRupees: 100 });
 
-    /* the discrepancy refund already returned the whole ₹100 */
+    /* the discrepancy refund obligation already consumes the whole ₹100 */
     assert.equal((await money(b.id)).refundable, 0, 'nothing is left to give back');
     /* and an override cannot manufacture the ₹159 that never arrived */
     await assert.rejects(pay.overrideRefund({ bookingId: b.id, amount: 159,
@@ -487,7 +546,7 @@ describe('failure, timeout and stale intents [provider-simulated]', () => {
     await deliver(co.paymentId, 'captured', { amountRupees: 300 });
     const m = await money(b.id);
     assert.equal(m.received, 300, 'we received ₹300 and must say so');
-    assert.equal(m.returned, 300, 'all of it goes back');
+    assert.equal(m.returned, 0, 'pending refund obligation is not reported as returned');
     assert.equal(m.refundable, 0);
     assert.notEqual((await pay.bookingViewById(b.id)).status, 'CONFIRMED');
   });
@@ -504,7 +563,8 @@ describe('failure, timeout and stale intents [provider-simulated]', () => {
 
     const m = await money(b.id);
     assert.equal(m.received, 100, 'still one receipt');
-    assert.equal(m.returned, 100, 'still ONE refund — not two');
+    assert.equal(m.returned, 0, 'the pending obligation is still not money returned');
+    assert.equal(m.refundable, 0, 'still ONE obligation — not two');
     const { rows: [n] } = await q(
       'SELECT count(*)::int n FROM refunds WHERE booking_id=$1', [b.id]);
     assert.equal(n.n, 1);
@@ -541,7 +601,9 @@ describe('F-01 · late settlement [provider-simulated]', () => {
 
     const a = await pay.bookingViewById(alices.id);
     assert.notEqual(a.status, 'CONFIRMED', 'an abandoned booking must never be resurrected');
-    assert.equal((await money(alices.id)).returned, FARE, 'her money goes back in full');
+    const am = await money(alices.id);
+    assert.equal(am.returned, 0, 'the pending obligation is not money returned yet');
+    assert.equal(am.refundable, 0, 'her full fare is obligated for return');
 
     const seat = await seatOf('9A');
     assert.equal(seat.booking_id, bobs.id, 'the seat belongs to the student who actually paid');
@@ -555,6 +617,10 @@ describe('F-01 · late settlement [provider-simulated]', () => {
   test('operations is told, rather than the money quietly sitting there', async () => {
     const b = await booked(ALICE, ['10A']);
     const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await q(
+      `INSERT INTO notification_requests (kind,user_id,trip_id,email,reason)
+       VALUES ('GET_NOTIFIED',$1,$2,'alice@woxsen.edu.in','Existing waitlist notice')`,
+      [ALICE, TRIP]);
     await q(`UPDATE bookings SET status='ABANDONED' WHERE id=$1`, [b.id]);
     await deliver(co.paymentId, 'captured');
     const { rows } = await q(`SELECT reason FROM notification_requests WHERE reason LIKE '%Late settlement%'`);
@@ -567,7 +633,7 @@ describe('F-01 · late settlement [provider-simulated]', () => {
 describe('F-03 · repricing', () => {
   test('THE REPRODUCED DEFECT · a fare change returns data instead of looping forever', async () => {
     const b = await booked(ALICE, ['11A']);
-    await q('UPDATE trips SET price = 299 WHERE id=$1', [TRIP]);
+    await fixtureSql('UPDATE trips SET price = 299 WHERE id=$1', [TRIP]);
 
     const first = await pay.createCheckout(b.id, A(ALICE), rp);
     const second = await pay.createCheckout(b.id, A(ALICE), rp);
@@ -581,7 +647,7 @@ describe('F-03 · repricing', () => {
 
   test('the student accepts the new total and can then pay it', async () => {
     const b = await booked(ALICE, ['11B']);
-    await q('UPDATE trips SET price = 299 WHERE id=$1', [TRIP]);
+    await fixtureSql('UPDATE trips SET price = 299 WHERE id=$1', [TRIP]);
     await pay.createCheckout(b.id, A(ALICE), rp);
     const accepted = await pay.acceptReprice(b.id, A(ALICE));
     assert.equal(accepted.totalAmount, 299);
@@ -595,7 +661,7 @@ describe('F-03 · repricing', () => {
   test('accepting a reprice cancels any intent created at the old amount', async () => {
     const b = await booked(ALICE, ['11C']);
     const stale = await pay.createCheckout(b.id, A(ALICE), rp) as any;
-    await q('UPDATE trips SET price = 299 WHERE id=$1', [TRIP]);
+    await fixtureSql('UPDATE trips SET price = 299 WHERE id=$1', [TRIP]);
     await pay.createCheckout(b.id, A(ALICE), rp);
     await pay.acceptReprice(b.id, A(ALICE));
     const { rows: [p] } = await q('SELECT status FROM payments WHERE id=$1', [stale.paymentId]);
@@ -623,7 +689,8 @@ describe('duplicate payment [provider-simulated]', () => {
     assert.equal(dup.status, 'DUPLICATE');
     const m = await money(b.id);
     assert.equal(m.received, FARE * 2);
-    assert.equal(m.returned, FARE, 'exactly one fare goes back');
+    assert.equal(m.returned, 0, 'the duplicate refund is not returned until provider settlement');
+    assert.equal(m.refundable, FARE, 'the duplicate obligation leaves the original fare refundable');
     assert.equal((await pay.bookingViewById(b.id)).status, 'CONFIRMED', 'the student keeps their seat');
   });
 });
@@ -659,7 +726,7 @@ describe('cancellation and refunds (F-05, F-12)', () => {
 
   test('inside 12 hours the policy refunds nothing', async () => {
     const b = await confirmed(ALICE, '2C');
-    await q(`UPDATE trips SET departure_at = now() + interval '3 hours' WHERE id=$1`, [TRIP]);
+    await fixtureSql(`UPDATE trips SET departure_at = now() + interval '3 hours' WHERE id=$1`, [TRIP]);
     assert.equal((await pay.cancellationQuote(b.id, A(ALICE))).amount, 0);
     assert.equal((await pay.cancelBooking(b.id, A(ALICE))).refundAmount, 0);
   });
@@ -688,7 +755,7 @@ describe('cancellation and refunds (F-05, F-12)', () => {
 
   test('F-12 · the override refuses \u20b90 and refuses more than is held', async () => {
     const b = await confirmed(ALICE, '4C');
-    await q(`UPDATE trips SET departure_at = now() + interval '3 hours' WHERE id=$1`, [TRIP]);
+    await fixtureSql(`UPDATE trips SET departure_at = now() + interval '3 hours' WHERE id=$1`, [TRIP]);
     await assert.rejects(pay.overrideRefund({ bookingId: b.id, amount: 0,
       reason: 'nothing at all', actorId: SUPER }), /zero-value/);
     await assert.rejects(pay.overrideRefund({ bookingId: b.id, amount: FARE + 500,
@@ -699,7 +766,7 @@ describe('cancellation and refunds (F-05, F-12)', () => {
 
   test('F-12 · a real override refunds inside the cutoff and reports the true amount', async () => {
     const b = await confirmed(ALICE, '4D');
-    await q(`UPDATE trips SET departure_at = now() + interval '3 hours' WHERE id=$1`, [TRIP]);
+    await fixtureSql(`UPDATE trips SET departure_at = now() + interval '3 hours' WHERE id=$1`, [TRIP]);
     assert.equal((await pay.cancellationQuote(b.id, A(ALICE))).amount, 0);
     const out = await pay.overrideRefund({ bookingId: b.id, amount: 100,
       reason: 'Departure retimed by 90 minutes', cancelBooking: true, actorId: SUPER });
@@ -727,28 +794,36 @@ describe('cancellation and refunds (F-05, F-12)', () => {
 /* ============================================ refund dispatch (new in Razorpay) */
 
 describe('refund dispatch and refund webhooks [provider-simulated]', () => {
-  test('THE GAP FROM LAST PHASE · a pending refund is actually sent to the provider', async () => {
-    const b = await booked(ALICE, ['13A']);
-    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
-    await deliver(co.paymentId, 'captured', { providerPaymentId: 'pay_refundable' });
-    await pay.cancelBooking(b.id, A(ALICE));
+  test('AUTO_REFUNDS_ENABLED=false leaves a pending obligation undispatched', async () => {
+    const prior = process.env.AUTO_REFUNDS_ENABLED;
+    process.env.AUTO_REFUNDS_ENABLED = 'false';
+    try {
+      const b = await booked(ALICE, ['13A']);
+      const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+      await deliver(co.paymentId, 'captured', { providerPaymentId: 'pay_refundable' });
+      await pay.cancelBooking(b.id, A(ALICE));
 
-    const before = await q(`SELECT provider_refund_id FROM refunds WHERE booking_id=$1`, [b.id]);
-    assert.equal(before.rows[0].provider_refund_id, null, 'not yet dispatched');
+      const before = await q(`SELECT provider_refund_id FROM refunds WHERE booking_id=$1`, [b.id]);
+      assert.equal(before.rows[0].provider_refund_id, null, 'not yet dispatched');
 
-    const sent = await pay.dispatchPendingRefunds(rp);
-    assert.equal(sent, 1);
-    const after = await q(`SELECT provider_refund_id, status FROM refunds WHERE booking_id=$1`, [b.id]);
-    assert.match(after.rows[0].provider_refund_id, /^rfnd_/);
-    assert.equal(after.rows[0].status, 'REFUND_PENDING', 'still pending until the provider says otherwise');
+      const sent = await pay.dispatchPendingRefunds(rp);
+      assert.equal(sent, 0, 'automatic refund dispatch is disabled in production policy');
+      const after = await q(`SELECT provider_refund_id, status FROM refunds WHERE booking_id=$1`, [b.id]);
+      assert.equal(after.rows[0].provider_refund_id, null);
+      assert.equal(after.rows[0].status, 'REFUND_PENDING');
+    } finally {
+      if (prior === undefined) delete process.env.AUTO_REFUNDS_ENABLED;
+      else process.env.AUTO_REFUNDS_ENABLED = prior;
+    }
   });
 
   test('refund.processed is what finally settles it', async () => {
     const b = await booked(ALICE, ['13B']);
     const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
     await deliver(co.paymentId, 'captured', { providerPaymentId: 'pay_r2' });
-    await pay.cancelBooking(b.id, A(ALICE));
-    await pay.dispatchPendingRefunds(rp);
+    await pay.cancelBooking(b.id, A(SUPER, 'SUPER_ADMIN'));
+    await q(`UPDATE refunds SET provider_refund_id='rfnd_r2', provider_status='created'
+              WHERE booking_id=$1`, [b.id]);
     const { rows: [r] } = await q('SELECT * FROM refunds WHERE booking_id=$1', [b.id]);
 
     await deliverRefund(r.id, r.provider_refund_id, 'processed');
@@ -761,7 +836,8 @@ describe('refund dispatch and refund webhooks [provider-simulated]', () => {
     const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
     await deliver(co.paymentId, 'captured', { providerPaymentId: 'pay_r3' });
     await pay.cancelBooking(b.id, A(ALICE));
-    await pay.dispatchPendingRefunds(rp);
+    await q(`UPDATE refunds SET provider_refund_id='rfnd_r3', provider_status='created'
+              WHERE booking_id=$1`, [b.id]);
     const { rows: [r] } = await q('SELECT * FROM refunds WHERE booking_id=$1', [b.id]);
     await deliverRefund(r.id, r.provider_refund_id, 'failed');
     const { rows: [done] } = await q('SELECT status FROM refunds WHERE id=$1', [r.id]);
@@ -790,7 +866,7 @@ describe('refund dispatch and refund webhooks [provider-simulated]', () => {
     await pay.cancelBooking(b.id, A(SUPER, 'SUPER_ADMIN'));
     await pay.dispatchPendingRefunds(rp);
     const { rows: [r] } = await q('SELECT provider_status, status FROM refunds WHERE booking_id=$1', [b.id]);
-    assert.match(r.provider_status, /manual settlement/);
+    assert.equal(r.provider_status, 'no captured provider payment — needs manual settlement');
     assert.equal(r.status, 'REFUND_PENDING');
   });
 });
@@ -899,11 +975,12 @@ describe('M-2/M-3 · paidAt and refund rows on the booking projection', () => {
     assert.equal(pendingView.refunds[0].status, 'REFUND_PENDING');
     assert.equal(pendingView.refunds[0].amount, FARE);
     assert.ok(pendingView.refunds[0].createdAt, 'each row carries when it was raised');
-    assert.equal(pendingView.returned, FARE,
-      'the total counts it as returned while it is in flight');
+    assert.equal(pendingView.returned, 0,
+      'a pending obligation is not presented as money already returned');
 
     /* the total alone cannot tell these two states apart — the row can */
-    await pay.dispatchPendingRefunds(rp);
+    await q(`UPDATE refunds SET provider_refund_id='rfnd_m3a', provider_status='created'
+              WHERE booking_id=$1`, [b.id]);
     const { rows: [r] } = await q('SELECT * FROM refunds WHERE booking_id=$1', [b.id]);
     await deliverRefund(r.id, r.provider_refund_id, 'processed');
 
@@ -933,7 +1010,7 @@ describe('M-2/M-3 · paidAt and refund rows on the booking projection', () => {
     const times = v.refunds.map((x: any) => new Date(x.createdAt).getTime());
     assert.deepEqual(times, [...times].sort((x, y) => x - y), 'rows are oldest first');
     const summed = v.refunds
-      .filter((x: any) => x.status !== 'REFUND_FAILED')
+      .filter((x: any) => x.status === 'REFUNDED')
       .reduce((a: number, x: any) => a + x.amount, 0);
     assert.equal(summed, v.returned, 'the rows and the total agree');
   });
@@ -942,7 +1019,7 @@ describe('M-2/M-3 · paidAt and refund rows on the booking projection', () => {
     const b = await booked(ALICE, ['3B']);
     const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
     await deliver(co.paymentId, 'captured');
-    await pay.cancelBooking(b.id, A(ALICE));
+    await pay.cancelBooking(b.id, A(SUPER, 'SUPER_ADMIN'));
 
     const v = await pay.bookingViewById(b.id);
     assert.ok(v.returned <= v.received, 'money out never exceeds money in');
@@ -960,7 +1037,7 @@ describe('M-2/M-3 · paidAt and refund rows on the booking projection', () => {
     assert.ok(!('pickupPoint' in v.trip),
       'no pickup point is invented — no column holds one');
 
-    await q(`UPDATE trips SET status='CANCELLED', cancel_reason='Vehicle breakdown' WHERE id=$1`, [TRIP]);
+    await fixtureSql(`UPDATE trips SET status='CANCELLED', cancel_reason='Vehicle breakdown' WHERE id=$1`, [TRIP]);
     const after = await pay.bookingViewById(b.id);
     assert.equal(after.trip.cancelledReason, 'Vehicle breakdown',
       'the reason comes from trips.cancel_reason, the authoritative column');
@@ -976,6 +1053,8 @@ describe('M-2/M-3 · paidAt and refund rows on the booking projection', () => {
 
     const { rows: [pax] } = await q(
       'SELECT id FROM booking_passengers WHERE booking_id=$1', [b.id]);
+    await q(`UPDATE trips SET status='BOOKING_CLOSED' WHERE id=$1`, [TRIP]);
+    await q(`UPDATE trips SET status='BOARDING' WHERE id=$1`, [TRIP]);
     await q(`UPDATE booking_passengers SET boarding_status='BOARDED' WHERE id=$1`, [pax.id]);
     await q(`SELECT log_boarding($1,$2,$3,'VALID','SCAN',NULL,NULL)`, [TRIP, pax.id, SUPER]);
 
@@ -1003,5 +1082,364 @@ describe('§12 · the booking cap is five, at every layer that enforces it', () 
       passengers: ['11A', '11B', '11C', '11D', '12A', '12B'].map((s, i) => ({
         seatNumber: s, name: `Passenger ${i + 1}`, studentId: `WU30000${i}` })),
     }), /Up to 5 passengers in one booking/);
+  });
+});
+
+/* ========================================== partial settlement · 019 / 020 */
+
+describe('partial settlement · claim what is still ours, refund only what is gone', () => {
+
+  /** Put a seat beyond this booking's reach the way a competing booking does:
+   *  still HELD, but owned by somebody else. This is 018's orphan shape — the
+   *  one case where a booking is live yet no longer owns one of its seats. */
+  async function stolenBy(seat: string, otherBookingId: string, thief: string) {
+    await q(
+      `UPDATE trip_seats SET hold_by = $2::uuid, booking_id = $3,
+              hold_expires_at = now() + interval '10 minutes', updated_at = now()
+        WHERE trip_id = $1 AND seat_number = $4`,
+      [TRIP, thief, otherBookingId, seat]);
+  }
+
+  test('every seat still available · the whole booking confirms, nothing refunded', async () => {
+    const b = await booked(ALICE, ['6A', '6B', '6C']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+
+    await deliver(co.paymentId, 'captured');
+
+    const v = await pay.bookingViewById(b.id);
+    assert.equal(v.status, 'CONFIRMED');
+    for (const n of ['6A', '6B', '6C']) {
+      const s = await seatOf(n);
+      assert.equal(s.status, 'BOOKED', `${n} must be permanently booked`);
+      assert.equal(s.booking_id, b.id);
+      assert.equal(s.hold_expires_at, null, 'a booked seat carries no hold');
+    }
+    const m = await money(b.id);
+    assert.equal(m.received, FARE * 3);
+    assert.equal(m.returned, 0, 'nothing is refunded when nothing was lost');
+    /* every passenger keeps a scannable pass */
+    const { rows: passes } = await q(
+      `SELECT bp.status FROM booking_passengers p
+         JOIN boarding_passes bp ON bp.passenger_id = p.id WHERE p.booking_id=$1`, [b.id]);
+    assert.equal(passes.length, 3);
+    assert.ok(passes.every((r: any) => r.status === 'VALID'));
+  });
+
+  test('one lost seat refunds ONE seat, and the booking stands on the rest', async () => {
+    const bob = await booked(BOB, ['6D']);
+    const b = await booked(ALICE, ['6A', '6B']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await stolenBy('6B', bob.id, BOB);
+
+    await deliver(co.paymentId, 'captured');
+
+    assert.equal((await pay.bookingViewById(b.id)).status, 'CONFIRMED',
+      'the seat they did get still stands');
+    assert.equal((await seatOf('6A')).status, 'BOOKED');
+    const m = await money(b.id);
+    assert.equal(m.received, FARE * 2);
+    assert.equal(m.returned, 0, 'the pending obligation is not money returned yet');
+    assert.equal(m.refundable, FARE, 'exactly one seat is obligated, not the whole booking');
+  });
+
+  test('F-01 · the lost seat is never taken from whoever holds it', async () => {
+    const bob = await booked(BOB, ['6D']);
+    const b = await booked(ALICE, ['6A', '6B']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await stolenBy('6B', bob.id, BOB);
+    await deliver(co.paymentId, 'captured');
+    assert.equal((await seatOf('6B')).booking_id, bob.id,
+      'two students must never end up on one seat');
+  });
+
+  test('when every requested seat is gone the whole payment goes back', async () => {
+    const bob = await booked(BOB, ['6D']);
+    const b = await booked(ALICE, ['6A']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await stolenBy('6A', bob.id, BOB);
+    await deliver(co.paymentId, 'captured');
+    assert.notEqual((await pay.bookingViewById(b.id)).status, 'CONFIRMED');
+    const m = await money(b.id);
+    assert.equal(m.returned, 0, 'pending full refund is not presented as returned');
+    assert.equal(m.refundable, 0);
+  });
+
+  test('a BLOCKED seat is lost, never claimed', async () => {
+    const b = await booked(ALICE, ['6A', '6B']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await q(`UPDATE trip_seats SET status='BLOCKED', booking_id=NULL, hold_by=NULL,
+                    hold_guest_token=NULL, hold_expires_at=NULL, block_reason='maintenance'
+              WHERE trip_id=$1 AND seat_number='6B'`, [TRIP]);
+    await deliver(co.paymentId, 'captured');
+    assert.equal((await seatOf('6B')).status, 'BLOCKED');
+    const m = await money(b.id);
+    assert.equal(m.returned, 0);
+    assert.equal(m.refundable, FARE);
+  });
+
+  test('DECIDED · an abandoned booking is NOT resurrected, even with its seat free', async () => {
+    const b = await booked(ALICE, ['6C']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await q(`UPDATE bookings SET hold_expires_at = now() - interval '1 min' WHERE id=$1`, [b.id]);
+    await q(`UPDATE trip_seats SET hold_expires_at = now() - interval '1 min' WHERE booking_id=$1`, [b.id]);
+    await q('SELECT sweep_expired_holds()');
+    assert.equal((await pay.bookingViewById(b.id)).status, 'ABANDONED');
+    assert.equal((await seatOf('6C')).status, 'AVAILABLE', 'the seat is genuinely free');
+
+    await deliver(co.paymentId, 'captured');
+
+    /* Deliberate. Reclaiming it would let a Razorpay checkout left open in an
+     * old tab confirm a second booking the student never wanted, charged twice.
+     * The remedy for a hold lapsing mid-payment is the bounded extension in
+     * createCheckout, not raising the booking from the dead. */
+    assert.notEqual((await pay.bookingViewById(b.id)).status, 'CONFIRMED');
+    const m = await money(b.id);
+    assert.equal(m.returned, 0, 'pending full refund is not presented as returned');
+    assert.equal(m.refundable, 0);
+  });
+
+  test('a refunded passenger is off the manifest and cannot board', async () => {
+    const bob = await booked(BOB, ['6D']);
+    const b = await booked(ALICE, ['6A', '6B']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await stolenBy('6B', bob.id, BOB);
+    await deliver(co.paymentId, 'captured');
+
+    const { rows: manifest } = await q(`SELECT * FROM trip_manifest($1,'OPS_ADMIN')`, [TRIP]);
+    const listed = manifest.map((r: any) => r.seat_number);
+    assert.ok(listed.includes('6A'), 'the seat they kept is on the list');
+    assert.ok(!listed.includes('6B'),
+      'a refunded seat must not be expected at the door');
+
+    const { rows: [pass] } = await q(
+      `SELECT bp.status FROM booking_passengers p
+         LEFT JOIN boarding_passes bp ON bp.passenger_id = p.id
+        WHERE p.booking_id=$1 AND p.seat_number='6B'`, [b.id]);
+    assert.notEqual(pass?.status, 'VALID', 'no scannable pass for a refunded seat');
+  });
+
+  /* ------------------------------------------------ the bounded hold window */
+
+  test('checkout renews the hold, but never past the ceiling', async () => {
+    const b = await booked(ALICE, ['7A']);
+    /* nearly lapsed — a student who lingered over the passenger form */
+    await q(`UPDATE bookings SET hold_expires_at = now() + interval '20 seconds' WHERE id=$1`, [b.id]);
+    await q(`UPDATE trip_seats SET hold_expires_at = now() + interval '20 seconds' WHERE booking_id=$1`, [b.id]);
+
+    await pay.createCheckout(b.id, A(ALICE), rp);
+    const { rows: [one] } = await q('SELECT hold_expires_at FROM bookings WHERE id=$1', [b.id]);
+    const gained = new Date(one.hold_expires_at).getTime() - Date.now();
+    assert.ok(gained > 8 * 60_000,
+      `checkout must buy a real window for a UPI approval; got ${Math.round(gained / 1000)}s`);
+    assert.equal(new Date((await seatOf('7A')).hold_expires_at).getTime(),
+      new Date(one.hold_expires_at).getTime(),
+      'booking and seat clocks must not drift (D-4)');
+
+    /* THE ABUSE THE CEILING EXISTS FOR: reopening checkout must not renew a
+     * hold forever, or one student could squat a seat indefinitely. */
+    for (let i = 0; i < 8; i++) await pay.createCheckout(b.id, A(ALICE), rp);
+    const { rows: [many] } = await q(
+      'SELECT hold_expires_at, created_at FROM bookings WHERE id=$1', [b.id]);
+    const ceiling = new Date(many.created_at).getTime()
+      + pay.CHECKOUT_HOLD_CEILING_MIN * 60_000;
+    assert.ok(new Date(many.hold_expires_at).getTime() <= ceiling + 1000,
+      'repeated /payments/create must not hold a seat past the ceiling');
+  });
+
+  /* ------------------------------------------------ release, mapped not 500 */
+
+  test('removing a seat a live pending booking owns is a CONFLICT, not a 500', async () => {
+    await booked(ALICE, ['7B']);
+    await assert.rejects(
+      () => seats.releaseSeat(TRIP, '7B', { userId: ALICE }),
+      (e: any) => {
+        assert.equal(e.code, 'CONFLICT', `expected a mapped CONFLICT, got ${e.code}`);
+        assert.match(e.message, /pending booking/);
+        return true;
+      });
+    assert.equal((await seatOf('7B')).status, 'HELD', 'the seat is left alone');
+  });
+
+  test('releasing a plain hold clears booking_id rather than violating the constraint', async () => {
+    await q('SELECT hold_seat($1,$2,$3::uuid,NULL)', [TRIP, '7C', ALICE]);
+    assert.equal(await seats.releaseSeat(TRIP, '7C', { userId: ALICE }), true);
+    const s = await seatOf('7C');
+    assert.equal(s.status, 'AVAILABLE');
+    assert.equal(s.booking_id, null, 'the coherence constraint rejects AVAILABLE + booking_id');
+  });
+
+  /* ------------------------------------------------ concurrency */
+
+  test('two bookings settling the SAME seat at once — exactly one gets it', async () => {
+    /* Both bookings end up naming seat 6A, the 018 orphan shape. Then both are
+     * paid and settled from separate connections at the same instant. */
+    const a = await booked(ALICE, ['6A']);
+    const b = await booked(BOB, ['6B']);
+    const seat6A = (await seatOf('6A')).id;
+    await q(`UPDATE booking_passengers SET trip_seat_id=$2 WHERE booking_id=$1`, [b.id, seat6A]);
+
+    const pay1 = (await q(
+      `INSERT INTO payments (booking_id,amount,status,provider,provider_order_id,provider_payment_id)
+       VALUES ($1,$2,'SUCCESS','RAZORPAY','order_cc1','pay_cc1') RETURNING *`,
+      [a.id, a.totalAmount])).rows[0];
+    const pay2 = (await q(
+      `INSERT INTO payments (booking_id,amount,status,provider,provider_order_id,provider_payment_id)
+       VALUES ($1,$2,'SUCCESS','RAZORPAY','order_cc2','pay_cc2') RETURNING *`,
+      [b.id, b.totalAmount])).rows[0];
+
+    const c1 = await pool.connect(), c2 = await pool.connect();
+    try {
+      const [r1, r2] = await Promise.all([
+        c1.query('SELECT * FROM settle_booking_v2($1,$2)', [a.id, pay1.id]),
+        c2.query('SELECT * FROM settle_booking_v2($1,$2)', [b.id, pay2.id]),
+      ]);
+      const outcomes = [r1.rows[0].outcome, r2.rows[0].outcome].sort();
+
+      /* One confirms on 6A. The other cannot have it — it has no other seat, so
+       * it must come back REFUND_REQUIRED. Never two winners. */
+      assert.deepEqual(outcomes, ['CONFIRMED', 'REFUND_REQUIRED'],
+        `exactly one settlement may take the seat, got ${outcomes.join(' + ')}`);
+    } finally { c1.release(); c2.release(); }
+
+    const { rows: booked6A } = await q(
+      `SELECT booking_id FROM trip_seats WHERE trip_id=$1 AND seat_number='6A' AND status='BOOKED'`,
+      [TRIP]);
+    assert.equal(booked6A.length, 1, 'one seat, one allocation');
+  });
+
+  /* ------------------------------------------------ 020 event retry */
+
+  test('020 · a deadlock is RETRIED, not swallowed with the payment', async () => {
+    /* THE DEFECT 020 EXISTS FOR: any failure marked the event processed_at, so
+     * a transient deadlock permanently discarded a captured payment.
+     *
+     * settle_booking_v2 is swapped for one that raises a real 40P01 through the
+     * real code path, then restored from its own captured definition — so this
+     * exercises the retry branch rather than asserting it by inspection. */
+    const b = await booked(ALICE, ['6A']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+
+    const { rows: [orig] } = await q(
+      `SELECT pg_get_functiondef(oid) AS d FROM pg_proc WHERE proname='settle_booking_v2'`);
+    /* parameter NAMES must match: CREATE OR REPLACE cannot rename them. */
+    await q(`CREATE OR REPLACE FUNCTION settle_booking_v2(p_booking_id uuid, p_payment_id uuid)
+             RETURNS TABLE (outcome text, seats_claimed int, seats_lost int, refund_amount int)
+             AS $fake$ BEGIN
+               RAISE EXCEPTION 'simulated deadlock' USING ERRCODE = '40P01';
+             END $fake$ LANGUAGE plpgsql`);
+    try {
+      await deliver(co.paymentId, 'captured');
+
+      const { rows: [e] } = await q(
+        `SELECT processed_at, attempts, next_attempt_at, process_error
+           FROM provider_events WHERE payment_id=$1 AND kind_normalized='PAYMENT_SUCCEEDED'`,
+        [co.paymentId]);
+      assert.equal(e.processed_at, null,
+        'a deadlock must NOT mark the event done — that is how a payment was lost');
+      assert.equal(e.attempts, 1, 'the attempt is counted');
+      assert.ok(e.next_attempt_at, 'and it is scheduled to come back');
+      assert.match(e.process_error, /retrying after/);
+
+      /* The booking must not have been confirmed or refunded by the failure. */
+      assert.equal((await pay.bookingViewById(b.id)).status, 'PAYMENT_PENDING');
+      assert.equal((await money(b.id)).returned, 0, 'no refund is raised on a transient failure');
+    } finally {
+      await q(orig.d);                       // restore the real settle_booking_v2
+    }
+
+    /* Once the fault clears and the backoff elapses, the SAME event settles. */
+    await q(`UPDATE provider_events SET next_attempt_at = now() - interval '1 second'
+              WHERE payment_id=$1 AND kind_normalized='PAYMENT_SUCCEEDED'`, [co.paymentId]);
+    await pay.processPendingEvents(rp);
+
+    assert.equal((await pay.bookingViewById(b.id)).status, 'CONFIRMED',
+      'the retry recovers the payment the old code discarded');
+    assert.equal((await seatOf('6A')).status, 'BOOKED');
+  });
+
+  /* ------------------------------------------------ deploy safety
+   *
+   * Migration 019 keeps the old scalar settle_booking and adds settle_booking_v2
+   * beside it. That makes migration-first safe for the currently deployed app,
+   * while this app gets the richer v2 row only after assertReady sees migration
+   * 021. */
+
+  async function withSettleBookingV2(body: string, run: () => Promise<void>) {
+    const { rows: [cur] } = await q(
+      `SELECT pg_get_functiondef(oid) AS d FROM pg_proc WHERE proname='settle_booking_v2'`);
+    await q('DROP FUNCTION settle_booking_v2(uuid,uuid)');
+    await q(body);
+    try { await run(); }
+    finally {
+      await q('DROP FUNCTION settle_booking_v2(uuid,uuid)');
+      await q(cur.d);                       // restore the real one, exactly
+    }
+  }
+
+  test('deploy-safe · old scalar settle_booking remains beside the v2 row function', async () => {
+    const { rows: [oldFn] } = await q(
+      `SELECT pg_get_function_result('settle_booking(uuid,uuid)'::regprocedure) AS result`);
+    const { rows: [newFn] } = await q(
+      `SELECT pg_get_function_result('settle_booking_v2(uuid,uuid)'::regprocedure) AS result`);
+    assert.equal(oldFn.result, 'settlement_outcome',
+      'old deployed code still has the scalar function it calls');
+    assert.match(newFn.result, /^TABLE\(outcome text, seats_claimed integer, seats_lost integer, refund_amount integer\)$/);
+
+    const b = await booked(ALICE, ['6A']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await q(`UPDATE bookings SET status='ABANDONED' WHERE id=$1`, [b.id]);
+    const { rows: [legacy] } = await q(
+      `SELECT settle_booking($1,$2) AS outcome`, [b.id, co.paymentId]);
+    assert.equal(legacy.outcome, 'REFUND_REQUIRED',
+      'the legacy query shape still returns a scalar enum value');
+  });
+
+  test('deploy-safe · an unrecognised shape refuses and retries, never guesses', async () => {
+    await withSettleBookingV2(
+      `CREATE FUNCTION settle_booking_v2(p_booking_id uuid, p_payment_id uuid)
+       RETURNS TABLE (nonsense text) AS $x$
+       BEGIN RETURN QUERY SELECT 'WAT'::text; END $x$ LANGUAGE plpgsql`,
+      async () => {
+        const b = await booked(ALICE, ['6C']);
+        const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+        await deliver(co.paymentId, 'captured');
+
+        const { rows: [e] } = await q(
+          `SELECT processed_at, attempts FROM provider_events
+            WHERE payment_id=$1 AND kind_normalized='PAYMENT_SUCCEEDED'`, [co.paymentId]);
+        assert.equal(e.processed_at, null,
+          'an unknown shape must be retried, never consumed');
+        assert.equal(e.attempts, 1);
+        assert.equal((await money(b.id)).returned, 0, 'and no refund is invented');
+        assert.notEqual((await pay.bookingViewById(b.id)).status, 'CONFIRMED');
+      });
+  });
+
+  /* ------------------------------------------------ the path the UI now offers */
+
+  test('cancelling an unpaid pending booking frees its seats, booking_id cleared', async () => {
+    /* "Change seats" depends on this: release_all_held deliberately skips seats
+     * a live pending booking owns, so the booking itself must be discarded. */
+    const b = await booked(ALICE, ['7D']);
+    const out: any = await pay.cancelBooking(b.id, A(ALICE), 'Changed seats before paying');
+    assert.equal(out.refundAmount, 0, 'nothing was paid, so nothing is refunded');
+    const s = await seatOf('7D');
+    assert.equal(s.status, 'AVAILABLE');
+    assert.equal(s.booking_id, null, 'the seat must be genuinely re-holdable');
+    await q('SELECT hold_seat($1,$2,$3::uuid,NULL)', [TRIP, '7D', BOB]);
+    assert.equal((await seatOf('7D')).hold_by, BOB, 'and another student can take it');
+  });
+
+  test('020 · an event scheduled for a later retry is left alone until then', async () => {
+    await q(
+      `INSERT INTO provider_events (provider, provider_event_id, kind, raw_body,
+         signature_ok, kind_normalized, attempts, next_attempt_at)
+       VALUES ('RAZORPAY','evt_deferred_test','payment.captured','{}'::jsonb,true,
+         'PAYMENT_SUCCEEDED', 2, now() + interval '5 minutes')`);
+    await pay.processPendingEvents(rp);
+    const { rows: [e] } = await q(
+      `SELECT processed_at FROM provider_events WHERE provider_event_id='evt_deferred_test'`);
+    assert.equal(e.processed_at, null,
+      'a deferred event must not be consumed before its retry time');
   });
 });

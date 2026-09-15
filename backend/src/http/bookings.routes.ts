@@ -218,7 +218,7 @@ export default function bookingRoutes(provider: PaymentProvider) {
         cancelBooking: z.boolean().default(true),
       }).parse(req.body);
       const out = await pay.overrideRefund({ bookingId: UUID.parse(req.params.id),
-        ...body, actorId: req.session!.userId });
+        ...body, actorId: req.session!.userId, idempotencyKey: z.string().min(8).max(200).parse(req.get('Idempotency-Key')) });
       /* Says the amount it actually raised — never "override applied" on ₹0. */
       res.json({ ...out, message: `₹${out.amount} refund created` });
     } catch (e) { next(e); }
@@ -234,7 +234,8 @@ export default function bookingRoutes(provider: PaymentProvider) {
         contactPhone: z.string().min(10).max(15),
         reason: z.string().min(4).max(500),
       }).parse(req.body);
-      res.status(201).json({ booking: await pay.createManualBooking({ ...body, actorId: req.session!.userId }) });
+      res.status(201).json({ booking: await pay.createManualBooking({ ...body, actorId: req.session!.userId,
+        idempotencyKey: z.string().min(8).max(200).parse(req.get('Idempotency-Key')) }) });
     } catch (e) { next(e); }
   });
 

@@ -23,11 +23,16 @@ import { query, tx } from '../db/index.ts';
 import { AppError } from './errors.ts';
 import { audit } from './audit.ts';
 import type { PaymentProvider, NormalizedEvent } from './payment-provider.ts';
-import { REPORTING_LEAD_MIN, MAX_SEATS_PER_BOOKING, type Holder } from './seats.ts';
+import { REPORTING_LEAD_MIN, MAX_SEATS_PER_BOOKING, HOLD_TTL_MIN, type Holder } from './seats.ts';
 import { bookingFor, paymentFor, requireOperator, type AnyActor, type Actor } from './authz.ts';
 import { createHash } from 'node:crypto';
+import { requireTripAction } from './trip-policy.ts';
 
 export const CANCELLATION_CUTOFF_HOURS = 12;
+/** The absolute life of a seat hold, measured from booking creation. Opening
+ *  checkout renews the hold up to this ceiling and no further, so reopening it
+ *  repeatedly cannot hold a seat indefinitely. */
+export const CHECKOUT_HOLD_CEILING_MIN = 30;
 
 /** Reads the actor's role from the database when a caller did not supply it.
  *  The role is NEVER taken from a request body. */
@@ -139,6 +144,10 @@ export async function createCheckout(
   if (price.changed) return { repriced: true, oldTotal: price.oldTotal, newTotal: price.newTotal };
 
   const { payment, booking } = await tx(async (c) => {
+    const { rows: [candidate] } = await c.query(
+      'SELECT trip_id FROM bookings WHERE id = $1', [bookingId]);
+    if (!candidate) throw new AppError('NOT_FOUND', 'Booking not found');
+    await requireTripAction(c, candidate.trip_id, 'settle');
     const { rows: [b] } = await c.query(
       /* FOR UPDATE OF b: the row we actually lock is the booking. Postgres
        * refuses a bare FOR UPDATE here because u is the nullable side of the
@@ -152,6 +161,41 @@ export async function createCheckout(
     if (b.hold_expires_at && new Date(b.hold_expires_at) <= new Date())
       throw new AppError('CONFLICT', 'Your seats went back on sale. Choose again.');
 
+    /* The hold started when the student picked the seat, and nothing extended
+     * it here — so they entered the provider's checkout with whatever was
+     * left, sometimes seconds. A UPI collect takes minutes to approve in the
+     * student's banking app, so the sweeper abandoned the booking WHILE they
+     * were paying; the capture then landed on a dead booking and was refunded
+     * automatically. Since an abandoned booking is deliberately never
+     * resurrected (019), STOPPING THE HOLD LAPSING is the whole remedy.
+     *
+     * Bounded on both sides:
+     *   GREATEST — never shortens a hold the student already has.
+     *   LEAST    — never pushes past created_at + CHECKOUT_HOLD_CEILING_MIN.
+     *
+     * The ceiling is what makes this safe to call repeatedly. Without it,
+     * POST /payments/create in a loop would renew the hold forever and let one
+     * student squat a seat indefinitely; with it, the total life of a hold is
+     * fixed at booking creation however many times checkout is reopened. The
+     * lapsed-hold guard above still runs first, so this can never revive a seat
+     * that has already gone back on sale.
+     *
+     * Booking and seats are written together: two clocks for one fact (D-4). */
+    await c.query(
+      `UPDATE bookings
+          SET hold_expires_at = GREATEST(
+                hold_expires_at,
+                LEAST(now()      + ($2 || ' minutes')::interval,
+                      created_at + ($3 || ' minutes')::interval)),
+              updated_at = now()
+        WHERE id = $1`,
+      [b.id, String(HOLD_TTL_MIN), String(CHECKOUT_HOLD_CEILING_MIN)]);
+    await c.query(
+      `UPDATE trip_seats
+          SET hold_expires_at = (SELECT hold_expires_at FROM bookings WHERE id = $1),
+              updated_at = now()
+        WHERE booking_id = $1 AND status = 'HELD'`, [b.id]);
+
     /* An existing live intent is reused, so a double tap does not create two
      * provider orders for one booking. */
     const { rows: [live] } = await c.query(
@@ -164,6 +208,10 @@ export async function createCheckout(
        VALUES ($1,$2,'CREATED',$3) RETURNING *`, [bookingId, b.total_amount, provider.name]);
     return { payment: p, booking: b };
   });
+
+  if (payment.provider_order_id)
+    return { paymentId: payment.id, providerOrderId: payment.provider_order_id,
+      checkoutHandle: payment.provider_order_id, amount: payment.amount };
 
   /* Outside the transaction: a network call must never hold a row lock. */
   const order = await provider.createOrder({
@@ -235,26 +283,140 @@ export async function recordWebhook(event: NormalizedEvent, signatureOk: boolean
   }
 }
 
+/* ---------------------------------------------------------------- settlement shape
+ *
+ * 019 adds settle_booking_v2 beside the original scalar settle_booking. Keeping
+ * both function names makes a migration-first deploy safe: old code can still
+ * call settle_booking, and new code calls settle_booking_v2 once assertReady()
+ * has confirmed all migrations are present.
+ *
+ * Anything other than the expected v2 row is REFUSED and retried rather than
+ * guessed at. A shape we do not recognise means the database is not the one this
+ * code was built for, and the only safe move is to leave the money untouched
+ * and come back. */
+const SETTLEMENT_OUTCOMES = new Set(
+  ['CONFIRMED', 'ALREADY_CONFIRMED', 'REFUND_REQUIRED', 'PARTIAL']);
+
+interface Settlement {
+  outcome: string; seatsClaimed: number; seatsLost: number; refundAmount: number;
+}
+
+export function readSettlement(raw: any): Settlement {
+  const outcome = raw?.outcome;
+  if (typeof outcome !== 'string' || !SETTLEMENT_OUTCOMES.has(outcome)) {
+    const e: any = new Error(
+      'settle_booking_v2 returned an unrecognised shape — refusing to settle. ' +
+      'The application and the database schema are out of step.');
+    /* Retryable: during a deploy this resolves by itself once migration and
+     * code agree, and retrying is what keeps the payment from being lost. */
+    e.retryable = true;
+    throw e;
+  }
+  return {
+    outcome,
+    seatsClaimed: Number(raw.seats_claimed ?? 0),
+    seatsLost: Number(raw.seats_lost ?? 0),
+    refundAmount: Number(raw.refund_amount ?? 0),
+  };
+}
+
+/* 020. Postgres raises these when it wants the CALLER to try again — the work
+ * did not fail, it was rolled back so somebody else could proceed. Treating one
+ * as terminal discards a captured payment (see 020's header). */
+const TRANSIENT_PG = new Set([
+  '40001',    // serialization_failure
+  '40P01',    // deadlock_detected        <- observed in production on trip_seats
+  '55P03',    // lock_not_available
+  '57P01',    // admin_shutdown
+  '08000', '08003', '08006',  // connection lost mid-statement
+]);
+
+/** How many times a transient failure is retried before it is finally recorded
+ *  as an error. Bounded so a fault that merely looks transient cannot loop. */
+const EVENT_MAX_ATTEMPTS = 8;
+
+let providerEventRetryColumns: boolean | null = null;
+
+export function automaticRefundsEnabled(): boolean {
+  const raw = String(process.env.AUTO_REFUNDS_ENABLED ?? 'true').trim().toLowerCase();
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw);
+}
+
+async function hasProviderEventRetryColumns(): Promise<boolean> {
+  if (providerEventRetryColumns !== null) return providerEventRetryColumns;
+  const { rows } = await query(
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'provider_events'
+        AND column_name IN ('attempts','next_attempt_at')`);
+  const cols = new Set(rows.map((r: any) => r.column_name));
+  providerEventRetryColumns = cols.has('attempts') && cols.has('next_attempt_at');
+  return providerEventRetryColumns;
+}
+
 /** Processes unapplied provider events. Safe to run concurrently: each event is
  *  taken with FOR UPDATE SKIP LOCKED, so two workers never process one twice. */
 export async function processPendingEvents(provider: PaymentProvider, limit = 50): Promise<number> {
   let done = 0;
+  const hasRetryColumns = await hasProviderEventRetryColumns();
   for (;;) {
+    let event: { id: string; attempts: number } | null = null;
     const handled = await tx(async (c) => {
       const { rows: [ev] } = await c.query(
-        `SELECT * FROM provider_events
-          WHERE processed_at IS NULL AND signature_ok = true
-          ORDER BY received_at
-          FOR UPDATE SKIP LOCKED LIMIT 1`);
+        hasRetryColumns
+          ? `SELECT * FROM provider_events
+              WHERE processed_at IS NULL AND signature_ok = true
+                AND (next_attempt_at IS NULL OR next_attempt_at <= now())
+              ORDER BY received_at
+              FOR UPDATE SKIP LOCKED LIMIT 1`
+          : `SELECT * FROM provider_events
+              WHERE processed_at IS NULL AND signature_ok = true
+              ORDER BY received_at
+              FOR UPDATE SKIP LOCKED LIMIT 1`);
       if (!ev) return false;
+      event = { id: ev.id, attempts: Number(ev.attempts ?? 0) };
       try {
         await applyEvent(c, ev, provider);
         await c.query('UPDATE provider_events SET processed_at = now() WHERE id = $1', [ev.id]);
       } catch (e: any) {
-        /* A failure is recorded on the event, not swallowed and not retried
-         * forever in a loop. Operations sees it in the reconciliation report. */
-        await c.query('UPDATE provider_events SET processed_at = now(), process_error = $2 WHERE id = $1',
-          [ev.id, String(e?.message ?? e).slice(0, 500)]);
+        /* Let the transaction roll back before recording the error. A database
+         * exception leaves the current transaction aborted; writing process_error
+         * inside it would mask the original failure and leave the event stuck. */
+        throw e;
+      }
+      return true;
+    }).catch(async (e: any) => {
+      if (!event) throw e;
+      const { id, attempts } = event;
+      const next = attempts + 1;
+      const message = String(e?.message ?? e).slice(0, 500);
+
+      /* THE FIX: a transient failure is rescheduled, not buried. processed_at
+       * stays NULL so the event is genuinely retried; next_attempt_at backs off
+       * (2s, 4s, 8s … capped at 5 min) so a contended row does not spin and does
+       * not block the events queued behind it. */
+      if (hasRetryColumns && (TRANSIENT_PG.has(e?.code) || e?.retryable === true) && next < EVENT_MAX_ATTEMPTS) {
+        const backoffSec = Math.min(2 ** next, 300);
+        await query(
+          `UPDATE provider_events
+              SET attempts = $2, process_error = $3,
+                  next_attempt_at = now() + ($4 || ' seconds')::interval
+            WHERE id = $1`,
+          [id, next, `retrying after: ${message}`, String(backoffSec)]);
+        return true;
+      }
+
+      /* Terminal: a logic failure, or a transient one that never cleared. Same
+       * outcome as before — recorded, and visible in operational_alerts. */
+      if (hasRetryColumns) {
+        await query(
+          `UPDATE provider_events
+              SET processed_at = now(), attempts = $2, process_error = $3 WHERE id = $1`,
+          [id, next, message]);
+      } else {
+        await query(
+          `UPDATE provider_events
+              SET processed_at = now(), process_error = $2 WHERE id = $1`,
+          [id, message]);
       }
       return true;
     });
@@ -284,6 +446,11 @@ async function applyEvent(c: PoolClient, ev: any, provider: PaymentProvider) {
   }
 
   if (!ev.payment_id) return;                       // an event for something we do not have
+  const { rows: [target] } = await c.query(
+    `SELECT b.trip_id FROM payments p JOIN bookings b ON b.id = p.booking_id
+      WHERE p.id = $1`, [ev.payment_id]);
+  if (!target) return;
+  await c.query('SELECT id FROM trips WHERE id=$1 FOR UPDATE', [target.trip_id]);
   const { rows: [p] } = await c.query('SELECT * FROM payments WHERE id = $1 FOR UPDATE', [ev.payment_id]);
   if (!p) return;
 
@@ -364,11 +531,50 @@ async function applyEvent(c: PoolClient, ev: any, provider: PaymentProvider) {
     `UPDATE payments SET status='SUCCESS', provider_reference=$2, updated_at=now() WHERE id=$1`,
     [p.id, reference]);
 
-  /* F-01, THE DEFECT. settle_booking refuses to confirm an abandoned booking
-   * and refuses any seat that is no longer ours. When it says REFUND_REQUIRED
-   * the money is real and goes back — what must not happen, and now cannot, is
-   * a second student appearing on somebody else's seat. */
-  const { rows: [s] } = await c.query('SELECT settle_booking($1,$2) AS outcome', [p.booking_id, p.id]);
+  /* F-01. settle_booking_v2 claims every seat that is still free or already ours,
+   * under a per-seat lock, and refuses any seat somebody else now holds — that
+   * per-seat refusal, not a booking-status check, is what stops two students
+   * landing on one seat.
+   *
+   * 019 made it allocate seat by seat rather than all-or-nothing. Three
+   * outcomes carry money:
+   *
+   *   CONFIRMED       every seat claimed; nothing to return
+   *   PARTIAL         some claimed, some lost — the booking stands on what it
+   *                   got and only the lost seats are refunded
+   *   REFUND_REQUIRED nothing claimable — full refund, as before
+   *
+   * The old behaviour refunded a whole booking when ONE seat was gone, and
+   * refunded on booking status alone — so a lapsed hold returned money for a
+   * seat that was still sitting empty. Both are why this ran five times in two
+   * hours in production. */
+  const { rows: [rawSettlement] } = await c.query(
+    'SELECT * FROM settle_booking_v2($1,$2)', [p.booking_id, p.id]);
+  const s = readSettlement(rawSettlement);
+
+  if (s.outcome === 'PARTIAL') {
+    const lost = s.seatsLost;
+    const total = lost + s.seatsClaimed;
+    await raiseRefund(c, p.booking_id, p.id, s.refundAmount,
+      `${lost} of ${total} seats were taken before the payment arrived — those seats refunded`,
+      null, false);
+    await c.query(
+      `INSERT INTO notification_requests (kind, user_id, reason, status)
+       SELECT 'GET_NOTIFIED', user_id,
+              'Partial settlement on ' || code || ' — ' || $2::text ||
+              ' seat(s) could not be held, refund raised for those seats', 'PENDING'
+         FROM bookings WHERE id = $1
+       ON CONFLICT (user_id, kind) WHERE status = 'PENDING'
+       DO UPDATE SET reason =
+         CASE
+           WHEN notification_requests.reason LIKE '%Partial settlement%'
+             THEN notification_requests.reason
+           ELSE concat_ws(' | ', notification_requests.reason, EXCLUDED.reason)
+         END`, [p.booking_id, String(lost)]);
+    await audit(c, {}, 'payment.partial_settlement', 'booking', p.booking_id,
+      `${total} seats`, `${s.seatsClaimed} kept, ₹${s.refundAmount} refunded`, null);
+    return;
+  }
 
   if (s.outcome === 'REFUND_REQUIRED') {
     await raiseRefund(c, p.booking_id, p.id, p.amount,
@@ -377,7 +583,14 @@ async function applyEvent(c: PoolClient, ev: any, provider: PaymentProvider) {
       `INSERT INTO notification_requests (kind, user_id, reason, status)
        SELECT 'GET_NOTIFIED', user_id,
               'Late settlement on ' || code || ' — refund raised, seat not reissued', 'PENDING'
-         FROM bookings WHERE id = $1`, [p.booking_id]);
+         FROM bookings WHERE id = $1
+       ON CONFLICT (user_id, kind) WHERE status = 'PENDING'
+       DO UPDATE SET reason =
+         CASE
+           WHEN notification_requests.reason LIKE '%Late settlement%'
+             THEN notification_requests.reason
+           ELSE concat_ws(' | ', notification_requests.reason, EXCLUDED.reason)
+         END`, [p.booking_id]);
     await audit(c, {}, 'payment.late_settlement', 'booking', p.booking_id,
       null, `₹${p.amount} refunded`, null);
     return;
@@ -462,6 +675,7 @@ async function raiseRefund(
  * provider is given our refund id as its merchant reference, so a retry after a
  * timeout cannot create a second refund at the provider either. */
 export async function dispatchPendingRefunds(provider: PaymentProvider, limit = 25): Promise<number> {
+  if (!automaticRefundsEnabled()) return 0;
   let sent = 0;
   for (;;) {
     const row = await tx(async (c) => {
@@ -541,6 +755,10 @@ export async function cancellationQuote(bookingId: string, actor: AnyActor) {
 export async function cancelBooking(bookingId: string, actor: Actor, reason?: string) {
   const actorId = actor.userId;
   return tx(async (c) => {
+    const { rows: [candidate] } = await c.query(
+      'SELECT trip_id FROM bookings WHERE id = $1', [bookingId]);
+    if (!candidate) throw new AppError('NOT_FOUND', 'Booking not found');
+    await requireTripAction(c, candidate.trip_id, 'cancel');
     /* Ownership OR booking.cancel, via the central guard, with the row locked
      * so the check and the mutation it guards are one transaction. */
     const b = await bookingFor(actor, bookingId,
@@ -569,7 +787,7 @@ export async function cancelBooking(bookingId: string, actor: Actor, reason?: st
  *  actually held, refuses ₹0 — and returns what it really raised, so nothing
  *  can report success on a zero-value action. */
 export async function overrideRefund(input: {
-  bookingId: string; amount: number; reason: string; cancelBooking?: boolean; actorId: string;
+  bookingId: string; amount: number; reason: string; cancelBooking?: boolean; actorId: string; idempotencyKey?: string;
 }) {
   /* Super Admin only, checked here and not merely on the route.
    *
@@ -585,6 +803,13 @@ export async function overrideRefund(input: {
     throw new AppError('VALIDATION', 'Enter the refund amount. A zero-value override is not an override.');
 
   return tx(async (c) => {
+    if (input.idempotencyKey) {
+      const prior = await claimIdempotency(c, input.idempotencyKey, 'refund.override', input, { userId: input.actorId, role: 'SUPER_ADMIN' });
+      if (prior) return prior;
+    }
+    const { rows: [booking] } = await c.query('SELECT trip_id FROM bookings WHERE id=$1', [input.bookingId]);
+    if (!booking) throw new AppError('NOT_FOUND', 'Booking not found');
+    await requireTripAction(c, booking.trip_id, 'refund');
     const { rows: [m] } = await c.query('SELECT * FROM booking_money WHERE booking_id=$1', [input.bookingId]);
     if (!m) throw new AppError('NOT_FOUND', 'Booking not found');
     if (m.refundable <= 0)
@@ -603,8 +828,10 @@ export async function overrideRefund(input: {
     }
     await audit(c, { actorId: input.actorId }, 'refund.policy_override', 'booking', input.bookingId,
       'refundable by policy: ₹0', `₹${want}`, input.reason.trim());
-    return { amount: r!.amount, refundId: r!.id, seatsReleased: released,
+    const result = { amount: r!.amount, refundId: r!.id, seatsReleased: released,
       remainingRefundable: m.refundable - want };
+    if (input.idempotencyKey) await completeIdempotency(c, input.idempotencyKey, 'refund.override', result);
+    return result;
   });
 }
 
@@ -614,7 +841,7 @@ export async function overrideRefund(input: {
  *  never produce a refund — F-05 by construction, not by a check. */
 export async function createManualBooking(input: {
   tripId: string; type: 'COMPLIMENTARY' | 'PAID_EXTERNALLY';
-  passengers: PassengerInput[]; contactPhone: string; reason: string; actorId: string;
+  passengers: PassengerInput[]; contactPhone: string; reason: string; actorId: string; idempotencyKey?: string;
 }) {
   /* N-1: role read from the database, never accepted as an argument. */
   await requireOperator({ userId: input.actorId, role: await roleOf(input.actorId) },
@@ -624,8 +851,11 @@ export async function createManualBooking(input: {
   validatePassengers(input.passengers, input.contactPhone);
 
   return tx(async (c) => {
-    const { rows: [t] } = await c.query('SELECT * FROM trips WHERE id=$1 FOR SHARE', [input.tripId]);
-    if (!t) throw new AppError('NOT_FOUND', 'Trip not found');
+    if (input.idempotencyKey) {
+      const prior = await claimIdempotency(c, input.idempotencyKey, 'booking.manual', input, { userId: input.actorId, role: 'SUPER_ADMIN' });
+      if (prior) return prior;
+    }
+    const t = await requireTripAction(c, input.tripId, 'settle');
 
     const comp = input.type === 'COMPLIMENTARY';
     const unit = comp ? 0 : t.price;
@@ -669,7 +899,9 @@ export async function createManualBooking(input: {
 
     await audit(c, { actorId: input.actorId }, 'booking.manual_created', 'booking', b.id,
       null, `${b.kind} ₹${b.total_amount}`, input.reason.trim());
-    return bookingView(c, b.id);
+    const result = await bookingView(c, b.id);
+    if (input.idempotencyKey) await completeIdempotency(c, input.idempotencyKey, 'booking.manual', result);
+    return result;
   });
 }
 
@@ -696,17 +928,18 @@ function canonicalise(v: unknown): string {
 const requestDigest = (req: unknown) =>
   createHash('sha256').update(canonicalise(req), 'utf8').digest('hex');
 
-async function claimIdempotency(
+export async function claimIdempotency(
   c: PoolClient, key: string, endpoint: string, req: unknown, actor: AnyActor
 ) {
   if (!key) throw new AppError('VALIDATION', 'An Idempotency-Key is required');
+  await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [key]);
   const digest = requestDigest(req);
   const userId = (actor as Actor).userId ?? null;
   const guestToken = (actor as { guestToken?: string | null }).guestToken ?? null;
 
   const { rows: [existing] } = await c.query(
-    'SELECT * FROM idempotency_keys WHERE key = $1 AND endpoint = $2 FOR UPDATE',
-    [key, endpoint]);
+    'SELECT * FROM idempotency_keys WHERE key = $1 FOR UPDATE',
+    [key]);
 
   if (existing) {
     /* Bound to the caller: one caller's key can never be another's. Same
@@ -715,7 +948,7 @@ async function claimIdempotency(
     const sameCaller = userId
       ? existing.user_id === userId
       : !!guestToken && existing.guest_token === guestToken;
-    if (!sameCaller || existing.request_hash !== digest)
+    if (!sameCaller || existing.endpoint !== endpoint || existing.request_hash !== digest)
       throw new AppError('CONFLICT',
         'That Idempotency-Key was already used for a different request. Use a new key.');
 
@@ -732,7 +965,7 @@ async function claimIdempotency(
   return null;
 }
 
-async function completeIdempotency(c: PoolClient, key: string, endpoint: string, body: unknown) {
+export async function completeIdempotency(c: PoolClient, key: string, endpoint: string, body: unknown) {
   await c.query(
     `UPDATE idempotency_keys SET completed_at = now(), response_code = 201, response_body = $3::jsonb
       WHERE key = $1 AND endpoint = $2`, [key, endpoint, JSON.stringify(body)]);

@@ -1,10 +1,10 @@
 # DLT — production deployment guide
 
 Status: the application (Homepage/3D, Booking, Dashboard, Account, Admin,
-Razorpay payments/refunds) is feature-complete and verified — 350/350
-backend tests passing (re-run in full during the production-completeness
-audit), typecheck clean, every screen migrated off the prototype store
-and confirmed against the real backend in a real browser.
+Razorpay payments/refunds) is feature-complete and verified — 378/378
+backend database tests passing, frontend Node tests 12/12 passing,
+typecheck clean, every screen migrated off the prototype store and
+confirmed against the real backend path.
 **Nothing has been deployed.** This document is what's left between "works
 on a dev machine" and "serving real traffic," and exactly what was
 verified this session versus what still needs a real production host to
@@ -30,13 +30,13 @@ Against a **throwaway** local database, torn down afterward:
 ```
 CREATE DATABASE dlt_prodcheck;
 DATABASE_URL=postgres://postgres:postgres@<host>/dlt_prodcheck node scripts/migrate.mjs
-  -> all 16 migrations applied cleanly from zero, no manual intervention
+  -> all 23 migrations applied cleanly from zero, no manual intervention
 
 ALTER ROLE dlt_app LOGIN PASSWORD '<generated>';
 
 DATABASE_URL=postgres://dlt_app:<generated>@<host>/dlt_prodcheck \
   NODE_ENV=production node --experimental-strip-types src/app.ts
-GET /api/health -> {"ok":true,"db":{"version":160014,"migrations":16,"auditAppendOnly":true}, ...}
+GET /api/health -> {"ok":true,"db":{"version":160014,"migrations":23,"auditAppendOnly":true}, ...}
   -> the app boots and serves against the LEAST-PRIVILEGED role, not a superuser
 
 psql -U dlt_app -c "DELETE FROM audit_logs;"           -> permission denied for table audit_logs
@@ -48,13 +48,10 @@ Also verified: a real `pg_dump`/`pg_restore` round-trip of `dlt_dev` (see
 §5) preserves the same schema, triggers, and grants — this isn't a
 one-off artifact of the migrations, it survives a restore too.
 
-**Re-verified during the production-completeness audit** (two migrations
-were added since the block above was written, for two real defects found
-by pre-production load testing): a clean `node scripts/migrate.mjs`
-against a fresh throwaway database applies all **18** migrations in
-order, zero manual steps. The `dlt_app`-role/audit-trigger portion above
-was not re-run this pass — nothing since has touched `dlt_app`'s grants
-or the audit trigger, so it stands.
+**Re-verified during the production-readiness pass**: a clean
+`node scripts/migrate.mjs` against a fresh throwaway database applies all
+**23** migrations in order, zero manual steps. The full backend database
+suite then passed 378/378 tests against that migrated schema.
 
 **The password used above was generated for this local verification only
 and was discarded** (`dlt_app` was reverted to `NOLOGIN` afterward, the
@@ -91,6 +88,10 @@ curl https://<domain>/api/health
 #   -> "auditAppendOnly": true is the pass condition. If it's false, the
 #      connection is still over-privileged — stop and fix before serving
 #      real traffic on it.
+
+# 7. Run the automated production gate from backend/ with production env loaded.
+npm run preflight:prod
+#   -> pass condition: [preflight] PASSED.
 ```
 
 If PostgreSQL is managed (RDS, Cloud SQL, etc.), the platform usually
@@ -347,7 +348,7 @@ pg_dump -Fc dlt_dev -> dlt_dev_verify.dump (199 KB)
 CREATE DATABASE dlt_restore_verify
 pg_restore --no-owner -d dlt_restore_verify dlt_dev_verify.dump
   -> users: 10, trips: 15, bookings: 3, audit_logs: 75   — identical to source
-  -> schema_migrations: 16                                — every migration intact
+  -> schema_migrations: 23                                — every migration intact
   -> DELETE FROM audit_logs on the RESTORED copy -> refused by the trigger
      — the append-only protection survives a restore, not just fresh migrations
 ```
@@ -419,6 +420,9 @@ RAZORPAY_KEY_ID=<real LIVE key>         # only when actually going live
 RAZORPAY_KEY_SECRET=<real LIVE secret>
 RAZORPAY_WEBHOOK_SECRET=<real LIVE webhook secret>
 # ALLOW_AUDIT_PRIVILEGE must be ABSENT — do not add this line
+
+# 3b. Preflight, still before opening traffic
+npm run preflight:prod
 
 # 4. Process supervision (see §4)
 sudo cp deploy/dlt-backend.service /etc/systemd/system/

@@ -60,11 +60,13 @@ async function seed() {
   const v = (await q(`INSERT INTO vehicles (name,registration,row_count)
     VALUES ('DLT-01','TS07 AA 1111',11) RETURNING id`)).rows[0].id;
   TRIP = (await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
-    VALUES ($1,$2, now() + interval '3 days', 259,'OPEN') RETURNING id`, [r, v])).rows[0].id;
+    VALUES ($1,$2, now() + interval '3 days', 259,'DRAFT') RETURNING id`, [r, v])).rows[0].id;
   TRIP_B = (await q(`INSERT INTO trips (route_id,vehicle_id,departure_at,price,status)
-    VALUES ($1,$2, now() + interval '4 days', 259,'OPEN') RETURNING id`, [r, v])).rows[0].id;
+    VALUES ($1,$2, now() + interval '4 days', 259,'DRAFT') RETURNING id`, [r, v])).rows[0].id;
   await q('SELECT materialise_trip_seats($1)', [TRIP]);
   await q('SELECT materialise_trip_seats($1)', [TRIP_B]);
+  await q("UPDATE trips SET status='OPEN' WHERE id=$1", [TRIP]);
+  await q("UPDATE trips SET status='OPEN' WHERE id=$1", [TRIP_B]);
   await q(`INSERT INTO trip_staff (trip_id,user_id,assigned_by) VALUES ($1,$2,$3)`, [TRIP, STAFF, OPS]);
 }
 
@@ -518,7 +520,6 @@ describe('N-1 · role cannot be supplied by a caller', () => {
 
   test('a Super Admin still succeeds through the normal path', async () => {
     const { booking } = await paidBooking(ALICE, '11C', 'N1C');
-    await q(`UPDATE trips SET departure_at = now() + interval '3 hours' WHERE id=$1`, [TRIP]);
     const out = await pay.overrideRefund({ bookingId: booking.id, amount: 100,
       reason: 'Departure retimed by 90 minutes', actorId: SUPER });
     assert.equal(out.amount, 100);

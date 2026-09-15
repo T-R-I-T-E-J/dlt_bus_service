@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z">
+<link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1">
+<script type="module" src="./dlt-client.js"></script>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -35,7 +39,6 @@
     [data-m="nav"] { flex-direction: row !important; flex-wrap: wrap !important; }
   }
 </style>
-<script type="module" src="./dlt-client.js"></script>
 <!-- QR decoding only. It never decides anything: DLT.boarding.scan remains the
      authority for pass, booking, payment, trip, cancellation, refund and prior
      boarding. Native BarcodeDetector is used where the browser has it (Chromium,
@@ -567,6 +570,45 @@
               </div>
             </sc-for>
           </dl>
+          <sc-if value="{{ hasPaymentHistory }}" hint-placeholder-val="{{ false }}">
+            <div data-m="wide" style="margin:20px 0 0;border:1px solid rgba(14,16,20,.12);background:#FFFFFF">
+              <div style="min-width:720px">
+                <div style="display:grid;grid-template-columns:92px 112px minmax(130px,1fr) 126px 130px;gap:12px;padding:11px 14px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+                  <span>Amount</span><span>Status</span><span>Reference</span><span>Provider</span><span>Updated</span>
+                </div>
+                <sc-for list="{{ paymentHistory }}" as="p" hint-placeholder-count="3">
+                  <div style="display:grid;grid-template-columns:92px 112px minmax(130px,1fr) 126px 130px;gap:12px;align-items:start;padding:12px 14px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px;font-variant-numeric:tabular-nums">
+                    <span style="font-weight:600">{{ p.amount }}</span>
+                    <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ p.fg }}">{{ p.status }}</span>
+                    <span style="color:#3D423C;overflow-wrap:anywhere">{{ p.ref }}</span>
+                    <span style="color:#3D423C">{{ p.provider }}</span>
+                    <span style="color:#5F6560">{{ p.updated }}</span>
+                    <sc-if value="{{ p.failure }}" hint-placeholder-val="{{ false }}">
+                      <span style="grid-column:1 / -1;color:#8A2F1C">{{ p.failure }}</span>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ hasRefundHistory }}" hint-placeholder-val="{{ false }}">
+            <div data-m="wide" style="margin:14px 0 0;border:1px solid rgba(14,16,20,.12);background:#FFFFFF">
+              <div style="min-width:620px">
+                <div style="display:grid;grid-template-columns:92px 128px minmax(130px,1fr) 160px;gap:12px;padding:11px 14px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+                  <span>Amount</span><span>Status</span><span>Reference</span><span>Created</span>
+                </div>
+                <sc-for list="{{ refundHistory }}" as="r" hint-placeholder-count="2">
+                  <div style="display:grid;grid-template-columns:92px 128px minmax(130px,1fr) 160px;gap:12px;align-items:start;padding:12px 14px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px;font-variant-numeric:tabular-nums">
+                    <span style="font-weight:600">{{ r.amount }}</span>
+                    <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ r.fg }}">{{ r.status }}</span>
+                    <span style="color:#3D423C;overflow-wrap:anywhere">{{ r.ref }}</span>
+                    <span style="color:#5F6560">{{ r.created }}</span>
+                    <span style="grid-column:1 / -1;color:#4A4F49">{{ r.reason }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
           <p style="margin:20px 0 0;font-size:12.5px;line-height:1.6;color:#4A4F49">Payment records are never deleted. Refunds are raised against the original transaction and reconciled under Payments.</p>
         </sc-if>
 
@@ -578,6 +620,13 @@
                 <div>
                   <div style="font-size:13.5px;font-weight:600">{{ p.name }} · seat {{ p.seat }}</div>
                   <div style="margin-top:4px;font-size:12.5px;color:#4A4F49">{{ p.boardMeta }}</div>
+                  <sc-if value="{{ p.hasBoardHistory }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin-top:9px;display:grid;gap:5px">
+                      <sc-for list="{{ p.history }}" as="h" hint-placeholder-count="2">
+                        <div style="font-size:11.5px;color:#5F6560;font-variant-numeric:tabular-nums">{{ h.at }} · {{ h.text }}</div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
                 </div>
                 <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ p.fg }}">{{ p.state }}</span>
               </div>
@@ -710,6 +759,24 @@
         </div>
         <sc-if value="{{ emptyManifest }}" hint-placeholder-val="{{ false }}">
           <p style="margin:0;padding:24px 16px;font-size:13px;color:#4A4F49;text-align:center">No passengers match that filter.</p>
+        </sc-if>
+      </div>
+    </div>
+
+    <div data-m="wide" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
+      <div style="min-width:680px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.12)">
+          <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Boarding activity</span>
+          <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ boardActivityCount }} events</span>
+        </div>
+        <sc-for list="{{ boardActivity }}" as="a" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:132px minmax(0,1fr);gap:14px;padding:11px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px">
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;color:#7A7F77;font-variant-numeric:tabular-nums">{{ a.at }}</span>
+            <span style="color:#3D423C">{{ a.text }}</span>
+          </div>
+        </sc-for>
+        <sc-if value="{{ noBoardActivity }}" hint-placeholder-val="{{ false }}">
+          <p style="margin:0;padding:22px 16px;font-size:13px;color:#4A4F49;text-align:center">No boarding activity has been recorded for this departure.</p>
         </sc-if>
       </div>
     </div>
@@ -966,6 +1033,61 @@
   </section>
   </sc-if>
 
+  <!-- SCHEDULE POLL -->
+  <sc-if value="{{ atSchedulePoll }}" hint-placeholder-val="{{ false }}">
+  <section>
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px">
+      <div>
+        <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);letter-spacing:0">Schedule poll</h1>
+        <p style="margin:9px 0 0;max-width:62ch;font-size:13px;line-height:1.6;color:#3D423C">{{ pollQuestion }} Students can choose up to three times without signing in. Percentages are the share of respondents who selected each time.</p>
+      </div>
+      <button type="button" onClick="{{ exportPoll }}" style="border:1px solid rgba(14,16,20,.2);background:#FFFFFF;padding:11px 16px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Export responses</button>
+    </div>
+
+    <div style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
+      <sc-for list="{{ pollMetrics }}" as="m" hint-placeholder-count="3">
+        <div style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12);padding:16px 18px">
+          <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560">{{ m.label }}</div>
+          <div style="margin-top:9px;font-stretch:125%;font-weight:700;font-size:24px;font-variant-numeric:tabular-nums">{{ m.value }}</div>
+          <div style="margin-top:5px;font-size:12px;color:#5F6560">{{ m.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12);padding:18px">
+      <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#5F6560">Votes by departure time</div>
+      <div style="display:grid;gap:13px;margin:16px 0 0">
+        <sc-for list="{{ pollTimes }}" as="t" hint-placeholder-count="12">
+          <div style="display:grid;grid-template-columns:68px minmax(0,1fr) 92px;gap:12px;align-items:center;font-size:13px;font-variant-numeric:tabular-nums">
+            <span style="font-weight:600">{{ t.label }}</span>
+            <span aria-hidden="true" style="height:8px;background:#E2E0D8"><span style="display:block;width:{{ t.width }};height:8px;background:{{ t.color }}"></span></span>
+            <span style="text-align:right;color:#3D423C">{{ t.votes }} · {{ t.percent }}%</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-m="wide" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
+      <div style="min-width:860px">
+        <div style="display:grid;grid-template-columns:minmax(180px,1.4fr) minmax(130px,1fr) 120px 130px minmax(180px,1.2fr) 138px;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+          <span>Preferred times</span><span>Name</span><span>Phone</span><span>Student ID</span><span>Email</span><span>Updated</span>
+        </div>
+        <sc-for list="{{ pollResponses }}" as="r" hint-placeholder-count="8">
+          <div style="display:grid;grid-template-columns:minmax(180px,1.4fr) minmax(130px,1fr) 120px 130px minmax(180px,1.2fr) 138px;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px">
+            <span style="font-weight:600;color:#0E4B34">{{ r.choices }}</span>
+            <span>{{ r.name }}</span><span>{{ r.phone }}</span><span>{{ r.studentId }}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis">{{ r.email }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;color:#6A7069">{{ r.updated }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ noPollResponses }}" hint-placeholder-val="{{ true }}">
+      <p style="margin:18px 0 0;font-size:13px;color:#4A4F49">No responses yet. New votes will appear here automatically.</p>
+    </sc-if>
+  </section>
+  </sc-if>
+
   <!-- REPORTS -->
   <sc-if value="{{ atReports }}" hint-placeholder-val="{{ false }}">
   <section>
@@ -1100,8 +1222,8 @@ class Component extends DCLogic {
     data: {
       allTrips: null, vehicles: null, staff: null, routes: null,
       dashboard: null, bookingList: [], booking: null, seatMap: null,
-      manifest: null, scannerTrip: null, payments: null, students: null,
-      reviews: null, requests: null, waitlist: null, auditRows: null,
+      manifest: null, boardingEvents: [], scannerTrip: null, payments: null, students: null,
+      reviews: null, requests: null, waitlist: null, schedulePoll: null, auditRows: null,
     },
     loading: {}, loadError: null,
     bkTab: 'Overview', bookingId: null, query: '', adminReason: '',
@@ -1121,6 +1243,13 @@ class Component extends DCLogic {
     mbEmail: '', mbReason: '',
   };
 
+  _liveTimer = null;
+  _liveRefreshInFlight = false;
+  _onLiveVisibility = () => {
+    if (document.hidden) this._stopLiveRefreshTimer();
+    else { this._startLiveRefreshTimer(); this._refreshLiveData(); }
+  };
+
   async componentDidMount() {
     try { await DLT.boot(); } catch (e) { /* offline: renders signed-out */ }
     const d = new Date(); d.setDate(d.getDate() + 7);
@@ -1131,58 +1260,105 @@ class Component extends DCLogic {
     if (!me || me.role === 'STUDENT') return;
     const section = me.role === 'BOARDING_STAFF' && !DLT.can(me.role, 'trip.read') ? 'Boarding' : 'Dashboard';
     this.setState({ section });
-    await this._loadCore();
-    await this._loadSection(section);
+    if (section === 'Dashboard') {
+      await Promise.all([this._loadCore(), this._loadSection(section)]);
+    } else {
+      await this._loadCore();
+      await this._loadSection(section);
+    }
+    this._startLiveRefresh();
   }
   componentWillUnmount() {
+    this._stopLiveRefresh();
     this._stopCamera();
     clearTimeout(this._searchDebounce);
   }
 
   ok = (msg) => this.setState({ toast: msg, toastKind: 'ok' });
   bad = (e) => this.setState({ toast: (e && e.message) || String(e), toastKind: 'bad' });
-  _busy = (key, val) => this.setState({ loading: { ...this.state.loading, [key]: val } });
-  _patch = (patch) => this.setState({ data: { ...this.state.data, ...patch } });
+  _busy = (key, val) => this.setState(st => st.loading[key] === val ? null
+    : { loading: { ...st.loading, [key]: val } });
+  _patch = (patch) => this.setState(st => {
+    // Poll responses are JSON data. Preserve state when nothing changed.
+    const changed = Object.keys(patch).some(key =>
+      JSON.stringify(st.data[key]) !== JSON.stringify(patch[key]));
+    return changed ? { data: { ...st.data, ...patch } } : null;
+  });
 
   /* ---- data every section (or several) can need: every trip, vehicles,
      staff, routes. Loaded once on mount, reloaded after whichever mutating
      action could change what they show. ---- */
-  async _loadCore() {
+  _startLiveRefresh() {
+    this._stopLiveRefresh();
+    document.addEventListener('visibilitychange', this._onLiveVisibility);
+    this._startLiveRefreshTimer();
+  }
+  _startLiveRefreshTimer() {
+    if (this._liveTimer || document.hidden) return;
+    this._liveTimer = setInterval(() => this._refreshLiveData(), 5000);
+  }
+  _stopLiveRefreshTimer() {
+    if (this._liveTimer) clearInterval(this._liveTimer);
+    this._liveTimer = null;
+  }
+  _stopLiveRefresh() {
+    this._stopLiveRefreshTimer();
+    document.removeEventListener('visibilitychange', this._onLiveVisibility);
+  }
+  async _refreshLiveData() {
+    const me = DLT.auth.current();
+    if (this._liveRefreshInFlight || document.hidden || !me || me.role === 'STUDENT') return;
+    this._liveRefreshInFlight = true;
+    try {
+      await this._loadCore({ silent: true });
+      await this._loadSection(this.state.section, { silent: true });
+      if (this.state.seatTripId) await this._loadSeatMap(this.state.seatTripId, { silent: true });
+    } catch (e) {
+      if (!(e && e.isOffline)) console.warn('[dlt-admin] live refresh', (e && e.message) || e);
+    } finally {
+      this._liveRefreshInFlight = false;
+    }
+  }
+
+  async _loadCore(opts = {}) {
     const me = DLT.auth.current();
     if (!me) return;
     await Promise.all([
-      this._reloadTrips(),
+      this._reloadTrips(opts),
       DLT.can(me.role, 'vehicle.read')
-        ? DLT.admin.vehicles().then((v) => this._patch({ vehicles: v })).catch((e) => this.bad(e))
+        ? DLT.admin.vehicles().then((v) => this._patch({ vehicles: v }))
+          .catch((e) => { if (!opts.silent) this.bad(e); })
         : Promise.resolve(),
       DLT.can(me.role, 'staff.assign')
-        ? DLT.admin.staff().then((v) => this._patch({ staff: v })).catch((e) => this.bad(e))
+        ? DLT.admin.staff().then((v) => this._patch({ staff: v }))
+          .catch((e) => { if (!opts.silent) this.bad(e); })
         : Promise.resolve(),
     ]);
   }
-  async _reloadTrips() {
+  async _reloadTrips(opts = {}) {
     const me = DLT.auth.current();
     if (!me || !DLT.can(me.role, 'trip.read')) return;
-    this._busy('trips', true);
+    if (!opts.silent) this._busy('trips', true);
     try {
       const [trips, routes] = await Promise.all([DLT.admin.listAllTrips(), DLT.admin.routes()]);
       this._patch({ allTrips: trips, routes });
-    } catch (e) { this.bad(e); } finally { this._busy('trips', false); }
+    } catch (e) { if (!opts.silent) this.bad(e); }
+    finally { if (!opts.silent) this._busy('trips', false); }
   }
 
   /* ---- one section's own data, on mount and on every nav switch ---- */
-  async _loadSection(section) {
+  async _loadSection(section, opts = {}) {
     const me = DLT.auth.current();
     if (!me) return;
     const can = (a) => DLT.can(me.role, a);
-    this._busy(section, true);
+    if (!opts.silent) this._busy(section, true);
     try {
       if (section === 'Dashboard' && can('trip.read')) {
         this._patch({ dashboard: await DLT.admin.dashboard() });
       } else if (section === 'Boarding') {
-        await this._loadBoarding();
+        await this._loadBoarding(opts);
       } else if (section === 'Bookings' && can('booking.read')) {
-        await this._searchBookings(true);
+        await this._searchBookings(true, opts);
       } else if (section === 'Payments' && can('payment.admin')) {
         this._patch({ payments: await DLT.admin.payments() });
       } else if (section === 'Students' && can('student.read')) {
@@ -1191,12 +1367,15 @@ class Component extends DCLogic {
         this._patch({ reviews: await DLT.admin.reviews() });
       } else if (section === 'Requests' && can('notification.read')) {
         this._patch({ requests: await DLT.admin.requests() });
+      } else if (section === 'Schedule poll' && can('poll.read')) {
+        this._patch({ schedulePoll: await DLT.admin.busTimePoll() });
       } else if (section === 'Waitlist' && can('waitlist.read')) {
         await this._loadWaitlist();
       } else if (section === 'Audit' && can('audit.read')) {
-        this._patch({ auditRows: (await DLT.admin.audit({ limit: 60 })).entries });
+        this._patch({ auditRows: (await DLT.admin.audit({ limit: 500 })).entries });
       }
-    } catch (e) { this.bad(e); } finally { this._busy(section, false); }
+    } catch (e) { if (!opts.silent) this.bad(e); }
+    finally { if (!opts.silent) this._busy(section, false); }
   }
 
   _go = (section) => {
@@ -1217,7 +1396,7 @@ class Component extends DCLogic {
       || trips.find((t) => t.status === 'OPEN');
     return t ? t.id : null;
   }
-  async _loadBoarding() {
+  async _loadBoarding(opts = {}) {
     const me = DLT.auth.current();
     let scannerTrip = this.state.data.scannerTrip;
     if (me.role === 'BOARDING_STAFF' && !scannerTrip) {
@@ -1225,9 +1404,12 @@ class Component extends DCLogic {
       this._patch({ scannerTrip });
     }
     const tripId = this._tripIdFor(me, { ...this.state, data: { ...this.state.data, scannerTrip } });
-    if (!tripId) { this._patch({ manifest: { trip: null, counts: null, passengers: [] } }); return; }
-    const manifest = await DLT.boarding.manifest(tripId);
-    this._patch({ manifest });
+    if (!tripId) { this._patch({ manifest: { trip: null, counts: null, passengers: [] }, boardingEvents: [] }); return; }
+    const [manifest, boardingEvents] = await Promise.all([
+      DLT.boarding.manifest(tripId),
+      DLT.boarding.events(tripId),
+    ]);
+    this._patch({ manifest, boardingEvents });
   }
 
   async _loadWaitlist() {
@@ -1240,22 +1422,22 @@ class Component extends DCLogic {
   }
 
   /* ---- bookings: debounced search-as-you-type, then the drill-down ---- */
-  async _searchBookings(force) {
+  async _searchBookings(force, opts = {}) {
     const q = this.state.query.trim();
     clearTimeout(this._searchDebounce);
     const run = async () => {
       try {
-        const list = q.length >= 3 ? await DLT.admin.bookings({ q, limit: 20 }) : await DLT.admin.bookings({ limit: 12 });
+        const list = q.length >= 3 ? await DLT.admin.bookings({ q, limit: 500 }) : await DLT.admin.bookings({ limit: 500 });
         this._patch({ bookingList: list });
         const id = this.state.bookingId || (list[0] && list[0].id) || null;
-        if (id) await this._loadBooking(id);
+        if (id) await this._loadBooking(id, opts);
         else this._patch({ booking: null });
-      } catch (e) { this.bad(e); }
+      } catch (e) { if (!opts.silent) this.bad(e); }
     };
     if (force) return run();
     this._searchDebounce = setTimeout(run, 300);
   }
-  async _loadBooking(id) {
+  async _loadBooking(id, opts = {}) {
     try {
       const booking = await DLT.admin.bookingDetail(id);
       this._patch({ booking, bookingQuote: null });
@@ -1263,7 +1445,7 @@ class Component extends DCLogic {
         try { this._patch({ bookingQuote: await DLT.bookings.cancellationQuote(id) }); }
         catch (e) { /* non-fatal — the override panel just shows ₹0 until it loads */ }
       }
-    } catch (e) { this.bad(e); }
+    } catch (e) { if (!opts.silent) this.bad(e); }
   }
 
   /* ---- vehicles, seats: save/block/unblock, then reload what changed ---- */
@@ -1275,22 +1457,22 @@ class Component extends DCLogic {
       await this._loadCore();
     } catch (e) { this.bad(e); }
   }
-  async _loadSeatMap(tripId) {
+  async _loadSeatMap(tripId, opts = {}) {
     try { const r = await DLT.trips.seatMap(tripId); this._patch({ seatMap: r.rows }); }
-    catch (e) { this.bad(e); }
+    catch (e) { if (!opts.silent) this.bad(e); }
   }
   async _blockSeat(tripId, seat, reason) {
     try {
       const r = await DLT.admin.blockSeat(tripId, seat, reason);
       this.ok('Seat ' + r.seatNumber + ' blocked — ' + r.reason + '. Audit logged.');
-      await this._loadSeatMap(tripId); await this._reloadTrips();
+      await Promise.all([this._loadSeatMap(tripId), this._reloadTrips()]);
     } catch (e) { this.bad(e); }
   }
   async _unblockSeat(tripId, seat) {
     try {
       const r = await DLT.admin.unblockSeat(tripId, seat);
       this.ok('Seat ' + r.seatNumber + ' released back on sale. Audit logged.');
-      await this._loadSeatMap(tripId); await this._reloadTrips();
+      await Promise.all([this._loadSeatMap(tripId), this._reloadTrips()]);
     } catch (e) { this.bad(e); }
   }
 
@@ -1410,7 +1592,7 @@ class Component extends DCLogic {
       bkPassengers: [], payFacts: [], bkTrail: [], boardList: [], payRows: [],
       payFilters: [], auditRows: [], vehicles: [], students: [], reviews: [],
       requests: [], wlRows: [], reportButtons: [], postTripRows: [], validLines: [],
-      previewRows: [], previewCols: [], vehicleOptions: [], boardTripOptions: [],
+      pollMetrics: [], pollTimes: [], pollResponses: [], previewRows: [], previewCols: [], vehicleOptions: [], boardTripOptions: [],
       wlTripOptions: [], repTripOptions: [], results: [] };
     if (!st.ready) return EMPTY;
 
@@ -1440,7 +1622,7 @@ class Component extends DCLogic {
       ['Dashboard', 'trip.read'], ['Trips', 'trip.read'], ['Vehicles', 'vehicle.read'],
       ['Bookings', 'booking.read'], ['Boarding', 'boarding.read'], ['Waitlist', 'waitlist.read'],
       ['Students', 'student.read'], ['Feedback', 'feedback.read'], ['Requests', 'notification.read'],
-      ['Payments', 'payment.admin'], ['Reports', 'report.read'], ['Audit', 'audit.read'],
+      ['Schedule poll', 'poll.read'], ['Payments', 'payment.admin'], ['Reports', 'report.read'], ['Audit', 'audit.read'],
     ].filter(([, perm]) => allow(perm));
     const section = sections.some(([s]) => s === st.section) ? st.section
       : (sections[0] ? sections[0][0] : 'Dashboard');
@@ -1471,6 +1653,7 @@ class Component extends DCLogic {
     const manifestData = d.manifest || { trip: null, counts: null, passengers: [] };
     const boardTripInfo = manifestData.trip;
     const manifest = manifestData.passengers || [];
+    const boardingEvents = d.boardingEvents || [];
     const q = st.manifestQuery.trim().toLowerCase();
     const filteredManifest = manifest.filter(p => !q ||
       (p.name + ' ' + p.studentId + ' ' + p.seatNumber).toLowerCase().indexOf(q) >= 0);
@@ -1484,6 +1667,29 @@ class Component extends DCLogic {
     /* ---------- bookings ---------- */
     const bookingList = d.bookingList || [];
     const booking = d.booking || null;
+    const bookingPayments = booking ? ((booking.payments && booking.payments.length)
+      ? booking.payments : (booking.payment ? [booking.payment] : [])) : [];
+    const bookingRefunds = booking ? (booking.refunds || []) : [];
+    const primaryPayment = bookingPayments[0] || null;
+    const paymentHistory = bookingPayments.map(p => ({
+      amount: DLT.fmt.money(p.amount),
+      status: String(p.status || 'UNKNOWN').replace(/_/g, ' '),
+      provider: String(p.provider || '—').replace(/_/g, ' '),
+      ref: p.providerReference || p.providerPaymentId || p.providerOrderId || '—',
+      failure: p.failureReason || '',
+      updated: DLT.fmt.dateTime(p.updatedAt || p.createdAt),
+      fg: p.status === 'SUCCESS' ? '#0E4B34'
+        : p.status === 'FAILED' || p.status === 'CANCELLED' ? '#8A2F1C' : '#8A5A0E',
+    }));
+    const refundHistory = bookingRefunds.map(r => ({
+      amount: DLT.fmt.money(r.amount),
+      status: String(r.stage || r.status || 'UNKNOWN').replace(/_/g, ' '),
+      ref: r.providerRefundId || '—',
+      reason: r.reason || r.providerStatus || '—',
+      created: DLT.fmt.dateTime(r.createdAt || r.updatedAt),
+      fg: r.status === 'REFUNDED' ? '#0E4B34'
+        : r.status === 'REFUND_FAILED' ? '#8A2F1C' : '#8A5A0E',
+    }));
 
     /* ---------- payments (Super Admin only — see domain/admin.ts's
        listPaymentsForReconciliation for why there is no Discrepancy bucket
@@ -1491,7 +1697,7 @@ class Component extends DCLogic {
        amount mismatch or a duplicate payment automatically, in full) ---- */
     let payRows = [], payCounts = {};
     const bucketOf = (r) => {
-      if (r.status === 'SUCCESS') return (r.refunds || []).some(x => x.status !== 'REFUND_FAILED') ? 'Refunded' : 'Successful';
+      if (r.status === 'SUCCESS') return (r.refunds || []).some(x => x.status === 'REFUNDED') ? 'Refunded' : 'Successful';
       if (r.status === 'PENDING' || r.status === 'CREATED') return 'Pending';
       if (r.status === 'FAILED' || r.status === 'CANCELLED') return 'Failed';
       if (r.status === 'DUPLICATE') return 'Duplicate';
@@ -1648,6 +1854,25 @@ class Component extends DCLogic {
       onAct: () => {},
     }));
 
+    /* ---------- public schedule poll ---------- */
+    const schedulePoll = d.schedulePoll || null;
+    const pollResponses = schedulePoll ? schedulePoll.responses.map(r => ({
+      choices: r.choiceLabels.join(', '), name: r.name || '—', phone: r.phone || '—',
+      studentId: r.studentId || '—', email: r.email || '—', updated: DLT.fmt.dateTime(r.updatedAt),
+    })) : [];
+    const pollTimes = schedulePoll ? schedulePoll.options.map((o, index) => ({
+      label: o.label, votes: o.votes, percent: o.percent,
+      width: Math.max(o.percent ? 3 : 0, o.percent) + '%',
+      color: index === 0 && o.votes ? '#0E4B34' : '#8EA899',
+    })) : [];
+    const pollMetrics = schedulePoll ? [
+      { label: 'Responses', value: schedulePoll.totalResponses, note: 'One current response per browser or account' },
+      { label: 'Leading time', value: schedulePoll.leadingOption ? schedulePoll.leadingOption.label : '—',
+        note: schedulePoll.leadingOption ? schedulePoll.leadingOption.votes + ' selections' : 'Waiting for the first vote' },
+      { label: 'Contactable', value: schedulePoll.contactable,
+        note: 'A phone number or signed-in email is available' },
+    ] : [];
+
     const p = st.prompt;
 
     /* ---------- trip seat map, staff, manual-booking and override inputs ---------- */
@@ -1685,8 +1910,8 @@ class Component extends DCLogic {
     const policyQuote = (d.bookingQuote && d.bookingQuote.amount) || 0;
     let overrideCap = 0;
     if (booking && isSuper) {
-      const paid = (booking.payment && ['SUCCESS', 'DUPLICATE'].includes(booking.payment.status))
-        ? booking.payment.amount : 0;
+      const paid = (primaryPayment && ['SUCCESS', 'DUPLICATE'].includes(primaryPayment.status))
+        ? primaryPayment.amount : 0;
       const out = (booking.refunds || []).filter(r => r.status !== 'REFUND_FAILED').reduce((n, r) => n + r.amount, 0);
       overrideCap = Math.max(0, paid - out);
     }
@@ -1709,7 +1934,7 @@ class Component extends DCLogic {
       atBoarding: section === 'Boarding', atWaitlist: section === 'Waitlist',
       atStudents: section === 'Students', atFeedback: section === 'Feedback',
       atRequests: section === 'Requests', atPayments: section === 'Payments',
-      atReports: section === 'Reports', atAudit: section === 'Audit',
+      atSchedulePoll: section === 'Schedule poll', atReports: section === 'Reports', atAudit: section === 'Audit',
       goTrips: () => this._go('Trips'),
       goBoarding: () => this._go('Boarding'),
 
@@ -1923,7 +2148,7 @@ class Component extends DCLogic {
         const act = t.status === 'DRAFT' ? 'Validate'
           : t.status === 'OPEN' ? 'Close booking'
           : t.status === 'BOOKING_CLOSED' ? 'Start boarding'
-          : t.status === 'BOARDING' ? 'Open scanner'
+          : t.status === 'BOARDING' ? 'Mark departed'
           : t.status === 'DEPARTED' ? 'Mark completed'
           : t.waitlistCount ? 'Waitlist' : 'View';
         return {
@@ -1931,7 +2156,7 @@ class Component extends DCLogic {
           vehicle: t.vehicle ? t.vehicle.name + ' · ' + t.vehicle.registration : '—',
           seats: t.booked + '/' + t.capacity,
           revenue: DLT.fmt.money(t.revenue),
-          status: t.status.replace('_', ' ') + (t.soldOut && t.status === 'OPEN' ? ' · full' : ''),
+          status: t.status.replace('_', ' ') + (t.needsCloseout ? ' · Needs closeout' : '') + (t.soldOut && t.status === 'OPEN' ? ' · full' : ''),
           statusFg: t.status === 'DRAFT' ? '#5F6560' : t.status === 'CANCELLED' ? '#8A2F1C'
             : t.soldOut ? '#8A5A0E' : '#0E4B34',
           act,
@@ -1939,7 +2164,7 @@ class Component extends DCLogic {
           actFg: t.status === 'DRAFT' ? '#F7F5F0' : '#0E1014',
           actBd: t.status === 'DRAFT' ? '#0E1014' : 'rgba(14,16,20,.2)',
           canCancel: allow('trip.cancel') && ['OPEN', 'BOOKING_CLOSED', 'BOARDING', 'DRAFT'].indexOf(t.status) >= 0,
-          canSeats: allow('seat.block') && t.status !== 'CANCELLED',
+          canSeats: allow('seat.block') && ['DRAFT','OPEN','BOOKING_CLOSED','BOARDING'].includes(t.status),
           onSeats: () => {
             const id = st.seatTripId === t.id ? null : t.id;
             this.setState({ seatTripId: id });
@@ -1961,12 +2186,17 @@ class Component extends DCLogic {
                 await this._reloadTrips();
                 await this._loadBoarding();
               } else if (t.status === 'BOARDING') {
-                this.setState({ section: 'Boarding', boardTripId: t.id });
-                await this._loadBoarding();
+                this.ask('Mark trip departed', 'Confirm the coach has departed. Boarding will close for ' + DLT.fmt.when(t.departureAt) + '.',
+                  'Mark departed', 'Departure confirmed by operator', async reason => {
+                    await DLT.admin.setTripStatus(t.id, 'DEPARTED', reason);
+                    await this._reloadTrips();
+                  });
               } else if (t.status === 'DEPARTED') {
-                await DLT.admin.setTripStatus(t.id, 'COMPLETED', 'Arrival confirmed by operations');
-                this.ok('Trip marked completed.');
-                await this._reloadTrips();
+                this.ask('Complete this trip', 'Confirm arrival for ' + DLT.fmt.when(t.departureAt) + '. This closes routine trip operations permanently.',
+                  'Mark completed', 'Arrival confirmed by operator', async reason => {
+                    await DLT.admin.setTripStatus(t.id, 'COMPLETED', reason);
+                    await this._reloadTrips();
+                  });
               } else if (t.waitlistCount) {
                 this.setState({ section: 'Waitlist', wlTripId: t.id });
                 await this._loadWaitlist();
@@ -2020,7 +2250,7 @@ class Component extends DCLogic {
             const when = before ? DLT.fmt.when(before.departureAt) : 'your departure';
             tmpl = { affected, message: 'Hi — your DLT departure on ' + when + ' has been cancelled. ' +
               (res.refundTotal > 0
-                ? 'A full refund of your fare is on its way back to your original payment method.'
+                ? 'A refund obligation has been recorded. This does not mean the provider has returned the money yet.'
                 : 'No payment is on file for your seat, so no refund is due.') +
               ' We are sorry for the disruption.' };
           } catch (e) {}
@@ -2061,9 +2291,9 @@ class Component extends DCLogic {
       /* bookings */
       query: st.query,
       onQuery: e => { this.setState({ query: e.target.value, bookingId: null }); this._searchBookings(false); },
-      hasResults: !st.loading.Bookings && st.query.trim().length >= 3 && bookingList.length > 0,
-      noResults: !st.loading.Bookings && st.query.trim().length >= 3 && bookingList.length === 0,
-      results: bookingList.slice(0, 8).map(b => ({
+      hasResults: !st.loading.Bookings && bookingList.length > 0,
+      noResults: !st.loading.Bookings && bookingList.length === 0,
+      results: bookingList.map(b => ({
         label: b.code + ' · ' + (b.ownerName || '—'),
         on: booking && b.id === booking.id,
         bg: booking && b.id === booking.id ? '#0E1014' : '#FFFFFF',
@@ -2123,16 +2353,27 @@ class Component extends DCLogic {
           ? (x.boardingMethod === 'MANUAL' ? 'Boarded manually at ' : 'Scanned at ') + DLT.fmt.time(x.boardedAt) +
             ' by ' + x.boardedBy + (x.boardingReason ? ' — ' + x.boardingReason : '')
           : x.passStatus === 'VALID' ? 'Pass issued · not yet scanned' : 'Pass ' + String(x.passStatus || 'not issued').toLowerCase(),
+        history: (x.boardingEvents || []).map(e => ({
+          at: DLT.fmt.dateTime(e.occurredAt),
+          text: (e.staffName || 'system') + ' · ' + String(e.result || '').replace(/_/g, ' ') +
+            ' · ' + String(e.method || '').replace(/_/g, ' ').toLowerCase() +
+            (e.reason ? ' — ' + e.reason : ''),
+        })),
+        hasBoardHistory: (x.boardingEvents || []).length > 0,
       })) : [],
-      payFacts: booking && booking.payment ? [
-        { k: 'Amount', v: DLT.fmt.money(booking.payment.amount), fg: '#0E1014' },
-        { k: 'Status', v: booking.payment.status, fg: booking.payment.status === 'SUCCESS' ? '#0E4B34' : '#8A5A0E' },
-        { k: 'Provider', v: String(booking.payment.provider).replace(/_/g, ' '), fg: '#0E1014' },
-        { k: 'Reference', v: booking.payment.providerReference || '—', fg: '#0E1014' },
-        { k: 'Updated', v: DLT.fmt.dateTime(booking.payment.updatedAt), fg: '#0E1014' },
-        { k: 'Refunds', v: booking.refunds.length ? booking.refunds.map(r => DLT.fmt.money(r.amount) + ' ' + r.status).join(', ') : 'None', fg: '#0E1014' },
+      payFacts: booking && primaryPayment ? [
+        { k: 'Amount', v: DLT.fmt.money(primaryPayment.amount), fg: '#0E1014' },
+        { k: 'Status', v: primaryPayment.status, fg: primaryPayment.status === 'SUCCESS' ? '#0E4B34' : '#8A5A0E' },
+        { k: 'Provider', v: String(primaryPayment.provider).replace(/_/g, ' '), fg: '#0E1014' },
+        { k: 'Reference', v: primaryPayment.providerReference || primaryPayment.providerPaymentId || primaryPayment.providerOrderId || '—', fg: '#0E1014' },
+        { k: 'Updated', v: DLT.fmt.dateTime(primaryPayment.updatedAt || primaryPayment.createdAt), fg: '#0E1014' },
+        { k: 'Refunds', v: bookingRefunds.length ? bookingRefunds.map(r => DLT.fmt.money(r.amount) + ' ' + r.status).join(', ') : 'None', fg: '#0E1014' },
         { k: 'Refunded total', v: DLT.fmt.money(booking.refundedTotal), fg: '#0E1014' },
       ] : [{ k: 'Payment', v: 'No payment record', fg: '#8A5A0E' }],
+      paymentHistory,
+      refundHistory,
+      hasPaymentHistory: paymentHistory.length > 0,
+      hasRefundHistory: refundHistory.length > 0,
       bkTrail: booking ? (booking.auditTrail || []).map(a => ({
         at: DLT.fmt.dateTime(a.occurredAt), text: a.action + (a.entityType ? ' · ' + a.entityType : '') })) : [],
       noTrail: !isSuper,
@@ -2239,6 +2480,15 @@ class Component extends DCLogic {
           at: x.boardedAt ? DLT.fmt.time(x.boardedAt) : '',
         };
       }),
+      boardActivity: boardingEvents.map(e => ({
+        at: DLT.fmt.dateTime(e.occurredAt),
+        text: (e.staffName || 'system') + ' · ' + String(e.result || '').replace(/_/g, ' ') +
+          (e.passengerName ? ' · ' + e.passengerName : '') +
+          (e.seatNumber ? ' · seat ' + e.seatNumber : '') +
+          (e.reason ? ' — ' + e.reason : ''),
+      })),
+      boardActivityCount: boardingEvents.length,
+      noBoardActivity: !boardingEvents.length,
 
       /* payments (Super Admin only) */
       payFilters: ['All', 'Successful', 'Pending', 'Failed', 'Duplicate', 'Refunded', 'Manual/external'].map(f => ({
@@ -2250,9 +2500,9 @@ class Component extends DCLogic {
         onPick: () => this.setState({ payFilter: f }),
       })),
       payRows: payRows.map(r => ({
-        code: r.bookingCode, student: r.student, amount: DLT.fmt.money(r.amount),
-        ref: r.providerReference || '— manual',
-        status: r.status + (r.refunds && r.refunds.length ? ' · ' + r.refunds[r.refunds.length - 1].status.replace('REFUND_', '') : ''),
+        code: r.bookingCode, student: r.student || 'Manual / no account', amount: DLT.fmt.money(r.amount),
+        ref: r.providerReference || r.providerPaymentId || r.providerOrderId || '— manual',
+        status: r.status + (r.refunds && r.refunds.length ? ' · ' + (r.refunds[0].stage || r.refunds[0].status).replace(/_/g, ' ') : ''),
         fg: r.status === 'SUCCESS' ? '#0E4B34'
           : r.status === 'FAILED' || r.status === 'CANCELLED' ? '#8A2F1C' : '#8A5A0E',
         actions: [{
@@ -2281,6 +2531,15 @@ class Component extends DCLogic {
       reviews, noReviews: !st.loading.Feedback && reviews.length === 0,
       requests, noRequests: !st.loading.Requests && requests.length === 0,
 
+      /* schedule poll */
+      pollQuestion: schedulePoll ? schedulePoll.question : 'What time should the Woxsen to Miyapur bus leave?',
+      pollMetrics, pollTimes, pollResponses,
+      noPollResponses: !st.loading['Schedule poll'] && pollResponses.length === 0,
+      exportPoll: () => {
+        window.open(DLT.admin.busTimePollExportUrl(), '_blank');
+        this.ok('Downloading schedule poll responses.');
+      },
+
       /* reports */
       repTripId: st.repTripId, repFrom: st.repFrom, repTo: st.repTo,
       onRepTrip: e => this.setState({ repTripId: e.target.value, preview: null }),
@@ -2292,7 +2551,7 @@ class Component extends DCLogic {
       previewTitle: st.preview ? st.preview.label : '',
       previewCount: st.preview ? st.preview.rows.length : 0,
       previewCols: st.preview && st.preview.rows.length ? Object.keys(st.preview.rows[0]) : [],
-      previewRows: st.preview ? st.preview.rows.slice(0, 12).map(r => ({ cells: Object.values(r).map(v => String(v == null ? '—' : v)) })) : [],
+      previewRows: st.preview ? st.preview.rows.map(r => ({ cells: Object.values(r).map(v => String(v == null ? '—' : v)) })) : [],
       exportPreview: () => {
         if (!st.preview) return;
         window.open(DLT.admin.exportUrl(st.preview.kind, repFilter), '_blank');
