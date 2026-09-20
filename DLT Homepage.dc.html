@@ -619,6 +619,8 @@
     &quot;label&quot;: &quot;Motion path&quot;
   }
 }">
+const PUBLIC_TRIP_LOOKAHEAD_DAYS = 30;
+
 const FAQ = [
   ['Booking', [
     ['What is DLT Services?', 'DLT Services is the student-run Woxsen University to Miyapur Metro shuttle booking site for enrolled students.'],
@@ -740,7 +742,7 @@ class Component extends DCLogic {
     await Promise.all([
       (async () => {
     try {
-      data.trips = await api.trips.listPublic(3);
+      data.trips = await api.trips.listPublic(PUBLIC_TRIP_LOOKAHEAD_DAYS);
       data.tripsLoaded = true;
     } catch (e) { data.trips = []; data.tripsLoaded = true; }
       })(),

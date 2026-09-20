@@ -677,6 +677,8 @@
 
    Every read inside renderVals() is now loaded into state.data by _load(),
    because every read is a request. renderVals keeps its shape. */
+const PUBLIC_TRIP_LOOKAHEAD_DAYS = 30;
+
 class Component extends DCLogic {  state = {
     ready: false, step: 'loading', tripId: null,
     pax: {}, open: 0, touched: false, contact: null,
@@ -748,7 +750,7 @@ class Component extends DCLogic {  state = {
 
   async _primeDepartures() {
     try {
-      const openTrips = await DLT.trips.listPublic(3);
+      const openTrips = await DLT.trips.listPublic(PUBLIC_TRIP_LOOKAHEAD_DAYS);
       this.setState(st => ({
         ready: true,
         step: st.step === 'loading' ? 'trips' : st.step,
@@ -768,7 +770,7 @@ class Component extends DCLogic {  state = {
     const data = Object.assign({}, st.data);
     try {
       await Promise.all([
-        DLT.trips.listPublic(3).then(trips => { data.openTrips = trips; }),
+        DLT.trips.listPublic(PUBLIC_TRIP_LOOKAHEAD_DAYS).then(trips => { data.openTrips = trips; }),
         (async () => {
       if (st.tripId) {
         const [trip, map] = await Promise.all([
