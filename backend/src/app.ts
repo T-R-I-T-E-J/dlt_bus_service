@@ -103,13 +103,34 @@ export function startJobs(provider: ReturnType<typeof createRazorpayProvider>) {
   return timers;
 }
 
+async function waitForDatabaseReady() {
+  const maxMs = Number(process.env.DB_BOOT_WAIT_MS ?? 240_000);
+  const started = Date.now();
+  let attempt = 0;
+
+  while (true) {
+    try {
+      return await assertReady();
+    } catch (e) {
+      attempt += 1;
+      const elapsed = Date.now() - started;
+      if (elapsed >= maxMs) throw e;
+
+      const delay = Math.min(10_000, 1_000 * attempt);
+      console.error('[dlt] database readiness failed; retrying in %dms (attempt %d): %s',
+        delay, attempt, (e as Error).message);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 /* ---------------------------------------------------------------- entry */
 
 if (process.env.NODE_ENV !== 'test') {
   const { app, provider } = createApp();
-  /* Fail at boot rather than on the first seat: an unmigrated or too-old
-   * database is a deployment error, not a request error. */
-  const ready = await assertReady();
+  /* Fail at boot rather than on the first seat, but give Neon/Railway a short
+   * window to recover from transient cold-start network timeouts. */
+  const ready = await waitForDatabaseReady();
   console.log('[dlt] postgres %s, %d migrations, email: %s, audit append-only: %s',
     ready.version, ready.migrations, currentTransport(), ready.auditAppendOnly);
 

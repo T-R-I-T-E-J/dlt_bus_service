@@ -21,7 +21,7 @@ export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   max: Number(process.env.PGPOOL_MAX ?? 10),
   idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
+  connectionTimeoutMillis: Number(process.env.PGCONNECT_TIMEOUT_MS ?? 10_000),
   /* A statement that runs longer than this is a bug, not a slow query. Bounded
    * so one pathological query cannot hold a seat row lock indefinitely and
    * stall every student trying to book. */
