@@ -692,7 +692,7 @@ class Component extends DCLogic {  state = {
        flips ready in the same setState that only *schedules* _load() as a
        callback - so there is one render with ready === true and no data yet.
        An empty shape here (not undefined) is the loading state. */
-    data: { openTrips: [], trip: null, seatRows: [], held: [],
+    data: { openTrips: [], tripsLoaded: false, trip: null, seatRows: [], held: [],
       booking: null, waits: [], waitTrip: null },
   };
 
@@ -754,7 +754,7 @@ class Component extends DCLogic {  state = {
       this.setState(st => ({
         ready: true,
         step: st.step === 'loading' ? 'trips' : st.step,
-        data: { ...st.data, openTrips, trip: st.tripId ? st.data.trip : (openTrips[0] || null) },
+        data: { ...st.data, openTrips, tripsLoaded: true, trip: st.tripId ? st.data.trip : (openTrips[0] || null) },
       }));
     } catch (e) {
       /* Full _load() after boot owns the visible error state. */
@@ -770,7 +770,7 @@ class Component extends DCLogic {  state = {
     const data = Object.assign({}, st.data);
     try {
       await Promise.all([
-        DLT.trips.listPublic(PUBLIC_TRIP_LOOKAHEAD_DAYS).then(trips => { data.openTrips = trips; }),
+        DLT.trips.listPublic(PUBLIC_TRIP_LOOKAHEAD_DAYS).then(trips => { data.openTrips = trips; data.tripsLoaded = true; }),
         (async () => {
       if (st.tripId) {
         const [trip, map] = await Promise.all([
@@ -1351,7 +1351,7 @@ class Component extends DCLogic {  state = {
       signedIn: !!me, signedOut: !me, userName: me ? me.name.split(' ')[0] : '',
       signOut: () => { DLT.auth.signOut(); this.setState({ step: 'trips', tripId: null, bookingId: null, paymentId: null, pax: {} }); },
 
-      trips, noTrips: trips.length === 0,
+      trips, noTrips: Boolean(st.data.tripsLoaded) && trips.length === 0,
       atTrips: step === 'trips', atSeats: step === 'seats', atPassengers: step === 'passengers',
       atReview: step === 'review', atCheckout: step === 'checkout', atVerifying: step === 'verifying',
       atPending: step === 'pending', atFailed: step === 'failed', atExpired: step === 'expired',

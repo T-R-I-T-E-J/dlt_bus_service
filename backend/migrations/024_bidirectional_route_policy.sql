@@ -23,4 +23,6 @@ ON CONFLICT (code) DO UPDATE
       duration_min = EXCLUDED.duration_min,
       active = true;
 
+INSERT INTO schema_migrations (filename) VALUES ('024_bidirectional_route_policy.sql');
+
 COMMIT;
