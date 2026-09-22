@@ -12,6 +12,14 @@ import { AppError } from '../domain/errors.ts';
 
 const router = Router();
 
+async function sweepExpiredHoldsBestEffort(context: string) {
+  try {
+    await seats.sweepExpiredHolds();
+  } catch (e) {
+    console.error('[trips:%s] hold sweep skipped: %s', context, (e as Error).message);
+  }
+}
+
 /* F-09 · UX §4 promises seat selection without an account. An unsigned browser
  * gets an opaque guest token in an HttpOnly cookie; sign-in adopts whatever it
  * holds (F-08), so authenticating mid-booking no longer loses the basket. */
@@ -33,7 +41,7 @@ const UUID = z.string().uuid();
 router.get('/trips', async (req, res, next) => {
   try {
     const days = z.coerce.number().int().min(1).max(60).optional().parse(req.query.days);
-    await seats.sweepExpiredHolds();          // never show a lapsed hold as taken
+    await sweepExpiredHoldsBestEffort('list');
     res.json({ trips: await seats.listTrips({ days }) });
   } catch (e) { next(e); }
 });
@@ -46,7 +54,7 @@ router.get('/trips/:id', async (req, res, next) => {
 router.get('/trips/:id/seats', async (req, res, next) => {
   try {
     const id = UUID.parse(req.params.id);
-    await seats.sweepExpiredHolds();
+    await sweepExpiredHoldsBestEffort('seats');
     const holder = req.session ? { userId: req.session.userId }
       : (req.cookies?.[GUEST_COOKIE] ? { guestToken: req.cookies[GUEST_COOKIE] } : null);
     res.json({ rows: await seats.seatMap(id, holder), held: holder ? await seats.myHeld(id, holder) : [] });
