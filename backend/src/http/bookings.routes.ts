@@ -10,6 +10,7 @@ import { MAX_SEATS_PER_BOOKING } from '../domain/seats.ts';
 import { requireAuth, requirePermission, GUEST_COOKIE } from './auth.routes.ts';
 import { AppError } from '../domain/errors.ts';
 import type { PaymentProvider } from '../domain/payment-provider.ts';
+import { invalidatePublicTripCache } from '../domain/cache.ts';
 
 export default function bookingRoutes(provider: PaymentProvider) {
   const router = Router();
@@ -56,7 +57,9 @@ export default function bookingRoutes(provider: PaymentProvider) {
       if (!holder.userId && !holder.guestToken)
         throw new AppError('CONFLICT', 'Your seats went back on sale. Choose again.');
 
-      res.status(201).json({ booking: await pay.createBooking({ ...body, holder, idempotencyKey: key }) });
+      const booking = await pay.createBooking({ ...body, holder, idempotencyKey: key });
+      invalidatePublicTripCache();
+      res.status(201).json({ booking });
     } catch (e) { next(e); }
   });
 
@@ -103,7 +106,11 @@ export default function bookingRoutes(provider: PaymentProvider) {
   router.post('/bookings/:id/cancel', requireAuth, jsonBody, async (req, res, next) => {
     try {
       const reason = z.string().max(500).optional().parse(req.body?.reason);
-      res.json(await pay.cancelBooking(UUID.parse(req.params.id), actorOf(req) as any, reason));
+      const out = await pay.cancelBooking(UUID.parse(req.params.id), actorOf(req) as any, reason);
+      invalidatePublicTripCache();
+      void pay.dispatchPendingRefunds(provider)
+        .catch(e => console.error('[refunds] post-cancel dispatch skipped: %s', (e as Error).message));
+      res.json({ ...out, refundDispatch: 'queued' });
     } catch (e) { next(e); }
   });
 
@@ -219,8 +226,11 @@ export default function bookingRoutes(provider: PaymentProvider) {
       }).parse(req.body);
       const out = await pay.overrideRefund({ bookingId: UUID.parse(req.params.id),
         ...body, actorId: req.session!.userId, idempotencyKey: z.string().min(8).max(200).parse(req.get('Idempotency-Key')) });
+      invalidatePublicTripCache();
+      void pay.dispatchPendingRefunds(provider)
+        .catch(e => console.error('[refunds] override dispatch skipped: %s', (e as Error).message));
       /* Says the amount it actually raised — never "override applied" on ₹0. */
-      res.json({ ...out, message: `₹${out.amount} refund created` });
+      res.json({ ...out, refundDispatch: 'queued', message: `₹${out.amount} refund created` });
     } catch (e) { next(e); }
   });
 
@@ -234,8 +244,10 @@ export default function bookingRoutes(provider: PaymentProvider) {
         contactPhone: z.string().min(10).max(15),
         reason: z.string().min(4).max(500),
       }).parse(req.body);
-      res.status(201).json({ booking: await pay.createManualBooking({ ...body, actorId: req.session!.userId,
-        idempotencyKey: z.string().min(8).max(200).parse(req.get('Idempotency-Key')) }) });
+      const booking = await pay.createManualBooking({ ...body, actorId: req.session!.userId,
+        idempotencyKey: z.string().min(8).max(200).parse(req.get('Idempotency-Key')) });
+      invalidatePublicTripCache();
+      res.status(201).json({ booking });
     } catch (e) { next(e); }
   });
 

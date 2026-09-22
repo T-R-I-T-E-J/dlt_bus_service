@@ -113,9 +113,6 @@
   }
 }
 </script>
-<link rel="modulepreload" href="./vendor/three/three.module.js">
-<link rel="modulepreload" href="./vendor/three/three.core.js">
-<link rel="modulepreload" href="./vendor/three/addons/loaders/GLTFLoader.js">
 <link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z">
 <link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1">
 <script type="module" src="./dlt-client.js"></script>
@@ -179,7 +176,37 @@
     [data-poll-layout] { grid-template-columns:1fr !important; }
   }
 </style>
-<script type="module" src="./journey.js"></script>
+<script type="module">
+  let dltJourneyLoad;
+  const loadDltJourney = () => {
+    if (!dltJourneyLoad) {
+      dltJourneyLoad = import('./journey.js').catch((error) => {
+        document.dispatchEvent(new CustomEvent('journeyfailed', {
+          detail: error?.message || 'journey load failed'
+        }));
+      });
+    }
+    return dltJourneyLoad;
+  };
+
+  const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 900));
+  const start = () => loadDltJourney();
+  const startAndCleanup = () => {
+    start();
+    window.removeEventListener('scroll', startAndCleanup);
+    window.removeEventListener('pointerdown', startAndCleanup);
+    window.removeEventListener('keydown', startAndCleanup);
+  };
+
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    window.addEventListener('load', () => setTimeout(start, 1500), { once: true });
+  } else {
+    idle(start, { timeout: 2200 });
+    window.addEventListener('scroll', startAndCleanup, { passive: true, once: true });
+    window.addEventListener('pointerdown', startAndCleanup, { passive: true, once: true });
+    window.addEventListener('keydown', startAndCleanup, { once: true });
+  }
+</script>
 </helmet>
 
 <a class="dlt-skip" href="#trips">Skip to booking</a>

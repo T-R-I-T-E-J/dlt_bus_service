@@ -16,6 +16,7 @@ import { z } from 'zod';
 import * as admin from '../domain/admin.ts';
 import * as polls from '../domain/polls.ts';
 import { readAudit } from '../domain/audit.ts';
+import { invalidatePublicTripCache } from '../domain/cache.ts';
 import { requireAuth, requirePermission } from './auth.routes.ts';
 
 const router = Router();
@@ -74,12 +75,18 @@ router.post('/admin/trips', requirePermission('trip.write'), async (req, res, ne
       id: UUID.nullish(), routeId: UUID, vehicleId: UUID,
       departureAt: z.string().datetime(), price: z.coerce.number().int().min(0).max(100000),
     }).parse(req.body);
-    res.status(body.id ? 200 : 201).json({ trip: await admin.saveTrip(body, actorOf(req)) });
+    const trip = await admin.saveTrip(body, actorOf(req));
+    invalidatePublicTripCache();
+    res.status(body.id ? 200 : 201).json({ trip });
   } catch (e) { next(e); }
 });
 
 router.post('/admin/trips/:id/publish', requirePermission('trip.publish'), async (req, res, next) => {
-  try { res.json(await admin.publishTrip(UUID.parse(req.params.id), actorOf(req))); }
+  try {
+    const out = await admin.publishTrip(UUID.parse(req.params.id), actorOf(req));
+    invalidatePublicTripCache();
+    res.json(out);
+  }
   catch (e) { next(e); }
 });
 
@@ -89,14 +96,18 @@ router.post('/admin/trips/:id/status', requirePermission('trip.status'), async (
       status: z.enum(['DRAFT', 'OPEN', 'BOOKING_CLOSED', 'BOARDING', 'DEPARTED', 'COMPLETED']),
       reason: REASON,
     }).parse(req.body);
-    res.json(await admin.setTripStatus(UUID.parse(req.params.id), body.status, body.reason, actorOf(req)));
+    const out = await admin.setTripStatus(UUID.parse(req.params.id), body.status, body.reason, actorOf(req));
+    invalidatePublicTripCache();
+    res.json(out);
   } catch (e) { next(e); }
 });
 
 router.post('/admin/trips/:id/cancel', requirePermission('trip.cancel'), async (req, res, next) => {
   try {
     const reason = REASON.parse(req.body?.reason);
-    res.json(await admin.cancelTrip(UUID.parse(req.params.id), reason, actorOf(req)));
+    const out = await admin.cancelTrip(UUID.parse(req.params.id), reason, actorOf(req));
+    invalidatePublicTripCache();
+    res.json(out);
   } catch (e) { next(e); }
 });
 
@@ -114,16 +125,20 @@ router.post('/admin/trips/:id/seats/:seat/block', requirePermission('seat.block'
   async (req, res, next) => {
     try {
       const reason = REASON.parse(req.body?.reason);
-      res.json({ seat: await admin.blockSeat(
-        UUID.parse(req.params.id), SEAT.parse(req.params.seat), reason, actorOf(req)) });
+      const seat = await admin.blockSeat(
+        UUID.parse(req.params.id), SEAT.parse(req.params.seat), reason, actorOf(req));
+      invalidatePublicTripCache();
+      res.json({ seat });
     } catch (e) { next(e); }
   });
 
 router.delete('/admin/trips/:id/seats/:seat/block', requirePermission('seat.block'),
   async (req, res, next) => {
     try {
-      res.json({ seat: await admin.unblockSeat(
-        UUID.parse(req.params.id), SEAT.parse(req.params.seat), actorOf(req)) });
+      const seat = await admin.unblockSeat(
+        UUID.parse(req.params.id), SEAT.parse(req.params.seat), actorOf(req));
+      invalidatePublicTripCache();
+      res.json({ seat });
     } catch (e) { next(e); }
   });
 

@@ -9,16 +9,11 @@ import rateLimit from 'express-rate-limit';
 import * as seats from '../domain/seats.ts';
 import { requireAuth, GUEST_COOKIE } from './auth.routes.ts';
 import { AppError } from '../domain/errors.ts';
+import { cacheGet, cacheSet, invalidatePublicTripCache } from '../domain/cache.ts';
 
 const router = Router();
-
-async function sweepExpiredHoldsBestEffort(context: string) {
-  try {
-    await seats.sweepExpiredHolds();
-  } catch (e) {
-    console.error('[trips:%s] hold sweep skipped: %s', context, (e as Error).message);
-  }
-}
+const TRIP_LIST_TTL = Number(process.env.TRIP_LIST_CACHE_TTL_SECONDS ?? 20);
+const TRIP_DETAIL_TTL = Number(process.env.TRIP_DETAIL_CACHE_TTL_SECONDS ?? 30);
 
 /* F-09 · UX §4 promises seat selection without an account. An unsigned browser
  * gets an opaque guest token in an HttpOnly cookie; sign-in adopts whatever it
@@ -41,23 +36,47 @@ const UUID = z.string().uuid();
 router.get('/trips', async (req, res, next) => {
   try {
     const days = z.coerce.number().int().min(1).max(60).optional().parse(req.query.days);
-    await sweepExpiredHoldsBestEffort('list');
-    res.json({ trips: await seats.listTrips({ days }) });
+    const key = `trips:list:${days ?? 'default'}`;
+    const cached = await cacheGet<unknown[]>(key);
+    if (cached) {
+      res.setHeader('X-DLT-Cache', 'HIT');
+      return res.json({ trips: cached });
+    }
+
+    const trips = await seats.listTrips({ days });
+    await cacheSet(key, trips, TRIP_LIST_TTL);
+    res.setHeader('X-DLT-Cache', 'MISS');
+    res.json({ trips });
   } catch (e) { next(e); }
 });
 
 router.get('/trips/:id', async (req, res, next) => {
-  try { res.json({ trip: await seats.getTrip(UUID.parse(req.params.id)) }); }
-  catch (e) { next(e); }
+  try {
+    const id = UUID.parse(req.params.id);
+    const key = `trips:detail:${id}`;
+    const cached = await cacheGet<unknown>(key);
+    if (cached) {
+      res.setHeader('X-DLT-Cache', 'HIT');
+      return res.json({ trip: cached });
+    }
+
+    const trip = await seats.getTrip(id);
+    await cacheSet(key, trip, TRIP_DETAIL_TTL);
+    res.setHeader('X-DLT-Cache', 'MISS');
+    res.json({ trip });
+  } catch (e) { next(e); }
 });
 
 router.get('/trips/:id/seats', async (req, res, next) => {
   try {
     const id = UUID.parse(req.params.id);
-    await sweepExpiredHoldsBestEffort('seats');
     const holder = req.session ? { userId: req.session.userId }
       : (req.cookies?.[GUEST_COOKIE] ? { guestToken: req.cookies[GUEST_COOKIE] } : null);
-    res.json({ rows: await seats.seatMap(id, holder), held: holder ? await seats.myHeld(id, holder) : [] });
+    const [rows, held] = await Promise.all([
+      seats.seatMap(id, holder),
+      holder ? seats.myHeld(id, holder) : Promise.resolve([]),
+    ]);
+    res.json({ rows, held });
   } catch (e) { next(e); }
 });
 
@@ -67,7 +86,9 @@ router.post('/trips/:id/seats/:seatNumber/hold', async (req, res, next) => {
   try {
     const id = UUID.parse(req.params.id);
     const seatNumber = z.string().regex(/^\d{1,2}[A-D]$/i).parse(req.params.seatNumber).toUpperCase();
-    res.json({ seat: await seats.holdSeat(id, seatNumber, holderOf(req, res)) });
+    const seat = await seats.holdSeat(id, seatNumber, holderOf(req, res));
+    invalidatePublicTripCache();
+    res.json({ seat });
   } catch (e) { next(e); }
 });
 
@@ -76,6 +97,7 @@ router.delete('/trips/:id/seats/:seatNumber/hold', async (req, res, next) => {
     const id = UUID.parse(req.params.id);
     const seatNumber = z.string().regex(/^\d{1,2}[A-D]$/i).parse(req.params.seatNumber).toUpperCase();
     const released = await seats.releaseSeat(id, seatNumber, holderOf(req, res));
+    invalidatePublicTripCache();
     /* F-20: the client is told this was deliberate, so it never shows the
      * "your seats went back on sale" expiry screen for a removal. */
     res.json({ released, reason: 'RELEASED_BY_STUDENT' });
@@ -85,6 +107,7 @@ router.delete('/trips/:id/seats/:seatNumber/hold', async (req, res, next) => {
 router.delete('/trips/:id/holds', async (req, res, next) => {
   try {
     const n = await seats.releaseAll(UUID.parse(req.params.id), holderOf(req, res));
+    invalidatePublicTripCache();
     res.json({ released: n, reason: 'RELEASED_BY_STUDENT' });
   } catch (e) { next(e); }
 });

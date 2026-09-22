@@ -21,6 +21,7 @@ import boardingRoutes from './http/boarding.routes.ts';
 import adminRoutes from './http/admin.routes.ts';
 import { sweepExpiredHolds } from './domain/seats.ts';
 import { processPendingEvents, dispatchPendingRefunds, automaticRefundsEnabled } from './domain/payments.ts';
+import { closeCache } from './domain/cache.ts';
 
 export function createApp() {
   const app = express();
@@ -62,7 +63,20 @@ export function createApp() {
   app.use('/api', boardingRoutes);
   app.use('/api', adminRoutes);
 
-  app.get('/api/health', async (_req, res) => {
+  app.get('/api/health', (_req, res) => {
+    res.json({
+      ok: true,
+      uptimeSeconds: Math.round(process.uptime()),
+      email: currentTransport(),
+      provider: provider.name,
+    });
+  });
+
+  app.get('/api/healthz', (_req, res) => {
+    res.json({ ok: true, uptimeSeconds: Math.round(process.uptime()) });
+  });
+
+  app.get('/api/ready', async (_req, res) => {
     try {
       const db = await assertReady();
       res.json({ ok: true, db, email: currentTransport(), provider: provider.name });
@@ -141,7 +155,9 @@ if (process.env.NODE_ENV !== 'test') {
   for (const sig of ['SIGTERM', 'SIGINT'] as const) {
     process.on(sig, () => {
       timers.forEach(clearInterval);
-      server.close(() => { void close().then(() => process.exit(0)); });
+      server.close(() => {
+        void Promise.all([close(), closeCache()]).then(() => process.exit(0));
+      });
     });
   }
 }
