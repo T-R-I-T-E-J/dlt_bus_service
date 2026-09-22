@@ -7,7 +7,8 @@
  *      guest seat maps carry that browser's held seats. A shared or campus
  *      machine, a browser back-button, or an intermediary cache should not
  *      retain them. Applied only when a session or guest basket cookie is
- *      present, so genuinely public reads (the trip list) stay cacheable.
+ *      present, or when the response creates a cookie, so genuinely public
+ *      reads (the trip list) stay cacheable.
  *
  *   2. `Retry-After` on every 429.
  *      The remediation added real rate limits (H-2 guest holds, login lockout).
@@ -25,7 +26,7 @@ export function noStoreForAuthenticated(req: Request, res: Response, next: NextF
   res.on('pipe', () => {});             // no-op; keeps the header logic in one place
   const original = res.json.bind(res);
   res.json = ((body: unknown) => {
-    if (req.session || req.cookies?.dlt_guest) {
+    if (req.session || req.cookies?.dlt_guest || res.getHeader('Set-Cookie')) {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
       res.setHeader('Pragma', 'no-cache');
       /* Vary on Cookie regardless, so a shared cache can never serve one
