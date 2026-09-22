@@ -6,7 +6,7 @@
  * WRITTEN, NOT EXECUTED.
  */
 
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { assertReady, close } from './db/index.ts';
@@ -23,12 +23,52 @@ import { sweepExpiredHolds } from './domain/seats.ts';
 import { processPendingEvents, dispatchPendingRefunds, automaticRefundsEnabled } from './domain/payments.ts';
 import { closeCache } from './domain/cache.ts';
 
+function requestPath(req: Request) {
+  return req.path || req.originalUrl.split('?')[0] || req.originalUrl;
+}
+
+function apiTiming(req: Request, res: Response, next: NextFunction) {
+  const start = process.hrtime.bigint();
+  const originalWriteHead = res.writeHead;
+  let wroteTiming = false;
+
+  res.writeHead = function writeHeadWithTiming(this: Response, ...args: any[]) {
+    if (!wroteTiming) {
+      wroteTiming = true;
+      const ms = Number(process.hrtime.bigint() - start) / 1_000_000;
+      if (!res.hasHeader('Server-Timing')) res.setHeader('Server-Timing', `app;dur=${ms.toFixed(1)}`);
+      if (!res.hasHeader('X-DLT-Response-Time')) res.setHeader('X-DLT-Response-Time', `${Math.round(ms)}ms`);
+    }
+    return originalWriteHead.apply(this, args as any);
+  } as typeof res.writeHead;
+
+  res.on('finish', () => {
+    const ms = Number(process.hrtime.bigint() - start) / 1_000_000;
+    const payload = {
+      level: res.statusCode >= 500 ? 'error' : 'info',
+      msg: 'api_request',
+      method: req.method,
+      path: requestPath(req),
+      status: res.statusCode,
+      duration_ms: Number(ms.toFixed(1)),
+      cache: res.getHeader('X-DLT-Cache') || undefined,
+      requestId: req.get('x-request-id') || req.get('x-vercel-id') || req.get('x-railway-request-id') || undefined,
+    };
+    const line = JSON.stringify(payload);
+    if (res.statusCode >= 500) console.error(line);
+    else console.log(line);
+  });
+
+  next();
+}
+
 export function createApp() {
   const app = express();
   const provider = createRazorpayProvider(razorpayConfigFromEnv());
 
   app.set('trust proxy', 1);            // behind TLS termination; req.ip must be real
   app.use(helmet());
+  app.use('/api', apiTiming);
 
   /* Cookies and the session they resolve to are independent of the request
    * body, so both run BEFORE bookingRoutes without touching the webhook's raw
