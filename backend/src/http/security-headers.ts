@@ -2,12 +2,11 @@
  *
  * Two small controls that belong at the boundary rather than in any handler:
  *
- *   1. `Cache-Control: no-store` on every private JSON response.
- *      Booking views carry passenger names, student IDs and phone numbers, and
- *      guest seat maps carry that browser's held seats. A shared or campus
- *      machine, a browser back-button, or an intermediary cache should not
- *      retain them. Applied only when a session or guest basket cookie is
- *      present, so genuinely public reads (the trip list) stay cacheable.
+ *   1. `Cache-Control: no-store` on every AUTHENTICATED JSON response.
+ *      Booking views carry passenger names, student IDs and phone numbers. A
+ *      shared or campus machine, a browser back-button, or an intermediary
+ *      cache should not retain them. Applied only when a session is present, so
+ *      genuinely public reads (the trip list) stay cacheable.
  *
  *   2. `Retry-After` on every 429.
  *      The remediation added real rate limits (H-2 guest holds, login lockout).
@@ -20,17 +19,16 @@
 
 import type { Request, Response, NextFunction } from 'express';
 
-/** Mount AFTER cookieParser + attachSession, so cookies/session are resolved. */
+/** Mount AFTER attachSession, so `req.session` is resolved. */
 export function noStoreForAuthenticated(req: Request, res: Response, next: NextFunction) {
   res.on('pipe', () => {});             // no-op; keeps the header logic in one place
   const original = res.json.bind(res);
   res.json = ((body: unknown) => {
-    if (req.session || req.cookies?.dlt_guest) {
+    if (req.session) {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
       res.setHeader('Pragma', 'no-cache');
       /* Vary on Cookie regardless, so a shared cache can never serve one
-       * student's or guest basket's response to another even if no-store is
-       * ignored. */
+       * student's response to another even if no-store is ignored. */
       res.setHeader('Vary', 'Cookie');
     }
     return original(body);
