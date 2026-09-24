@@ -68,8 +68,12 @@ const DeletionBody = z.object({ reason: z.string().max(500).nullish() });
 /* ---------------------------------------------------------------- middleware */
 
 export async function attachSession(req: Request, _res: Response, next: NextFunction) {
-  req.session = await auth.resolveSession(req.cookies?.[SESSION_COOKIE]);
-  next();
+  try {
+    req.session = await auth.resolveSession(req.cookies?.[SESSION_COOKIE]);
+    next();
+  } catch (e) {
+    next(e);
+  }
 }
 
 export function requireAuth(req: Request, _res: Response, next: NextFunction) {
