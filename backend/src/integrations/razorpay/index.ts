@@ -173,7 +173,8 @@ export function createRazorpayProvider(cfg: RazorpayConfig): PaymentProvider {
   async function call(path: string, init?: RequestInit) {
     const res = await fetch(`${cfg.baseUrl}${path}`, {
       ...init,
-      headers: { authorization: auth, 'content-type': 'application/json' },
+      headers: { ...Object.fromEntries(new Headers(init?.headers)), authorization: auth, 'content-type': 'application/json' },
+      signal: AbortSignal.timeout(10_000),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -182,7 +183,7 @@ export function createRazorpayProvider(cfg: RazorpayConfig): PaymentProvider {
       console.error('[razorpay] %s %s -> %s %s', init?.method ?? 'GET', path, res.status,
         (body as any)?.error?.code ?? '');
       throw new AppError('INTERNAL',
-        'The payment provider could not be reached. Nothing has been charged.');
+        'The payment provider could not be reached. Payment or refund status must be verified.');
     }
     return body as any;
   }
@@ -215,30 +216,29 @@ export function createRazorpayProvider(cfg: RazorpayConfig): PaymentProvider {
       const o = await call(`/orders/${encodeURIComponent(providerOrderId)}`);
       /* An order alone does not name the payment that settled it, and refunds
        * need pay_.... Ask for the order's payments too. */
-      let paymentId: string | null = null;
-      let paymentStatus: string | null = null;
-      try {
-        const ps = await call(`/orders/${encodeURIComponent(providerOrderId)}/payments`);
-        const captured = (ps.items ?? []).find((p: any) => p.status === 'captured')
-          ?? (ps.items ?? [])[0];
-        if (captured) { paymentId = captured.id; paymentStatus = captured.status; }
-      } catch { /* the order status alone is still usable */ }
+      const ps = await call(`/orders/${encodeURIComponent(providerOrderId)}/payments`);
+      const payment = (ps.items ?? []).find((p: any) => p.status === 'captured')
+        ?? (ps.items ?? [])[0];
+      // Never settle from an order aggregate without identifying the captured
+      // payment. Otherwise its later refund has no payment ID to target.
+      if (o.status === 'paid' && (!payment?.id || payment.status !== 'captured'))
+        throw new Error('Paid order has no captured payment yet; reconciliation must retry');
 
       return {
         providerOrderId: o.id,
-        kind: paymentStatus ? mapPaymentStatus(paymentStatus) : mapOrderStatus(o.status),
-        providerStatus: String(paymentStatus ?? o.status ?? 'unknown'),
-        amountRupees: toRupees(o.amount) ?? 0,
-        paymentId,
+        kind: payment?.status ? mapPaymentStatus(payment.status) : mapOrderStatus(o.status),
+        providerStatus: String(payment?.status ?? o.status ?? 'unknown'),
+        amountRupees: toRupees(payment?.amount ?? o.amount) ?? 0,
+        paymentId: payment?.id ?? null,
       };
     },
 
     async createRefund(i): Promise<CreatedRefund> {
-      /* Against the PAYMENT, not the order — and only a captured payment can be
-       * refunded. `receipt` is our refund row id, which makes this idempotent
-       * from our side. */
+      /* receipt is only a reference. The dedicated header is what makes a
+       * retry after an uncertain network response safe at Razorpay. */
       const r = await call(`/payments/${encodeURIComponent(i.providerPaymentId)}/refund`, {
         method: 'POST',
+        headers: { 'X-Refund-Idempotency': i.reference },
         body: JSON.stringify({
           amount: toPaise(i.amountRupees),
           speed: 'normal',

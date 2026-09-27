@@ -454,9 +454,11 @@ async function applyEvent(c: PoolClient, ev: any, provider: PaymentProvider) {
   const { rows: [p] } = await c.query('SELECT * FROM payments WHERE id = $1 FOR UPDATE', [ev.payment_id]);
   if (!p) return;
 
-  /* Record the provider's payment id the first time we learn it: a refund is
-   * created against that, not against the order. */
-  if (ev.subject_payment_id && !p.provider_payment_id) {
+  /* An order can have a failed attempt followed by a successful one. A capture
+   * must replace the failed attempt's ID, since refunds target the capture.
+   * Out-of-order failure/authorization events must never replace a settled ID. */
+  if (ev.subject_payment_id && (!p.provider_payment_id ||
+      (ev.kind_normalized === 'PAYMENT_SUCCEEDED' && !['SUCCESS','DUPLICATE'].includes(p.status)))) {
     await c.query('UPDATE payments SET provider_payment_id = $2, updated_at = now() WHERE id = $1',
       [p.id, ev.subject_payment_id]);
   }
@@ -471,7 +473,7 @@ async function applyEvent(c: PoolClient, ev: any, provider: PaymentProvider) {
   const reference = ev.subject_payment_id ?? null;
 
   if (ev.kind_normalized === 'PAYMENT_FAILED') {
-    if (p.status === 'SUCCESS') return;             // never downgrade a settled payment
+    if (p.status === 'SUCCESS' || p.status === 'DUPLICATE') return; // never downgrade a settled receipt
     await c.query(
       `UPDATE payments SET status='FAILED', failure_reason=$2, provider_reference=$3, updated_at=now()
         WHERE id=$1`, [p.id, ev.failure_reason ?? ev.provider_status, reference]);
@@ -508,7 +510,7 @@ async function applyEvent(c: PoolClient, ev: any, provider: PaymentProvider) {
       [p.id, received, reference,
        `amount mismatch: expected ₹${expected}, received ₹${received}`]);
     await raiseRefund(c, p.booking_id, p.id, received,
-      'Amount received does not match the fare — returned in full', null, false);
+      'Amount received does not match the fare — full refund pending', null, false);
     await audit(c, {}, 'payment.amount_mismatch', 'payment', p.id,
       `₹${expected}`, `₹${received}`, null);
     return;
@@ -523,7 +525,7 @@ async function applyEvent(c: PoolClient, ev: any, provider: PaymentProvider) {
     await c.query(
       `UPDATE payments SET status='DUPLICATE', provider_reference=$2, updated_at=now() WHERE id=$1`,
       [p.id, reference]);
-    await raiseRefund(c, p.booking_id, p.id, p.amount, 'Duplicate payment returned in full', null, false);
+    await raiseRefund(c, p.booking_id, p.id, p.amount, 'Duplicate payment — full refund pending', null, false);
     return;
   }
 
@@ -556,7 +558,7 @@ async function applyEvent(c: PoolClient, ev: any, provider: PaymentProvider) {
     const lost = s.seatsLost;
     const total = lost + s.seatsClaimed;
     await raiseRefund(c, p.booking_id, p.id, s.refundAmount,
-      `${lost} of ${total} seats were taken before the payment arrived — those seats refunded`,
+      `${lost} of ${total} seats could not be allocated when payment was confirmed — refund pending for those seats`,
       null, false);
     await c.query(
       `INSERT INTO notification_requests (kind, user_id, reason, status)
@@ -572,13 +574,23 @@ async function applyEvent(c: PoolClient, ev: any, provider: PaymentProvider) {
            ELSE concat_ws(' | ', notification_requests.reason, EXCLUDED.reason)
          END`, [p.booking_id, String(lost)]);
     await audit(c, {}, 'payment.partial_settlement', 'booking', p.booking_id,
-      `${total} seats`, `${s.seatsClaimed} kept, ₹${s.refundAmount} refunded`, null);
+      `${total} seats`, `${s.seatsClaimed} kept, ₹${s.refundAmount} refund pending`, null);
     return;
   }
 
   if (s.outcome === 'REFUND_REQUIRED') {
+    const { rows: [state] } = await c.query(
+      `SELECT b.status, t.status AS trip_status FROM bookings b JOIN trips t ON t.id=b.trip_id
+        WHERE b.id=$1`, [p.booking_id]);
+    const reason = state.status === 'ABANDONED'
+      ? 'Booking expired or was abandoned before payment was verified'
+      : ['CANCELLED_BY_STUDENT','CANCELLED_BY_DLT'].includes(state.status)
+        ? 'Booking was cancelled before payment was verified'
+        : !['OPEN','BOOKING_CLOSED','BOARDING'].includes(state.trip_status)
+          ? 'Trip was no longer accepting payment confirmations'
+          : 'Selected seats could not be allocated when payment was verified';
     await raiseRefund(c, p.booking_id, p.id, p.amount,
-      'Payment arrived after the seats were released — returned in full', null, false);
+      `${reason} — full refund pending`, null, false);
     await c.query(
       `INSERT INTO notification_requests (kind, user_id, reason, status)
        SELECT 'GET_NOTIFIED', user_id,
@@ -592,7 +604,7 @@ async function applyEvent(c: PoolClient, ev: any, provider: PaymentProvider) {
            ELSE concat_ws(' | ', notification_requests.reason, EXCLUDED.reason)
          END`, [p.booking_id]);
     await audit(c, {}, 'payment.late_settlement', 'booking', p.booking_id,
-      null, `₹${p.amount} refunded`, null);
+      null, `₹${p.amount} refund pending`, reason);
     return;
   }
   if (s.outcome === 'CONFIRMED')
@@ -613,6 +625,16 @@ export async function reconcile(
   const p = await paymentFor(actor, paymentId, { permission: 'payment.reconcile' });
   if (!p.provider_order_id) throw new AppError('INVALID', 'That payment never reached the provider');
 
+  await reconcileOrder({ id: p.id, provider_order_id: p.provider_order_id }, provider);
+
+  const { rows: [after] } = await query(
+    `SELECT p.status AS payment_status, b.status AS booking_status
+       FROM payments p JOIN bookings b ON b.id = p.booking_id WHERE p.id = $1`, [paymentId]);
+  return { paymentStatus: after.payment_status, bookingStatus: after.booking_status,
+    bookingId: p.booking_id };
+}
+
+async function reconcileOrder(p: { id: string; provider_order_id: string }, provider: PaymentProvider) {
   const order = await provider.fetchOrder(p.provider_order_id);
   /* A deterministic synthesised id, so polling repeatedly cannot apply the same
    * outcome twice, and namespaced so it can never collide with a real provider
@@ -632,11 +654,37 @@ export async function reconcile(
   await recordWebhook(event, true);
   await processPendingEvents(provider);
 
-  const { rows: [after] } = await query(
-    `SELECT p.status AS payment_status, b.status AS booking_status
-       FROM payments p JOIN bookings b ON b.id = p.booking_id WHERE p.id = $1`, [paymentId]);
-  return { paymentStatus: after.payment_status, bookingStatus: after.booking_status,
-    bookingId: p.booking_id };
+}
+
+/** Recover captures even if the browser closes and the webhook is delayed.
+ * Claims are persisted before network I/O, bounded and shared across workers.
+ * This does not extend holds or resurrect abandoned/cancelled bookings. */
+export async function reconcilePendingPayments(provider: PaymentProvider, limit = 25): Promise<number> {
+  let checked = 0;
+  while (checked < limit) {
+    const { rows: [p] } = await query(
+      `WITH candidate AS (
+         SELECT id FROM payments
+          WHERE provider = $1 AND provider_order_id IS NOT NULL
+            AND status IN ('CREATED','PENDING','FAILED','CANCELLED')
+            AND created_at > now() - interval '24 hours'
+            AND (last_reconciled_at IS NULL OR last_reconciled_at < now() - interval '60 seconds')
+          ORDER BY last_reconciled_at NULLS FIRST, created_at
+          FOR UPDATE SKIP LOCKED LIMIT 1
+       ) UPDATE payments p SET last_reconciled_at = now()
+          FROM candidate c WHERE p.id = c.id RETURNING p.id, p.provider_order_id`, [provider.name]);
+    if (!p) break;
+    checked++;
+    try {
+      await reconcileOrder(p, provider);
+      await query('UPDATE payments SET reconciliation_error = NULL WHERE id = $1', [p.id]);
+    } catch {
+      // An unavailable provider is not evidence of failure or grounds for a refund.
+      await query(`UPDATE payments SET reconciliation_error = 'Provider reconciliation failed; retry pending'
+                    WHERE id = $1`, [p.id]);
+    }
+  }
+  return checked;
 }
 
 /* ---------------------------------------------------------------- refunds
@@ -672,30 +720,39 @@ async function raiseRefund(
  * That gap is what this closes.
  *
  * Safe to run concurrently: each row is taken FOR UPDATE SKIP LOCKED, and the
- * provider is given our refund id as its merchant reference, so a retry after a
- * timeout cannot create a second refund at the provider either. */
+ * adapter sends our refund id in the provider's idempotency header. Legacy
+ * ambiguous errors (sent without that header) and interrupted dispatches stay
+ * for manual reconciliation; never blindly retry them under a new contract. */
 export async function dispatchPendingRefunds(provider: PaymentProvider, limit = 25): Promise<number> {
   if (!automaticRefundsEnabled()) return 0;
   let sent = 0;
-  for (;;) {
+  const attempted: string[] = [];
+  while (attempted.length < limit) {
     const row = await tx(async (c) => {
       const { rows: [r] } = await c.query(
         `SELECT r.*, p.provider_payment_id
            FROM refunds r
-           LEFT JOIN payments p ON p.booking_id = r.booking_id
-                               AND p.status IN ('SUCCESS','DUPLICATE')
+           LEFT JOIN payments p ON p.booking_id = r.booking_id AND p.provider = $2
+             AND ((r.payment_id IS NOT NULL AND p.id = r.payment_id
+                   AND p.status IN ('SUCCESS','DUPLICATE'))
+               OR (r.payment_id IS NULL AND p.status = 'SUCCESS'))
           WHERE r.status = 'REFUND_PENDING' AND r.provider_refund_id IS NULL
             AND COALESCE(r.provider_status,'') <> 'dispatching'
-          ORDER BY r.created_at
-          FOR UPDATE OF r SKIP LOCKED LIMIT 1`);
+            AND COALESCE(r.provider_status,'') <> 'no captured provider payment — needs manual settlement'
+            AND COALESCE(r.provider_status,'') NOT LIKE 'dispatch error:%'
+            AND (COALESCE(r.provider_status,'') NOT LIKE 'retryable dispatch error:%'
+                 OR r.updated_at < now() - interval '60 seconds')
+            AND NOT (r.id = ANY($1::uuid[]))
+          ORDER BY r.updated_at, r.created_at
+          FOR UPDATE OF r SKIP LOCKED LIMIT 1`, [attempted, provider.name]);
       if (!r) return null;
-      /* A null provider_payment_id means the payment never captured — there is
-       * nothing at the provider to refund, and a manual settlement is owed. */
+      /* A missing captured payment ID or a different provider needs manual
+       * reconciliation. It does not prove that the student was never charged. */
       if (!r.provider_payment_id) {
         await c.query(
           `UPDATE refunds SET provider_status = $2, updated_at = now() WHERE id = $1`,
           [r.id, 'no captured provider payment — needs manual settlement']);
-        return null;
+        return { ...r, manual: true };
       }
       /* Claim it, so a second worker does not pick it up while we are on the
        * network. */
@@ -704,6 +761,8 @@ export async function dispatchPendingRefunds(provider: PaymentProvider, limit = 
       return r;
     });
     if (!row) break;
+    attempted.push(row.id);
+    if (row.manual) continue;
 
     try {
       const out = await provider.createRefund({
@@ -727,7 +786,7 @@ export async function dispatchPendingRefunds(provider: PaymentProvider, limit = 
        * operations the provider refused when it may never have been asked. */
       await query(
         `UPDATE refunds SET provider_status = $2, updated_at = now() WHERE id = $1`,
-        [row.id, `dispatch error: ${String(e?.message ?? e).slice(0, 200)}`]);
+        [row.id, `retryable dispatch error: ${String(e?.message ?? e).slice(0, 200)}`]);
     }
     if (++sent >= limit) break;
   }

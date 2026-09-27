@@ -492,8 +492,8 @@
   <sc-if value="{{ atDiscrepancy }}" hint-placeholder-val="{{ false }}">
   <section aria-live="assertive" style="border:1px solid rgba(184,115,10,.34);border-top:2px solid #B8730A;background:#FFFDF6;padding:clamp(24px,4vw,40px)">
     <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#8A5A0E">Payment held for review</div>
-    <h1 style="margin:14px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(23px,2.6vw,30px);letter-spacing:-.015em">The amount received didn't match</h1>
-    <p style="margin:11px 0 0;max-width:52ch;font-size:13.5px;line-height:1.65;color:#3D423C">We received ₹{{ paidAmount }} against ₹{{ total }} due, so the booking has <strong style="font-weight:600">not</strong> been confirmed and your payment is being held, not lost. <strong style="font-weight:600">Please don't pay again.</strong> Our team resolves this and will either complete the booking or return the money.</p>
+    <h1 style="margin:14px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(23px,2.6vw,30px);letter-spacing:-.015em">Your payment needs attention</h1>
+    <p style="margin:11px 0 0;max-width:52ch;font-size:13.5px;line-height:1.65;color:#3D423C">{{ paymentReviewMessage }}</p>
     <dl style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 20px;font-variant-numeric:tabular-nums">
       <div style="border-top:1px solid rgba(14,16,20,.14);padding-top:10px">
         <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">Booking</dt>
@@ -873,6 +873,12 @@ class Component extends DCLogic {  state = {
       } else if (status.paymentStatus === 'SUCCESS' && bookingStatus === 'PROCESSING') {
         this.setState({ step: 'processing' });
       } else if (status.paymentStatus === 'DUPLICATE') {
+        await this._load({ quiet: true });
+        this.setState({ step: 'discrepancy' });
+      } else if (status.paymentStatus === 'SUCCESS') {
+        // Captured money on an expired/cancelled or mismatched booking is a
+        // review/refund outcome, not an endless "confirming" spinner.
+        await this._load({ quiet: true });
         this.setState({ step: 'discrepancy' });
       } else if (status.paymentStatus === 'FAILED') {
         this.setState({ step: 'failed', lastOutcome: 'declined' });
@@ -1358,6 +1364,9 @@ class Component extends DCLogic {  state = {
       atReview: step === 'review', atCheckout: step === 'checkout', atVerifying: step === 'verifying',
       atPending: step === 'pending', atFailed: step === 'failed', atExpired: step === 'expired',
       atDone: step === 'done', atDiscrepancy: step === 'discrepancy', atProcessing: step === 'processing',
+      paymentReviewMessage: booking && booking.status === 'CONFIRMED'
+        ? 'Your booking remains confirmed. An extra payment was recorded; check its refund status in My Trips. Please do not pay again.'
+        : 'Your payment was recorded, but the booking is not confirmed. Check the payment and refund details in My Trips. Please do not pay again while this is reviewed.',
       showStepper: order.indexOf(step) >= 0,
 
       /* The summary's one button. These were computed above but never returned,

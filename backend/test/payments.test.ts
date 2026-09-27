@@ -181,6 +181,142 @@ const seatOf = async (n: string) =>
 after(async () => { await pool.end(); });
 beforeEach(seed);
 
+describe('payment expiry audit regressions [provider-simulated]', () => {
+  test('successful retry replaces a failed attempt ID for refunds', async () => {
+    const b = await booked(ALICE, ['2A']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'failed', { providerPaymentId: 'pay_failed_attempt' });
+    await deliver(co.paymentId, 'captured', { providerPaymentId: 'pay_captured_attempt' });
+    await deliver(co.paymentId, 'failed', { providerPaymentId: 'pay_failed_attempt', eventId: 'evt_late_failure' });
+    const { rows: [p] } = await q('SELECT * FROM payments WHERE id=$1', [co.paymentId]);
+    assert.equal(p.status, 'SUCCESS');
+    assert.equal(p.provider_payment_id, 'pay_captured_attempt');
+    assert.equal((await pay.bookingViewById(b.id)).status, 'CONFIRMED');
+  });
+
+  test('captured payment is recovered without a browser handback or webhook', async () => {
+    const b = await booked(ALICE, ['2A']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    Object.assign(rp.orders.get(co.providerOrderId)!, { status: 'paid', paymentId: 'pay_recovered' });
+    assert.equal(await pay.reconcilePendingPayments(rp), 1);
+    assert.equal((await pay.bookingViewById(b.id)).status, 'CONFIRMED');
+    assert.equal((await seatOf('2A')).status, 'BOOKED');
+    assert.equal((await q('SELECT * FROM refunds WHERE booking_id=$1', [b.id])).rowCount, 0);
+    assert.equal(await pay.reconcilePendingPayments(rp), 0);
+    // Repeated delivery and a stale expiry clock cannot cancel a paid seat.
+    await fixtureSql(`UPDATE bookings SET hold_expires_at=now()-interval '15 minutes' WHERE id=$1`, [b.id]);
+    await q('SELECT sweep_expired_holds()');
+    await deliver(co.paymentId, 'captured', { providerPaymentId: 'pay_recovered' });
+    assert.equal((await pay.bookingViewById(b.id)).status, 'CONFIRMED');
+    assert.equal((await seatOf('2A')).booking_id, b.id);
+    assert.equal((await q('SELECT * FROM refunds WHERE booking_id=$1', [b.id])).rowCount, 0);
+  });
+
+  test('provider failure keeps the hold unchanged and does not raise a refund', async () => {
+    const b = await booked(ALICE, ['2A']);
+    await pay.createCheckout(b.id, A(ALICE), rp);
+    const before = await seatOf('2A');
+    const unavailable = { ...rp, async fetchOrder() { throw new Error('provider offline'); } };
+    assert.equal(await pay.reconcilePendingPayments(unavailable), 1);
+    assert.equal((await seatOf('2A')).hold_expires_at.getTime(), before.hold_expires_at.getTime());
+    assert.equal((await pay.bookingViewById(b.id)).status, 'PAYMENT_PENDING');
+    assert.equal((await q('SELECT * FROM refunds WHERE booking_id=$1', [b.id])).rowCount, 0);
+    assert.equal(await pay.reconcilePendingPayments(unavailable), 0, 'retry is throttled');
+  });
+
+  test('reconciliation workers share the claim and unpaid bookings still expire', async () => {
+    const b = await booked(ALICE, ['2A']);
+    await pay.createCheckout(b.id, A(ALICE), rp);
+    const counts = await Promise.all([pay.reconcilePendingPayments(rp), pay.reconcilePendingPayments(rp)]);
+    assert.equal(counts.reduce((a, b) => a + b, 0), 1);
+    await q(`UPDATE bookings SET hold_expires_at=now()-interval '1 minute' WHERE id=$1`, [b.id]);
+    await q(`UPDATE trip_seats SET hold_expires_at=now()-interval '1 minute' WHERE booking_id=$1`, [b.id]);
+    await q('SELECT sweep_expired_holds()');
+    assert.equal((await pay.bookingViewById(b.id)).status, 'ABANDONED');
+    assert.equal((await seatOf('2A')).status, 'AVAILABLE');
+  });
+
+  test('late recovered capture does not take a seat from its new owner', async () => {
+    const b = await booked(ALICE, ['2A']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await q(`UPDATE bookings SET hold_expires_at=now()-interval '1 minute' WHERE id=$1`, [b.id]);
+    await q(`UPDATE trip_seats SET hold_expires_at=now()-interval '1 minute' WHERE booking_id=$1`, [b.id]);
+    await q('SELECT sweep_expired_holds()');
+    const bob = await booked(BOB, ['2A']);
+    Object.assign(rp.orders.get(co.providerOrderId)!, { status: 'paid', paymentId: 'pay_late_recovered' });
+    await pay.reconcilePendingPayments(rp);
+    assert.equal((await seatOf('2A')).booking_id, bob.id);
+    assert.equal((await pay.bookingViewById(b.id)).status, 'ABANDONED');
+    const refunds = (await q('SELECT * FROM refunds WHERE booking_id=$1', [b.id])).rows;
+    assert.equal(refunds.length, 1);
+    assert.match(refunds[0].reason, /refund pending/);
+    assert.doesNotMatch(refunds[0].reason, /taken|sold|returned in full/);
+  });
+
+  test('duplicate-payment refund targets the duplicate, leaving the confirmed seat intact', async () => {
+    const b = await booked(ALICE, ['2A']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'captured', { providerPaymentId: 'pay_original' });
+    const { rows: [second] } = await q(`INSERT INTO payments(booking_id,amount,status,provider,provider_order_id)
+      VALUES($1,$2,'PENDING','RAZORPAY','order_duplicate_audit') RETURNING id`, [b.id, FARE]);
+    await deliver(second.id, 'captured', { providerPaymentId: 'pay_duplicate' });
+    await deliver(second.id, 'failed', { providerPaymentId: 'pay_duplicate', eventId: 'evt_duplicate_late_failure' });
+    assert.equal((await q('SELECT status FROM payments WHERE id=$1', [second.id])).rows[0].status, 'DUPLICATE');
+    const targets: string[] = [];
+    const provider = { ...rp, async createRefund(i: Parameters<PaymentProvider['createRefund']>[0]) {
+      targets.push(i.providerPaymentId); return rp.createRefund(i);
+    } };
+    await pay.dispatchPendingRefunds(provider);
+    assert.deepEqual(targets, ['pay_duplicate']);
+    assert.equal((await pay.bookingViewById(b.id)).status, 'CONFIRMED');
+    assert.equal((await seatOf('2A')).booking_id, b.id);
+  });
+
+  test('manual refund does not block a later online refund', async () => {
+    const manual = await pay.createManualBooking({ tripId: TRIP, type: 'PAID_EXTERNALLY',
+      contactPhone: '9876543210', reason: 'Cash at the office', actorId: SUPER,
+      passengers: [{ seatNumber: '2A', name: 'Cash Student', studentId: 'WU209999' }] });
+    await pay.cancelBooking(manual.id, A(SUPER, 'SUPER_ADMIN'));
+    const b = await booked(ALICE, ['2B']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'captured', { providerPaymentId: 'pay_after_manual' });
+    await pay.cancelBooking(b.id, A(ALICE));
+    assert.equal(await pay.dispatchPendingRefunds(rp), 1);
+    assert.ok((await q('SELECT provider_refund_id FROM refunds WHERE booking_id=$1', [b.id])).rows[0].provider_refund_id);
+  });
+
+  test('failed dispatch is attempted once per run and backs off before retry', async () => {
+    const b = await booked(ALICE, ['2A']);
+    const co = await pay.createCheckout(b.id, A(ALICE), rp) as any;
+    await deliver(co.paymentId, 'captured');
+    await pay.cancelBooking(b.id, A(ALICE));
+    let calls = 0;
+    const unavailable = { ...rp, async createRefund(): Promise<never> { calls++; throw new Error('timeout'); } };
+    await pay.dispatchPendingRefunds(unavailable);
+    await pay.dispatchPendingRefunds(unavailable);
+    assert.equal(calls, 1);
+    await q(`UPDATE refunds SET updated_at=now()-interval '2 minutes' WHERE booking_id=$1`, [b.id]);
+    await pay.dispatchPendingRefunds(unavailable);
+    assert.equal(calls, 2);
+  });
+
+  test('an ambiguous legacy dispatch is left for review, without blocking new refunds', async () => {
+    const old = await booked(ALICE, ['2A']);
+    const oldCheckout = await pay.createCheckout(old.id, A(ALICE), rp) as any;
+    await deliver(oldCheckout.paymentId, 'captured');
+    await pay.cancelBooking(old.id, A(ALICE));
+    await q(`UPDATE refunds SET provider_status='dispatch error: response lost' WHERE booking_id=$1`, [old.id]);
+    const fresh = await booked(BOB, ['2B']);
+    const freshCheckout = await pay.createCheckout(fresh.id, A(BOB), rp) as any;
+    await deliver(freshCheckout.paymentId, 'captured');
+    await pay.cancelBooking(fresh.id, A(BOB));
+    assert.equal(await pay.dispatchPendingRefunds(rp), 1);
+    const { rows: [legacy] } = await q('SELECT * FROM refunds WHERE booking_id=$1', [old.id]);
+    assert.equal(legacy.provider_refund_id, null);
+    assert.equal(legacy.provider_status, 'dispatch error: response lost');
+  });
+});
+
 /* ================================================================= creation */
 
 describe('booking creation', () => {

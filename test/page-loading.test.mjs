@@ -70,3 +70,24 @@ test('dashboard keeps bookings when optional waitlist fails', async () => {
   assert.deepEqual(page.state.data.waitlist, []);
   assert.equal(page.state.loading, false);
 });
+
+test('booking distinguishes confirmed seats from captured payments awaiting review', async () => {
+  const cases = [
+    ['SUCCESS', 'CONFIRMED', 'done'],
+    ['SUCCESS', 'ABANDONED', 'discrepancy'],
+    ['SUCCESS', 'CANCELLED_BY_STUDENT', 'discrepancy'],
+    ['SUCCESS', 'PAYMENT_PENDING', 'discrepancy'],
+    ['DUPLICATE', 'CONFIRMED', 'discrepancy'],
+  ];
+  for (const [paymentStatus, bookingStatus, expected] of cases) {
+    const page = component('DLT Booking.dc.html', {
+      payments: { reconcile: async () => ({ paymentStatus, bookingStatus }) }
+    });
+    Object.assign(page.state, { paymentId: 'payment', step: 'pending' });
+    let refreshed = false;
+    page._load = async () => { refreshed = true; };
+    await page._poll();
+    assert.equal(page.state.step, expected, `${paymentStatus}/${bookingStatus}`);
+    assert.ok(refreshed, 'refreshes booking and refund details before showing the outcome');
+  }
+});

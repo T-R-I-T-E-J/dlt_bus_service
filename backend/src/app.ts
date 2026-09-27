@@ -20,7 +20,7 @@ import bookingRoutes from './http/bookings.routes.ts';
 import boardingRoutes from './http/boarding.routes.ts';
 import adminRoutes from './http/admin.routes.ts';
 import { sweepExpiredHolds } from './domain/seats.ts';
-import { processPendingEvents, dispatchPendingRefunds, automaticRefundsEnabled } from './domain/payments.ts';
+import { processPendingEvents, reconcilePendingPayments, dispatchPendingRefunds, automaticRefundsEnabled } from './domain/payments.ts';
 import { closeCache } from './domain/cache.ts';
 
 function requestPath(req: Request) {
@@ -143,12 +143,20 @@ export function createApp() {
  * SKIP LOCKED) but wasteful.
  */
 export function startJobs(provider: ReturnType<typeof createRazorpayProvider>) {
-  const every = (ms: number, name: string, fn: () => Promise<unknown>) =>
-    setInterval(() => { void fn().catch(e => console.error('[job:%s]', name, e.message)); }, ms);
+  const every = (ms: number, name: string, fn: () => Promise<unknown>) => {
+    let running = false;
+    return setInterval(() => {
+      if (running) return;
+      running = true;
+      void fn().catch(e => console.error('[job:%s]', name, e.message))
+        .finally(() => { running = false; });
+    }, ms);
+  };
 
   const timers = [
     every(30_000, 'sweep', sweepExpiredHolds),
     every(20_000, 'events', () => processPendingEvents(provider)),
+    every(20_000, 'reconcile', () => reconcilePendingPayments(provider)),
   ];
   if (automaticRefundsEnabled())
     timers.push(every(60_000, 'refunds', () => dispatchPendingRefunds(provider)));
