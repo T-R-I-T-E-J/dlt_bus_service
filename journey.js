@@ -134,6 +134,62 @@ const RIG = {
 };
 const DEG = Math.PI / 180;
 
+function landscapeTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#C9D1B8'; ctx.fillRect(0, 0, 512, 512);
+  const random = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(43);
+  const colors = ['#AEBE93', '#D4D6BF', '#BDCCA7', '#DBD5BF'];
+  for (let i = 0; i < 48; i++) {
+    const x = random() * 512, y = random() * 512, radius = 35 + random() * 100;
+    // Wrap each brush across the tile edges so the landscape has no seams.
+    for (const dx of [-512, 0, 512]) for (const dy of [-512, 0, 512]) {
+      const brush = ctx.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, radius);
+      brush.addColorStop(0, colors[i % colors.length] + 'B0');
+      brush.addColorStop(1, colors[i % colors.length] + '00');
+      ctx.fillStyle = brush; ctx.fillRect(x + dx - radius, y + dy - radius, radius * 2, radius * 2);
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(10, 12);
+  return texture;
+}
+
+function contactTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(32, 32, 6, 32, 32, 32);
+  gradient.addColorStop(0, 'rgba(17, 30, 20, .8)');
+  gradient.addColorStop(0.5, 'rgba(17, 30, 20, .5)');
+  gradient.addColorStop(1, 'rgba(17, 30, 20, 0)');
+  ctx.fillStyle = gradient; ctx.fillRect(0, 0, 64, 64);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function asphaltTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext('2d'), pixels = ctx.createImageData(128, 128);
+  let seed = 83;
+  for (let i = 0; i < pixels.data.length; i += 4) {
+    seed = seed * 16807 % 2147483647;
+    const shade = 238 + Math.floor(seed / 2147483647 * 18);
+    pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = shade;
+    pixels.data[i + 3] = 255;
+  }
+  ctx.putImageData(pixels, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+}
+
 /* the sign face, drawn once into a canvas — letters set as letters, not blocks */
 function signTexture() {
   const W = 1024, H = 218, c = document.createElement('canvas');
@@ -219,6 +275,7 @@ class DLTJourney extends HTMLElement {
       /* no WebGL, or a driver that refuses the context: say so once and let the
          page fall back to the static route. Booking must never wait on 3D. */
       console.warn('DLT journey: 3D unavailable, static fallback', err);
+      document.documentElement.setAttribute('data-journey-failed', '1');
       this.dispatchEvent(new CustomEvent('journeyfailed', { bubbles: true, composed: true }));
       return;
     }
@@ -256,7 +313,7 @@ class DLTJourney extends HTMLElement {
       if (e.ctrlKey) return;
       const host = this.closest('[data-journey-scroll]') || this.parentElement;
       const r = host.getBoundingClientRect();
-      const span = r.height - innerHeight;
+      const span = r.height - this.clientHeight;
       if (span <= 0) return;
       const top = scrollY + r.top;
       const here = scrollY - top;
@@ -296,6 +353,8 @@ class DLTJourney extends HTMLElement {
     addEventListener('wheel', this._onWheel, { passive: false });
     this._ro = new ResizeObserver(() => { this._resize(); this._dirty = true; });
     this._ro.observe(this);
+    this.closest('[data-journey-scroll]')?.querySelectorAll('.journey-stop')
+      .forEach(card => this._ro.observe(card));
     this._io = new IntersectionObserver(e => {
       const vis = e[0].isIntersecting;
       if (vis && !this._visible) { this._snap = true; this._snapRig = true; this._last = 0; }
@@ -334,19 +393,35 @@ class DLTJourney extends HTMLElement {
     this._lite = lite;
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, lite ? 1.4 : 2));
     renderer.shadowMap.enabled = !lite;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     this._renderer = renderer;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(PAPER);
-    scene.fog = new THREE.Fog(PAPER, 38, 215);
+    scene.background = new THREE.Color('#EDF1E8');
+    scene.fog = new THREE.Fog('#EDF1E8', 58, 245);
     this._scene = scene;
+
+    // A quiet daylight sky, authored once; no animated textures or downloads.
+    const skyCanvas = document.createElement('canvas');
+    skyCanvas.width = 2; skyCanvas.height = 128;
+    const skyContext = skyCanvas.getContext('2d');
+    const skyGradient = skyContext.createLinearGradient(0, 0, 0, 128);
+    skyGradient.addColorStop(0, '#BBD0DA');
+    skyGradient.addColorStop(0.35, '#D9E4E2');
+    skyGradient.addColorStop(0.5, '#EDF1E8');
+    skyGradient.addColorStop(1, '#EDF1E8');
+    skyContext.fillStyle = skyGradient; skyContext.fillRect(0, 0, 2, 128);
+    const skyMap = new THREE.CanvasTexture(skyCanvas);
+    skyMap.colorSpace = THREE.SRGBColorSpace;
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(600, 16, 12),
+      new THREE.MeshBasicMaterial({ map: skyMap, side: THREE.BackSide, depthWrite: false, fog: false }));
+    sky.position.z = 75; sky.renderOrder = -10; scene.add(sky);
 
     this._camera = new THREE.PerspectiveCamera(38, 1, 0.5, 900);
 
-    scene.add(new THREE.HemisphereLight('#ffffff', '#cfd4cb', 1.05));
-    const key = new THREE.DirectionalLight('#fff8ec', 2.1);
+    scene.add(new THREE.HemisphereLight('#F4F8FF', '#B9C4A0', 1.5));
+    const key = new THREE.DirectionalLight('#FFF1DA', 1.65);
     key.castShadow = !lite;
     key.shadow.mapSize.set(lite ? 512 : 1024, lite ? 512 : 1024);
     const sc = key.shadow.camera;
@@ -359,18 +434,20 @@ class DLTJourney extends HTMLElement {
     const curve = new THREE.CatmullRomCurve3([
       [0, 0, -12], [0, 0, 12], [4, 0, 34], [6, 0, 56],
       [2, 0, 78], [-5, 0, 100], [-4, 0, 122], [0, 0, 143], [3, 0, 166],
+      // Continue beyond the travelled section so the road disappears into fog.
+      [6, 0, 210], [8, 0, 280], [12, 0, 400],
     ].map(p => new THREE.Vector3(...p)), false, 'catmullrom', 0.5);
     this._curve = curve;
     this._len = curve.getLength();
 
     const M = {
-      asphalt: new THREE.MeshStandardMaterial({ color: INK, roughness: 0.94, metalness: 0.02 }),
+      asphalt: new THREE.MeshStandardMaterial({ color: INK, map: asphaltTexture(), roughness: 0.94, metalness: 0.02 }),
       dash:    new THREE.MeshStandardMaterial({ color: '#1E7A52', roughness: 0.55 }),
       edge:    new THREE.MeshStandardMaterial({ color: '#D8D6CE', roughness: 0.7 }),
-      ground:  new THREE.MeshStandardMaterial({ color: '#EFEDE4', roughness: 1 }),
-      field:   new THREE.MeshStandardMaterial({ color: '#DFE3D6', roughness: 1 }),
+      ground:  new THREE.MeshStandardMaterial({ map: landscapeTexture(), roughness: 1 }),
+      verge:   new THREE.MeshStandardMaterial({ color: '#A7BA88', roughness: 1 }),
       trunk:   new THREE.MeshStandardMaterial({ color: '#4A4A42', roughness: 0.9 }),
-      crown:   new THREE.MeshStandardMaterial({ color: '#2E5A3E', roughness: 0.85 }),
+      crown:   new THREE.MeshStandardMaterial({ color: '#FFFFFF', roughness: 0.95 }),
       block:   new THREE.MeshStandardMaterial({ color: '#E4E2D9', roughness: 0.8 }),
       blockAlt:new THREE.MeshStandardMaterial({ color: '#D3D6CE', roughness: 0.8 }),
       ink:     new THREE.MeshStandardMaterial({ color: '#23272D', roughness: 0.6 }),
@@ -386,28 +463,43 @@ class DLTJourney extends HTMLElement {
       joint:   new THREE.MeshStandardMaterial({ color: '#C3C0B6', roughness: 0.9 }),
       white:   new THREE.MeshStandardMaterial({ color: '#F4F2EC', roughness: 0.62 }),
       glass:   new THREE.MeshStandardMaterial({ color: '#DDE2DE', roughness: 0.28, metalness: 0.24 }),
+      windows: new THREE.MeshStandardMaterial({ color: '#FFFFFF', roughness: 0.48, metalness: 0.12 }),
+      metro:   new THREE.MeshStandardMaterial({ color: '#A95748', roughness: 0.8 }),
       palm:    new THREE.MeshStandardMaterial({ color: '#6C6454', roughness: 0.88 }),
       frond:   new THREE.MeshStandardMaterial({ color: '#4A7A57', roughness: 0.78, side: THREE.DoubleSide }),
       hedge:   new THREE.MeshStandardMaterial({ color: '#2C5439', roughness: 0.9 }),
       lawn:    new THREE.MeshStandardMaterial({ color: '#DCE2D2', roughness: 1 }),
     };
     this._M = M;
+    M.ground.map.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+    M.asphalt.map.anisotropy = M.ground.map.anisotropy;
 
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 800), M.ground);
     ground.rotation.x = -Math.PI / 2; ground.position.set(0, -0.04, 75);
     ground.receiveShadow = true; scene.add(ground);
 
+    // Narrow planted verges separate the road from the landscape without
+    // adding foreground objects that could hide the coach on a phone.
+    scene.add(this._ribbon(curve, 3.2, 6.2, M.verge, true));
+    scene.add(this._ribbon(curve, 3.2, -6.2, M.verge, true));
     scene.add(this._ribbon(curve, 9.2, 0.0, M.asphalt, true));
     scene.add(this._ribbon(curve, 0.26, 4.45, M.edge, false));
     scene.add(this._ribbon(curve, 0.26, -4.45, M.edge, false));
     scene.add(this._dashes(curve, M.dash));
+
+    // A single soft contact patch also works on phones where real shadows are off.
+    this._contactShadow = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 12.8).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ map: contactTexture(), transparent: true,
+        opacity: lite ? 0.38 : 0.16, depthWrite: false }));
+    this._contactShadow.visible = false;
+    scene.add(this._contactShadow);
 
     this._scatter(M);
 
     /* Stop markers: a low lit face on a stone base, carrying the place NAME.
        They were 7 m dark posts with a side arm, which read as a gibbet from
        every angle — and then as unlabelled green bars, which read as nothing. */
-    [[WOXSEN, -12.5], [MIYAPUR, 12.5]].forEach(([d, side], i) => {
+    [[WOXSEN, -12.5], [MIYAPUR, -9.5]].forEach(([d, side], i) => {
       const g = new THREE.Group();
       const face = i ? M.mkMiyapur : M.mkWoxsen;
       const base = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.5, 1.1), M.joint);
@@ -428,7 +520,7 @@ class DLTJourney extends HTMLElement {
 
   /* a flat ribbon following the curve, optionally the full road slab */
   _ribbon(curve, width, offset, mat, shadow) {
-    const N = 420, pos = [], idx = [];
+    const N = 420, pos = [], idx = [], uv = [];
     const up = new THREE.Vector3(0, 1, 0), right = new THREE.Vector3();
     for (let i = 0; i <= N; i++) {
       const u = i / N;
@@ -438,10 +530,12 @@ class DLTJourney extends HTMLElement {
       const a = c.clone().addScaledVector(right, -width / 2);
       const b = c.clone().addScaledVector(right, width / 2);
       pos.push(a.x, 0.008 + (offset ? 0.004 : 0), a.z, b.x, 0.008 + (offset ? 0.004 : 0), b.z);
+      uv.push(0, u * this._len / 2.3, width / 2.3, u * this._len / 2.3);
       if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     g.setIndex(idx); g.computeVertexNormals();
     const m = new THREE.Mesh(g, mat);
     m.receiveShadow = !!shadow;
@@ -452,14 +546,14 @@ class DLTJourney extends HTMLElement {
   _dashes(curve, mat) {
     const step = 9, dashLen = 3.4;
     const n = Math.floor(this._len / step);
-    const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.04, dashLen), mat, n);
+    const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 0.005, dashLen), mat, n);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
     for (let i = 0; i < n; i++) {
       const u = (i * step) / this._len;
       if (u > 1) break;
       const p = curve.getPointAt(u), tg = curve.getTangentAt(u);
       q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tg.clone().normalize());
-      m4.compose(new THREE.Vector3(p.x, 0.03, p.z), q, new THREE.Vector3(1, 1, 1));
+      m4.compose(new THREE.Vector3(p.x, 0.014, p.z), q, new THREE.Vector3(1, 1, 1));
       mesh.setMatrixAt(i, m4);
     }
     mesh.instanceMatrix.needsUpdate = true;
@@ -480,6 +574,9 @@ class DLTJourney extends HTMLElement {
   _scatter(M) {
     const S = this._scene;
     const rnd = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(7);
+
+    // An independent seed keeps the neighbourhood stable as terrain changes.
+    const landscapeRandom = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(735415251);
 
     const broad = [], palms = [];
     for (let d = -4; d < 172; d += 3.1) {
@@ -517,7 +614,7 @@ class DLTJourney extends HTMLElement {
     const BLOBS = [[2.30, 3.7, 0.80], [1.72, 4.7, 0.72], [1.48, 3.2, 0.88]];
     const blobs = BLOBS.map(() => {
       const im = new THREE.InstancedMesh(
-        new THREE.IcosahedronGeometry(1, 1), M.crown.clone(), broad.length);
+        new THREE.IcosahedronGeometry(1, 2), M.crown.clone(), broad.length);
       im.castShadow = true; return im;
     });
     broad.forEach(([d, lat, sc], i) => {
@@ -535,7 +632,7 @@ class DLTJourney extends HTMLElement {
                    q, V(sc, sc * (0.85 + rnd() * 0.4), sc));
         limb.setMatrixAt(i * LIMB + k, m4);
       }
-      tone.setHSL(0.335 + (rnd() - 0.5) * 0.055, 0.26 + rnd() * 0.14, 0.24 + rnd() * 0.10);
+      tone.setHSL(0.28 + (rnd() - 0.5) * 0.06, 0.24 + rnd() * 0.12, 0.22 + rnd() * 0.12);
       BLOBS.forEach(([r, y, flat], k) => {
         const a = rnd() * 6.28, off = (0.45 + rnd() * 0.85) * sc;
         const rr = r * sc * (0.86 + rnd() * 0.28);
@@ -599,32 +696,39 @@ class DLTJourney extends HTMLElement {
     /* A distant treeline and two ranges of low hills. Far enough out to sit in
        the fog, so they read as depth rather than objects — the horizon was
        otherwise blank paper wherever the roadside band ran out. */
-    const hillMat = new THREE.MeshStandardMaterial({ color: '#C9CCC0', roughness: 1 });
-    const farMat = new THREE.MeshStandardMaterial({ color: '#DDDFD5', roughness: 1 });
+    const hillMat = new THREE.MeshStandardMaterial({ color: '#A2B59A', roughness: 1 });
+    const farMat = new THREE.MeshStandardMaterial({ color: '#C2CFBD', roughness: 1 });
     [[132, hillMat, 26, 15, 58], [178, farMat, 20, 22, 84]].forEach(([out, mat, count, hMax, wMax]) => {
-      const im = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 7, 1), mat, count);
+      const im = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 20, 10), mat, count);
       const m = new THREE.Matrix4(), qq = new THREE.Quaternion(), vv = new THREE.Vector3();
       for (let i = 0; i < count; i++) {
         const a = (i / count) * 6.2832 + rnd() * 0.2;
         const rr = out * (0.9 + rnd() * 0.25);
         const w = wMax * (0.55 + rnd() * 0.6), hh = hMax * (0.5 + rnd() * 0.75);
+        let x = Math.cos(a) * rr;
+        const z = 75 + Math.sin(a) * rr;
+        // The horizon must not put a hillside across the continuing road.
+        if (z > 100 && Math.abs(x) < w + 24) x = (Math.sign(x) || 1) * (w + 24);
         qq.setFromEuler(new THREE.Euler(0, rnd() * 6.28, 0));
-        m.compose(vv.set(Math.cos(a) * rr, hh / 2 - 3, 75 + Math.sin(a) * rr), qq,
+        m.compose(vv.set(x, -hh * 0.4, z), qq,
                   new THREE.Vector3(w, hh, w * 0.8));
         im.setMatrixAt(i, m);
       }
       im.instanceMatrix.needsUpdate = true; S.add(im);
     });
     /* a treeline band closer in, reading as canopy mass rather than trees */
-    const bandMat = new THREE.MeshStandardMaterial({ color: '#B4BCAE', roughness: 1 });
+    const bandMat = new THREE.MeshStandardMaterial({ color: '#97AF8C', roughness: 1 });
     const band = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 5), bandMat, 54);
     {
       const m = new THREE.Matrix4(), qq = new THREE.Quaternion(), vv = new THREE.Vector3();
       for (let i = 0; i < 54; i++) {
         const a = (i / 54) * 6.2832 + rnd() * 0.1, rr = 108 * (0.92 + rnd() * 0.2);
         const w = 13 + rnd() * 12;
+        let x = Math.cos(a) * rr;
+        const z = 75 + Math.sin(a) * rr;
+        if (z > 100 && Math.abs(x) < w + 24) x = (Math.sign(x) || 1) * (w + 24);
         qq.setFromEuler(new THREE.Euler(0, rnd() * 6.28, 0));
-        m.compose(vv.set(Math.cos(a) * rr, 1.5 + rnd() * 2.6, 75 + Math.sin(a) * rr), qq,
+        m.compose(vv.set(x, 1.5 + rnd() * 2.6, z), qq,
                   new THREE.Vector3(w, 4.6 + rnd() * 3.4, w * 0.7));
         band.setMatrixAt(i, m);
       }
@@ -654,7 +758,7 @@ class DLTJourney extends HTMLElement {
        can never z-fight with the carriageway */
     const lawn = new THREE.Mesh(new THREE.PlaneGeometry(52, 30), M.lawn);
     lawn.rotation.x = -Math.PI / 2;
-    this._place(lawn, 52, -48); lawn.position.y = -0.03; lawn.receiveShadow = true; S.add(lawn);
+    this._place(lawn, 52, -48); lawn.position.y = -0.005; lawn.receiveShadow = true; S.add(lawn);
 
     /* The board from the photo: a long low run of concrete panels on a plinth,
        lighter than the fog so it reads at distance, turned a few degrees to
@@ -750,21 +854,37 @@ class DLTJourney extends HTMLElement {
     annex.castShadow = true; annex.receiveShadow = true;
     this._place(annex, 28, -56, 0.12); annex.position.y = 4.2; S.add(annex);
 
-    /* MIYAPUR — apartment mid-rise rather than random boxes: every block is a
-       plinth, a shaft banded at a 3.1 m floor height, and a parapet, so height
-       reads in storeys. Instanced, so 22 blocks cost four draw calls. */
+    /* MIYAPUR — apartment mid-rise: plinths, floor bands, windows and parapets
+       share instanced batches across the near and distant neighbourhoods. */
     const CITY = [];
     for (let i = 0; i < 22; i++) {
       CITY.push([101 + i * 3.0 + rnd() * 1.6,
                  (rnd() > 0.5 ? 1 : -1) * (17 + rnd() * 38),
                  10 + rnd() * 9, 9 + rnd() * 8, 3 + Math.floor(rnd() * 8)]);
     }
+    // A second, distant neighbourhood completes the city horizon beyond the
+    // station. It shares the same instanced batches as the nearby buildings.
+    for (let i = 0; i < 18; i++) {
+      CITY.push([175 + Math.floor(i / 2) * 9 + landscapeRandom() * 4,
+        (i % 2 ? 1 : -1) * (24 + landscapeRandom() * 30),
+        10 + landscapeRandom() * 8, 9 + landscapeRandom() * 7, 3 + Math.floor(landscapeRandom() * 5)]);
+    }
+    // Keep a clear corridor for the metro, on the side visible behind the coach.
+    CITY.forEach(city => { if (city[1] < 0) city[1] = Math.min(city[1], -42); });
     const FLOOR = 3.1, unit = new THREE.BoxGeometry(1, 1, 1);
     const plinth = new THREE.InstancedMesh(unit, M.blockAlt, CITY.length);
-    const shaft = new THREE.InstancedMesh(unit, M.block, CITY.length);
+    const shaft = new THREE.InstancedMesh(unit, M.block.clone(), CITY.length);
+    shaft.material.color.set('#FFFFFF');
     const parapet = new THREE.InstancedMesh(unit, M.blockAlt, CITY.length);
     const bandCount = CITY.reduce((a, c) => a + c[4], 0);
     const bands = new THREE.InstancedMesh(unit, M.glass, bandCount);
+    const windowCount = CITY.reduce((count, [, , w, dep, floors]) =>
+      count + floors * 2 * (Math.max(2, Math.floor(w / 3)) + Math.max(2, Math.floor(dep / 3))), 0);
+    const windows = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.15, 1.5), M.windows, windowCount);
+    const windowMatrix = new THREE.Matrix4(), windowRotation = new THREE.Quaternion();
+    const buildingColors = ['#E6E0CE', '#D0D9C8', '#DCCDBA', '#D6DFDA', '#E7E7DB'];
+    const paneColors = ['#708780', '#8DA199', '#B7C8BC', '#627B78'];
+    let windowIndex = 0;
     plinth.castShadow = shaft.castShadow = parapet.castShadow = true;
     shaft.receiveShadow = plinth.receiveShadow = true;
     let bi = 0;
@@ -776,15 +896,39 @@ class DLTJourney extends HTMLElement {
       plinth.setMatrixAt(i, m4);
       m4.compose(V(o.position.x, 2.2 + H / 2, o.position.z), q, V(w, H, dep));
       shaft.setMatrixAt(i, m4);
+      shaft.setColorAt(i, new THREE.Color(buildingColors[i % buildingColors.length]));
       m4.compose(V(o.position.x, 2.2 + H + 0.35, o.position.z), q, V(w + 0.9, 0.7, dep + 0.9));
       parapet.setMatrixAt(i, m4);
       for (let f = 0; f < floors; f++) {
         m4.compose(V(o.position.x, 2.2 + f * FLOOR + 1.95, o.position.z), q,
                    V(w + 0.14, 1.15, dep + 0.14));
         bands.setMatrixAt(bi++, m4);
+        const addPane = (x, z, yaw) => {
+          const position = new THREE.Vector3(x, 2.2 + f * FLOOR + 1.6, z)
+            .applyQuaternion(q).add(o.position);
+          windowRotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw).premultiply(q);
+          windowMatrix.compose(position, windowRotation, new THREE.Vector3(1, 1, 1));
+          windows.setMatrixAt(windowIndex, windowMatrix);
+          windows.setColorAt(windowIndex++, new THREE.Color(paneColors[Math.floor(landscapeRandom() * paneColors.length)]));
+        };
+        const across = Math.max(2, Math.floor(w / 3)), deep = Math.max(2, Math.floor(dep / 3));
+        for (let col = 0; col < across; col++) {
+          const x = (col + 0.5) * w / across - w / 2;
+          addPane(x, dep / 2 + 0.1, 0);
+          addPane(x, -dep / 2 - 0.1, Math.PI);
+        }
+        for (let col = 0; col < deep; col++) {
+          const z = (col + 0.5) * dep / deep - dep / 2;
+          addPane(w / 2 + 0.1, z, Math.PI / 2);
+          addPane(-w / 2 - 0.1, z, -Math.PI / 2);
+        }
       }
     });
-    [plinth, shaft, parapet, bands].forEach(im => { im.instanceMatrix.needsUpdate = true; S.add(im); });
+    [plinth, shaft, parapet, bands, windows].forEach(im => {
+      im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      S.add(im);
+    });
 
     /* the station itself, so the viaduct reads as a metro and not a flyover */
     const stn = new THREE.Group();
@@ -793,9 +937,19 @@ class DLTJourney extends HTMLElement {
     const canopy = new THREE.Mesh(new THREE.BoxGeometry(12.6, 0.5, 38), M.block);
     canopy.position.y = 14.3; canopy.castShadow = true;
     stn.add(concourse, canopy);
+    // The Red Line accent and glazed platform distinguish the metro from
+    // the surrounding residential blocks without adding animated distractions.
+    const routeStripe = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.24, 33), M.metro);
+    routeStripe.position.set(-4.9, 10.25, 0);
+    const platformGlass = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.4, 30),
+      new THREE.MeshStandardMaterial({ color: '#8AA5A0', roughness: 0.42, metalness: 0.12 }));
+    platformGlass.position.set(-4.55, 11.7, 0);
+    stn.add(routeStripe, platformGlass);
     for (let i = -2; i <= 2; i++) {
       const col = new THREE.Mesh(new THREE.BoxGeometry(0.5, 4.2, 0.5), M.blockAlt);
       col.position.set(0, 12.1, i * 7.6); stn.add(col);
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(10.6, 0.18, 0.18), M.white);
+      beam.position.set(0, 14.0, i * 7.6); stn.add(beam);
     }
     /* the station's name board, hung on the road-facing fascia — the destination
        has to name itself in the world, not only in the DOM card */
@@ -803,19 +957,72 @@ class DLTJourney extends HTMLElement {
       [M.mkMiyapur, M.mkMiyapur, M.signtop, M.signtop, M.blockAlt, M.blockAlt]);
     nameBoard.position.set(-5.0, 11.9, -6.0); nameBoard.castShadow = true;
     stn.add(nameBoard);
-    this._place(stn, 120, 25); S.add(stn);
-    const deck = new THREE.Group();
-    for (let d = 103; d < 168; d += 2.2) {
-      const seg = new THREE.Mesh(new THREE.BoxGeometry(6.2, 1.5, 8.4), M.blockAlt);
-      this._place(seg, d, 25); seg.position.y = 9.4; seg.castShadow = true;
-      deck.add(seg);
-      if (Math.round((d - 103) / 2.2) % 4 === 0) {
-        const pier = new THREE.Mesh(new THREE.BoxGeometry(2.1, 9.4, 2.1), M.blockAlt);
-        this._place(pier, d, 25); pier.position.y = 4.7; pier.castShadow = true;
-        deck.add(pier);
+    this._place(stn, 120, -13); S.add(stn);
+    // Continuous curved concrete avoids the overlapping boxes and flickering
+    // joins of the old deck. Three meshes cover the deck and its parapets.
+    const viaductBeam = (lateral, width, bottom, height) => {
+      const positions = [], indices = [], sections = 72;
+      for (let i = 0; i <= sections; i++) {
+        const u = (103 + 105 * i / sections) / this._len;
+        const p = this._curve.getPointAt(u), tangent = this._curve.getTangentAt(u);
+        const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+        for (const y of [bottom, bottom + height]) for (const side of [-1, 1]) {
+          const point = p.clone().addScaledVector(right, lateral + side * width / 2);
+          positions.push(point.x, y, point.z);
+        }
+        if (i < sections) {
+          const k = i * 4;
+          indices.push(k + 2, k + 3, k + 6, k + 3, k + 7, k + 6,
+            k, k + 4, k + 1, k + 1, k + 4, k + 5,
+            k, k + 2, k + 4, k + 2, k + 6, k + 4,
+            k + 1, k + 5, k + 3, k + 3, k + 5, k + 7);
+        }
+      }
+      const end = sections * 4;
+      indices.push(0, 1, 2, 1, 3, 2, end, end + 2, end + 1, end + 1, end + 2, end + 3);
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setIndex(indices); geometry.computeVertexNormals();
+      const beam = new THREE.Mesh(geometry, M.concrete);
+      beam.castShadow = beam.receiveShadow = true; S.add(beam);
+    };
+    viaductBeam(-13, 6.2, 9.175, 0.95);
+    viaductBeam(-16.02, 0.18, 10.125, 0.4);
+    viaductBeam(-9.98, 0.18, 10.125, 0.4);
+    viaductBeam(-9, 2, 0.005, 0.08); // station-side pavement, clear of the road
+    const pierCount = 12;
+    const piers = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.62, 0.94, 8.7, 12), M.concrete, pierCount);
+    const caps = new THREE.InstancedMesh(new THREE.BoxGeometry(5.8, 0.6, 1.6), M.concrete, pierCount);
+    const feet = new THREE.InstancedMesh(new THREE.BoxGeometry(2.2, 0.24, 2.2), M.joint, pierCount);
+    for (let i = 0; i < pierCount; i++) {
+      const o = this._place(new THREE.Object3D(), 105 + i * 9, -13);
+      q.setFromEuler(o.rotation);
+      for (const [batch, y] of [[piers, 4.35], [caps, 8.95], [feet, 0.12]]) {
+        m4.compose(V(o.position.x, y, o.position.z), q, V(1, 1, 1));
+        batch.setMatrixAt(i, m4);
       }
     }
-    S.add(deck);
+    [piers, caps, feet].forEach(batch => {
+      batch.instanceMatrix.needsUpdate = true;
+      batch.castShadow = batch.receiveShadow = true; S.add(batch);
+    });
+    const planters = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 0.45, 4), M.joint, 4);
+    const planting = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 6), M.hedge, 12);
+    for (let i = 0; i < 4; i++) {
+      const o = this._place(new THREE.Object3D(), 136 + i * 20, -10.4);
+      q.setFromEuler(o.rotation);
+      m4.compose(V(o.position.x, 0.225, o.position.z), q, V(1, 1, 1));
+      planters.setMatrixAt(i, m4);
+      for (let k = 0; k < 3; k++) {
+        const p = V(0, 0.65, (k - 1) * 1.2).applyQuaternion(q).add(o.position);
+        m4.compose(p, q, V(0.65, 0.45, 0.85));
+        planting.setMatrixAt(i * 3 + k, m4);
+      }
+    }
+    [planters, planting].forEach(batch => {
+      batch.instanceMatrix.needsUpdate = true;
+      batch.castShadow = batch.receiveShadow = true; S.add(batch);
+    });
 
     /* Kilometre stones, the way they actually sit on a state highway: a short
        white stone with a rounded painted top, close to the shoulder. They give
@@ -933,7 +1140,9 @@ class DLTJourney extends HTMLElement {
   /* the rig sampled at t. Distance is derived from framing and lens, so
      apparent subject size stays authored rather than emergent. */
   _cameraFor(t, busP, tg, right) {
-    const azim = RIG.azim(t), elev = RIG.elev(t);
+    const portrait = this._portrait;
+    const azim = portrait ? 160 + (RIG.azim(t) - 150) * 0.35 : RIG.azim(t);
+    const elev = portrait ? Math.max(19, RIG.elev(t)) : RIG.elev(t);
     const frame = Math.min(0.50, Math.max(0.18, RIG.frame(t)));
     const fov = Math.min(60, Math.max(26, RIG.fov(t)));
     const aim = busP.clone(); aim.y += AIM_H;
@@ -956,19 +1165,42 @@ class DLTJourney extends HTMLElement {
     const ax = (v) => 0.5 * (COACH_L * Math.abs(tg.dot(v)) + COACH_H * Math.abs(WUP.dot(v))
                            + COACH_W * Math.abs(right.dot(v)));
     const aspect = this._camera.aspect || 1.7;
-    const frameH = Math.min(0.62, frame * 1.35);
-    const dist = Math.max(ax(sr) / (frame * half * aspect), ax(su) / (frameH * half));
+    // In portrait, fit the coach to the usable width, not the desktop fraction.
+    // Pulling the camera back to fit 35% of a phone puts scenery in front of it.
+    const frameW = portrait ? 0.66 : frame;
+    const frameH = portrait ? 0.22 : Math.min(0.62, frame * 1.35);
+    const dist = Math.max(ax(sr) / (frameW * half * aspect), ax(su) / (frameH * half));
     const pos = aim.clone().addScaledVector(dir0, dist);
     if (pos.y < 1.6) pos.y = 1.6;
     /* lift the aim with the camera: from above, aiming at the coach's waist
        tips the horizon out of frame and the shot reads as a map, not a camera. */
-    aim.y += Math.max(0, pos.y - 3.5) * 0.17;
-    return { pos, aim, fov, anchor: [RIG.ax(t), RIG.ay(t)] };
+    aim.y += Math.max(0, pos.y - 3.5) * (portrait ? 0 : 0.17);
+    const stop = Math.max(
+      smoothstep(0.16, 0.25, t) * (1 - smoothstep(0.40, 0.49, t)),
+      smoothstep(0.66, 0.75, t) * (1 - smoothstep(0.88, 0.97, t))
+    );
+    let anchor = [RIG.ax(t), RIG.ay(t)];
+    if (portrait) {
+      const h = this.clientHeight;
+      const cardTop = h - this._cardReserve;
+      const stopY = (80 + Math.max(180, cardTop - 24)) / 2;
+      const centerY = h * 0.50 * (1 - stop) + stopY * stop;
+      anchor = [0, 1 - 2 * centerY / h];
+    } else if (this._shortLandscape) {
+      anchor = [-0.48 * stop, RIG.ay(t)];
+    }
+    return { pos, aim, fov, anchor };
   }
 
   _resize() {
     const r = this.getBoundingClientRect();
     const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+    this._portrait = w <= 720 && w < h;
+    this._shortLandscape = h <= 540 && w >= h;
+    // Measure the actual copy, including schedule labels and enlarged fonts.
+    const cards = this.closest('[data-journey-scroll]')?.querySelectorAll('.journey-stop') || [];
+    this._cardReserve = Math.max(0, ...Array.from(cards, card =>
+      card.offsetHeight + (parseFloat(getComputedStyle(card).bottom) || 0)));
     this._renderer.setSize(w, h, false);
     this._camera.aspect = w / h;
     this._camera.updateProjectionMatrix();
@@ -977,7 +1209,8 @@ class DLTJourney extends HTMLElement {
   progress() {
     const host = this.closest('[data-journey-scroll]') || this.parentElement;
     const r = host.getBoundingClientRect();
-    const span = r.height - innerHeight;
+    // Match the sticky stage (svh on phones), not the changing browser toolbar.
+    const span = r.height - this.clientHeight;
     return span <= 0 ? 0 : clamp01(-r.top / span);
   }
 
@@ -1034,6 +1267,9 @@ class DLTJourney extends HTMLElement {
     const busP = p.clone().addScaledVector(right, LANE);
 
     if (this._coach) {
+      this._contactShadow.visible = true;
+      this._contactShadow.position.set(busP.x, 0.018, busP.z);
+      this._contactShadow.rotation.y = Math.atan2(tg.x, tg.z);
       /* the coach carries mass: it pitches as it brakes into a stop, squats as
          it pulls away, and leans into the curve. A degree or two, but it is the
          difference between a vehicle and a prop sliding along a spline. */

@@ -119,6 +119,40 @@
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script src="./support.js"></script>
+<!-- Keep executable JS outside helmet: template attribute encoding rewrites camelCase declarations. -->
+<script type="module">
+  let dltJourneyLoad;
+  const loadDltJourney = () => {
+    if (!dltJourneyLoad) {
+      dltJourneyLoad = import('./journey.js?v=6377003f1557').catch((error) => {
+        document.documentElement.setAttribute('data-journey-failed', '1');
+        document.dispatchEvent(new CustomEvent('journeyfailed', {
+          detail: error?.message || 'journey load failed'
+        }));
+      });
+    }
+    return dltJourneyLoad;
+  };
+
+  const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 900));
+  const start = () => loadDltJourney();
+  const startAndCleanup = () => {
+    start();
+    window.removeEventListener('scroll', startAndCleanup);
+    window.removeEventListener('pointerdown', startAndCleanup);
+    window.removeEventListener('keydown', startAndCleanup);
+  };
+
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    window.addEventListener('load', () => setTimeout(start, 1500), { once: true });
+  } else {
+    idle(start, { timeout: 2200 });
+    window.addEventListener('scroll', startAndCleanup, { passive: true, once: true });
+    window.addEventListener('pointerdown', startAndCleanup, { passive: true, once: true });
+    window.addEventListener('keydown', startAndCleanup, { once: true });
+  }
+
+</script>
 </head>
 <body>
 <x-dc>
@@ -149,6 +183,14 @@
     font-family: 'Archivo', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased; text-wrap: pretty; }
   [data-journey-scroll], #trips { overflow-anchor: none; }
+  [data-journey-scroll] { position:relative; height:480vh; background:#F7F5F0; }
+  .journey-stage { position:sticky; top:0; height:100vh; overflow:hidden; }
+  .journey-stop { box-sizing:border-box; }
+  .journey-skip { white-space:nowrap; }
+  .journey-skip:focus-visible { outline-offset:4px; }
+  .journey-finish-label { display:none; }
+  html[data-journey-beat="handoff"] .journey-skip-label { display:none; }
+  html[data-journey-beat="handoff"] .journey-finish-label { display:inline; }
   a { color: #0E4B34; text-decoration: none; }
   a:hover { color: #0E1014; }
   input, button, select { font: inherit; color: inherit; }
@@ -172,51 +214,53 @@
     [data-m="route"] { grid-area: 2 / 1 / 3 / -1; }
     [data-m="seats"] { grid-area: 3 / 1 / 4 / -1; }
     [data-m="cta"] { grid-area: 4 / 1 / 5 / -1; text-align: center; padding: 14px 20px; }
-    [data-journey-scroll] { height: 360vh; }
+    [data-journey-scroll] { height:360vh; height:360svh; }
+    .journey-stage { height:100vh; height:100svh; }
+    .journey-stage::after { content:''; position:absolute; inset:auto 0 0; height:160px; pointer-events:none; background:linear-gradient(transparent, #F7F5F0 42%); }
+    .journey-overlay { z-index:1; }
+    .journey-brand { white-space:nowrap; font-size:16px !important; }
+    .journey-tagline { display:none; }
+    .journey-stop {
+      left:18px; right:18px !important; width:auto !important;
+      bottom:calc(116px + env(safe-area-inset-bottom, 0px)) !important;
+      padding:16px !important;
+    }
+    .journey-stop h2 { font-size:clamp(22px, 6vw, 27px) !important; }
+    .journey-stop dl { margin-top:12px !important; gap:8px !important; }
+    .journey-stop dd { font-size:14px !important; overflow-wrap:anywhere; }
+    .journey-progress { bottom:calc(76px + env(safe-area-inset-bottom, 0px)) !important; }
+    .journey-labels { display:grid !important; grid-template-columns:auto 1fr 1fr auto; gap:8px; font-size:8px !important; letter-spacing:.04em !important; }
+    .journey-labels > span { margin:0 !important; }
+    .journey-labels > span:nth-child(2), .journey-labels > span:nth-child(3) { text-align:center; }
+    .journey-labels .journey-time { display:block; margin-top:3px; }
+    .journey-skip { bottom:calc(16px + env(safe-area-inset-bottom, 0px)) !important; }
     [data-poll-times] { grid-template-columns:repeat(3,minmax(0,1fr)) !important; }
     [data-poll-contact] { grid-template-columns:1fr !important; }
     [data-poll-layout] { grid-template-columns:1fr !important; }
   }
-</style>
-<script type="module">
-  let dltJourneyLoad;
-  const loadDltJourney = () => {
-    if (!dltJourneyLoad) {
-      dltJourneyLoad = import('./journey.js').catch((error) => {
-        document.dispatchEvent(new CustomEvent('journeyfailed', {
-          detail: error?.message || 'journey load failed'
-        }));
-      });
-    }
-    return dltJourneyLoad;
-  };
-
-  const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 900));
-  const start = () => loadDltJourney();
-  const startAndCleanup = () => {
-    start();
-    window.removeEventListener('scroll', startAndCleanup);
-    window.removeEventListener('pointerdown', startAndCleanup);
-    window.removeEventListener('keydown', startAndCleanup);
-  };
-
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    window.addEventListener('load', () => setTimeout(start, 1500), { once: true });
-  } else {
-    idle(start, { timeout: 2200 });
-    window.addEventListener('scroll', startAndCleanup, { passive: true, once: true });
-    window.addEventListener('pointerdown', startAndCleanup, { passive: true, once: true });
-    window.addEventListener('keydown', startAndCleanup, { once: true });
+  /* Short landscape screens need side-by-side space for the scene and details. */
+  @media (max-height: 540px) and (min-aspect-ratio: 1/1) {
+    [data-journey-scroll] { height:360svh; }
+    .journey-stage { height:100svh; }
+    .journey-stop { left:auto; right:18px !important; top:80px; bottom:auto !important; width:44% !important; padding:12px !important; }
+    .journey-stop h2 { font-size:22px !important; margin-top:6px !important; }
+    .journey-stop p { font-size:12px !important; margin-top:6px !important; line-height:1.35 !important; }
+    .journey-stop dl { margin-top:8px !important; }
+    .journey-stop dd { font-size:13px !important; }
+    .journey-progress { bottom:24px !important; right:54% !important; }
+    .journey-labels { display:none !important; }
+    .journey-skip { left:auto !important; right:18px; transform:none !important; bottom:12px !important; }
   }
-</script>
+</style>
+
 </helmet>
 
 <a class="dlt-skip" href="#trips">Skip to booking</a>
 
 <header style="position:fixed;top:0;left:0;right:0;z-index:40;height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(18px,4vw,44px);background:rgba(247,245,240,.86);backdrop-filter:blur(14px);border-bottom:1px solid rgba(14,16,20,.10)">
   <a href="#top" style="display:flex;align-items:baseline;gap:9px;color:#0E1014">
-    <span style="font-stretch:125%;font-weight:700;font-size:19px;letter-spacing:.02em">DLT Services</span>
-    <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Student shuttle</span>
+    <span class="journey-brand" style="font-stretch:125%;font-weight:700;font-size:19px;letter-spacing:.02em">DLT Services</span>
+    <span class="journey-tagline" style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Student shuttle</span>
   </a>
   <nav aria-label="Main" style="display:flex;align-items:center;gap:clamp(12px,2.2vw,26px);font-size:13.5px;font-weight:500;white-space:nowrap">
     <a href="#schedule-poll" data-m="hide" style="color:#3D423C">Vote</a>
@@ -247,8 +291,8 @@
 </sc-if>
 
 <sc-if value="{{ motion }}" hint-placeholder-val="{{ true }}">
-<section data-journey-scroll="1" data-screen-label="Journey" aria-label="Woxsen to Miyapur journey, scroll to travel" style="position:relative;height:480vh;background:#F7F5F0">
-  <div style="position:sticky;top:0;height:100vh;overflow:hidden">
+<section data-journey-scroll="1" data-screen-label="Journey" aria-label="Woxsen to Miyapur journey, scroll to travel">
+  <div class="journey-stage">
 
     <div style="position:absolute;inset:0;background:linear-gradient(#FFFFFF 0%, #F7F5F0 46%, #EFEDE4 100%)"></div>
     <div style="position:absolute;inset:0">
@@ -266,7 +310,7 @@
       </div>
     </sc-if>
 
-    <div style="position:absolute;inset:0;pointer-events:none;padding:calc(64px + clamp(20px,4vh,40px)) clamp(18px,4vw,44px) clamp(20px,4vh,40px)">
+    <div class="journey-overlay" style="position:absolute;inset:0;pointer-events:none;padding:calc(64px + clamp(20px,4vh,40px)) clamp(18px,4vw,44px) clamp(20px,4vh,40px)">
 
       <div style="--in:clamp(0, calc((0.155 - var(--journey-t, 0)) * 13), 1);opacity:var(--in);position:relative;width:max-content;max-width:100%">
         <div style="position:absolute;left:-46px;top:-44px;right:-72px;bottom:-46px;background:#F7F5F0;-webkit-mask-image:radial-gradient(closest-side at 46% 50%, #000 0%, rgba(0,0,0,.94) 40%, rgba(0,0,0,.55) 68%, rgba(0,0,0,0) 100%);mask-image:radial-gradient(closest-side at 46% 50%, #000 0%, rgba(0,0,0,.94) 40%, rgba(0,0,0,.55) 68%, rgba(0,0,0,0) 100%)"></div>
@@ -279,19 +323,19 @@
         </div>
       </div>
 
-      <div style="position:absolute;left:clamp(18px,4vw,44px);right:clamp(18px,4vw,44px);bottom:clamp(64px,10vh,96px)">
+      <div class="journey-progress" style="position:absolute;left:clamp(18px,4vw,44px);right:clamp(18px,4vw,44px);bottom:clamp(64px,10vh,96px)">
         <div style="position:relative;height:1px;background:rgba(14,16,20,.18)">
           <div style="position:absolute;left:0;top:0;height:1px;background:#0E4B34;width:calc(var(--journey-t, 0) * 100%)"></div>
           <div style="position:absolute;top:-4px;left:calc(var(--journey-t, 0) * 100%);width:9px;height:9px;border-radius:50%;background:#0E4B34;margin-left:-4.5px"></div>
           <span style="position:absolute;left:20%;top:-5px;width:1px;height:11px;background:rgba(14,16,20,.34)"></span>
           <span style="position:absolute;left:74%;top:-5px;width:1px;height:11px;background:rgba(14,16,20,.34)"></span>
         </div>
-        <div style="display:flex;justify-content:space-between;margin-top:9px;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#5F6560">
-          <span>Depart</span><span style="margin-left:6%">Woxsen {{ departLabel }}</span><span style="margin-right:14%">Miyapur ≈{{ arriveLabel }}</span><span>Book</span>
+        <div class="journey-labels" style="display:flex;justify-content:space-between;margin-top:9px;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#5F6560">
+          <span>Depart</span><span style="margin-left:6%">Woxsen <span class="journey-time">{{ departLabel }}</span></span><span style="margin-right:14%">Miyapur <span class="journey-time">≈{{ arriveLabel }}</span></span><span>Book</span>
         </div>
       </div>
 
-      <article style="--in:min(clamp(0, calc((var(--journey-t, 0) - 0.20) * 18), 1), clamp(0, calc((0.455 - var(--journey-t, 0)) * 18), 1));opacity:var(--in);transform:translateY(calc((1 - var(--in)) * 22px));position:absolute;right:clamp(18px,4vw,44px);bottom:clamp(112px,19vh,190px);width:min(390px,84vw);background:#FFFFFF;border:1px solid rgba(14,16,20,.12);border-top:2px solid #0E4B34;padding:22px 24px 20px;box-shadow:0 18px 44px -28px rgba(14,16,20,.34)">
+      <article class="journey-stop" style="--in:min(clamp(0, calc((var(--journey-t, 0) - 0.20) * 18), 1), clamp(0, calc((0.455 - var(--journey-t, 0)) * 18), 1));opacity:var(--in);transform:translateY(calc((1 - var(--in)) * 22px));position:absolute;right:clamp(18px,4vw,44px);bottom:clamp(112px,19vh,190px);width:min(390px,84vw);background:#FFFFFF;border:1px solid rgba(14,16,20,.12);border-top:2px solid #0E4B34;padding:22px 24px 20px;box-shadow:0 18px 44px -28px rgba(14,16,20,.34)">
         <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:#0E4B34">Stop 01 · Boarding point</div>
         <h2 style="margin:10px 0 0;font-stretch:125%;font-weight:700;font-size:29px;line-height:1;letter-spacing:-.015em">Woxsen University</h2>
         <p style="margin:11px 0 0;font-size:13.5px;line-height:1.55;color:#3D423C">Kamkole, Sadasivpet. The coach waits at the main gate loop — be there 30 minutes early and you'll board without hurrying.</p>
@@ -311,7 +355,7 @@
         </dl>
       </article>
 
-      <article style="--in:min(clamp(0, calc((var(--journey-t, 0) - 0.70) * 20), 1), clamp(0, calc((0.925 - var(--journey-t, 0)) * 20), 1));opacity:var(--in);transform:translateY(calc((1 - var(--in)) * 22px));position:absolute;right:clamp(18px,4vw,44px);bottom:clamp(112px,19vh,190px);width:min(390px,84vw);background:#0E1014;color:#F7F5F0;border-top:2px solid #0E4B34;padding:22px 24px 20px;box-shadow:0 18px 44px -28px rgba(14,16,20,.42)">
+      <article class="journey-stop" style="--in:min(clamp(0, calc((var(--journey-t, 0) - 0.70) * 20), 1), clamp(0, calc((0.925 - var(--journey-t, 0)) * 20), 1));opacity:var(--in);transform:translateY(calc((1 - var(--in)) * 22px));position:absolute;right:clamp(18px,4vw,44px);bottom:clamp(112px,19vh,190px);width:min(390px,84vw);background:#0E1014;color:#F7F5F0;border-top:2px solid #0E4B34;padding:22px 24px 20px;box-shadow:0 18px 44px -28px rgba(14,16,20,.42)">
         <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:#5FAE86">Stop 02 · Destination</div>
         <h2 style="margin:10px 0 0;font-stretch:125%;font-weight:700;font-size:29px;line-height:1;letter-spacing:-.015em">Miyapur</h2>
         <p style="margin:8px 0 0;font-size:18px;font-weight:600;letter-spacing:-.01em">You've arrived.</p>
@@ -333,8 +377,9 @@
         <p style="margin:13px 0 0;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:#A9AFA6">Arrival time approximate</p>
       </article>
 
-      <a href="#trips" style="--in:min(clamp(0, calc((var(--journey-t, 0) - 0.015) * 40), 1), clamp(0, calc((0.86 - var(--journey-t, 0)) * 24), 1));opacity:var(--in);pointer-events:auto;position:absolute;left:50%;transform:translateX(-50%);bottom:clamp(18px,3vh,30px);display:flex;align-items:center;gap:8px;font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:#3D423C;background:rgba(247,245,240,.86);padding:11px 14px;border:1px solid rgba(14,16,20,.16);border-radius:2px;min-height:44px;box-sizing:border-box">
-        Skip the journey
+      <a class="journey-skip" href="#trips" style="pointer-events:auto;position:absolute;left:50%;transform:translateX(-50%);bottom:clamp(18px,3vh,30px);display:flex;align-items:center;gap:8px;font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:#3D423C;background:rgba(247,245,240,.86);padding:11px 14px;border:1px solid rgba(14,16,20,.16);border-radius:2px;min-height:44px;box-sizing:border-box">
+        <span class="journey-skip-label">Skip the journey</span>
+        <span class="journey-finish-label">View departures</span>
         <span aria-hidden="true" style="display:inline-block;animation:dltNudge 2.4s ease-in-out infinite">↓</span>
       </a>
 
@@ -371,7 +416,7 @@
       <p style="margin:10px 0 0;font-size:13.5px;line-height:1.55;color:#C3C8BE">Beside Miyapur metro on the Red Line. Journey ≈2 h, arrival approximate.</p>
     </article>
   </div>
-  <p style="margin:18px 0 0;font-size:12.5px;color:#4A4F49">You're seeing the static route because your device asks for reduced motion. Nothing about booking depends on the animated journey.</p>
+  <p style="margin:18px 0 0;font-size:12.5px;color:#4A4F49">You're viewing the route without animation. All trip details and booking options are still available.</p>
 </section>
 </sc-if>
 
@@ -718,6 +763,8 @@ class Component extends DCLogic {
     this._onFailed = () => { clearTimeout(this._giveUp); this.setState({ scene: 'failed' }); };
     document.addEventListener('journeyready', this._onReady);
     document.addEventListener('journeyfailed', this._onFailed);
+    // A custom element can fail during mounting, before these listeners exist.
+    if (document.documentElement.hasAttribute('data-journey-failed')) this._onFailed();
     this._giveUp = setTimeout(() => {
       if (this.state.scene === 'loading') this.setState({ scene: 'ready' });
     }, 12000);
