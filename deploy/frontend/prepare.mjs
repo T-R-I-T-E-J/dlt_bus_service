@@ -7,20 +7,25 @@ import { fileURLToPath } from 'node:url';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const args = process.argv.slice(2);
 const options = { domain: 'dltservices.tech', alias: '', 'api-origin': '', out: '' };
-for (let i = 0; i < args.length; i += 2) {
+const preview = args.includes('--preview');
+for (let i = 0; i < args.length;) {
+  if (args[i] === '--preview') { i += 1; continue; }
   const key = args[i].replace(/^--/, '');
   if (!args[i].startsWith('--') || !Object.hasOwn(options, key) || !args[i + 1])
-    throw new Error('Usage: node deploy/frontend/prepare.mjs --api-origin https://your-new-api.up.railway.app --out /tmp/dlt-release [--domain dltservices.tech] [--alias www.dltservices.tech]');
+    throw new Error('Usage: node deploy/frontend/prepare.mjs (--preview | --api-origin https://your-api.example.com) --out /tmp/dlt-release [--domain dltservices.tech] [--alias www.dltservices.tech]');
   options[key] = args[i + 1];
+  i += 2;
 }
 const validDomain = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 for (const name of [options.domain, options.alias].filter(Boolean)) {
   if (!validDomain.test(name)) throw new Error(`Invalid domain: ${name}`);
 }
-if (!options['api-origin'])
+if (preview && options['api-origin'])
+  throw new Error('--preview disables the API; do not combine it with --api-origin.');
+if (!preview && !options['api-origin'])
   throw new Error('--api-origin is required; supply the new Railway backend public HTTPS origin.');
-const api = new URL(options['api-origin']);
-if (api.protocol !== 'https:' || api.username || api.password || api.pathname !== '/' || api.search || api.hash || !validDomain.test(api.hostname))
+const api = preview ? null : new URL(options['api-origin']);
+if (api && (api.protocol !== 'https:' || api.username || api.password || api.pathname !== '/' || api.search || api.hash || !validDomain.test(api.hostname)))
   throw new Error('--api-origin must be an HTTPS origin without credentials, path or query.');
 if (!options.out) throw new Error('--out is required; use a new directory for each release.');
 const out = resolve(options.out);
@@ -46,6 +51,38 @@ for (const folder of ['assets', 'vendor'])
   await cp(join(repo, folder), join(publicDir, folder), { recursive: true, dereference: false });
 
 const names = [options.domain, options.alias].filter(Boolean).join(' ');
+if (preview) {
+  await writeFile(join(out, 'nginx-preview.conf'), `# Static preview only. No backend or database connection.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${names};
+    root /var/www/dlt/current;
+    index "DLT Homepage.dc.html";
+    server_tokens off;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header X-Robots-Tag "noindex, noarchive" always;
+    add_header Cache-Control "no-store" always;
+    location ^~ /api/ {
+        default_type application/json;
+        return 503 '{"ok":false,"error":"Frontend preview; API is not connected."}';
+    }
+    location = /api { return 308 /api/$is_args$args; }
+    location = /booking { rewrite ^ "/DLT Booking.dc.html" last; }
+    location = /policies { rewrite ^ "/DLT Policies.dc.html" last; }
+    location = /account { rewrite ^ "/DLT Account.dc.html" last; }
+    location = /my-trips { rewrite ^ "/DLT Dashboard.dc.html" last; }
+    location = /admin { rewrite ^ "/DLT Admin.dc.html" last; }
+    location = /book { return 301 /booking$is_args$args; }
+    location = /terms { return 301 /policies$is_args$args; }
+    location = /privacy { return 301 /policies$is_args$args; }
+    location ~ /\\. { return 404; }
+    location / { try_files $uri $uri/ =404; }
+    error_page 404 /404.html;
+}
+`);
+} else {
 const acme = `    location ^~ /.well-known/acme-challenge/ {
         root /var/www/letsencrypt;
         try_files $uri =404;
@@ -125,6 +162,7 @@ server {
     error_page 404 /404.html;
 }
 `);
+}
 console.log(`Frontend release prepared at ${out}`);
-console.log(`API origin: ${api.origin}`);
+console.log(preview ? 'Static preview only: API is disabled.' : `API origin: ${api.origin}`);
 console.log('No backend environment, migrations or data were changed.');

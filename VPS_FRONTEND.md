@@ -1,5 +1,26 @@
 # Move the Vercel frontend to a personal VPS
 
+## Static preview before connecting the backend
+
+For frontend-first testing, package without an API connection:
+
+```sh
+node deploy/frontend/prepare.mjs --preview --domain dlt-preview.local --out /tmp/dlt-preview-release
+```
+
+This creates `public/` and `nginx-preview.conf`. Publish `public/` through
+`/var/www/dlt/current` and add the preview configuration as its own Nginx
+site. Test locally with `curl -H 'Host: dlt-preview.local' http://127.0.0.1/`.
+The preview serves the pages and assets, returns an explicit 503 for API
+requests and marks responses as non-indexable. It makes no backend or
+database connection. Login, bookings and payments require the backend and
+HTTPS and are not functional in this static preview. Existing production
+DNS and other Nginx sites need no changes for these local checks.
+
+The remainder of this guide covers connecting the API and enabling HTTPS.
+
+## Production frontend
+
 Use branch `codex/vps-frontend-deployment`, based on `master` commit
 `f15c446`. This moves **only the frontend** to the VPS and routes API
 requests to your **new Railway backend public URL**. To retain existing
