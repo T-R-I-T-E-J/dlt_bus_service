@@ -613,6 +613,24 @@ const admin = {
     { idempotencyKey: idempotencyKeyFor(JSON.stringify(['manual', input])) }).then((r) => r.booking),
 };
 
+/* ================================================================= fare
+ *
+ * How a seat price is SHOWN: fare + GST. The server's trip price is still the
+ * only amount charged (₹320); this splits it for display so every page shows
+ * the same ₹299 + ₹21 GST. GST_PER_SEAT is a fixed amount set by DLT - if the
+ * trip price changes, only the fare part moves. No price, no breakdown.
+ */
+const GST_PER_SEAT = 21;
+const fare = {
+  GST_PER_SEAT,
+  split(price, seats = 1) {
+    const p = Number(price), n = Number(seats);
+    if (price === null || price === undefined || !Number.isFinite(p) || p <= GST_PER_SEAT
+      || !Number.isFinite(n) || n < 0) return null;
+    return { base: (p - GST_PER_SEAT) * n, gst: GST_PER_SEAT * n, total: p * n };
+  },
+};
+
 /* ================================================================= export
  *
  * Note what is absent, permanently: DLT.provider (the sandbox acquirer),
@@ -622,7 +640,7 @@ const admin = {
 
 export const DLT = {
   auth, trips, seats, bookings, payments, checkout, waitlist, boarding, polls, admin,
-  notifications, fmt, seatType, roleLabel, can,
+  notifications, fmt, fare, seatType, roleLabel, can,
   subscribe, startPolling, stopPolling,
   boot, isReady, setUnauthenticatedHandler,
   ApiError,

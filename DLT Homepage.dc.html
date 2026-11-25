@@ -82,7 +82,7 @@
           "name": "What is the DLT Services current fare?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "The current fare is Rs 320 per seat, with online payment and QR boarding passes."
+            "text": "The current fare is Rs 320 per seat (Rs 299 fare + Rs 21 GST), with online payment and QR boarding passes."
           }
         }
       ]
@@ -415,7 +415,7 @@
       <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">DLT Services · Woxsen ⇄ Miyapur</div>
       <h2 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.8vw,36px);line-height:1.05;letter-spacing:-.018em">Next departures</h2>
     </div>
-    <p style="margin:0;max-width:44ch;font-size:13px;line-height:1.55;color:#4A4F49">₹{{ fare }} per seat, up to five passengers on one booking. Free cancellation until 24 hours before departure.</p>
+    <p style="margin:0;max-width:44ch;font-size:13px;line-height:1.55;color:#4A4F49">₹{{ fare }} per seat{{ fareNote }}, up to five passengers on one booking. Free cancellation until 24 hours before departure.</p>
   </div>
 
   <div role="list" style="--h:var(--journey-handoff, 0);opacity:calc(.18 + var(--h) * .82);transform:translateY(calc((1 - var(--h)) * 30px));display:flex;flex-direction:column;gap:0;border-top:1px solid rgba(14,16,20,.16)">
@@ -690,7 +690,7 @@ const FAQ = [
     ['How long are seats held?', 'Ten minutes from the first seat you pick. The clock is shown in the summary and the seats reopen when it runs out.'],
   ]],
   ['Payment & refunds', [
-    ['What is the fare?', 'The current fare is ₹320 per seat. No booking fee, coupon or tax line is added in this release.'],
+    ['What is the fare?', '₹320 per seat in total: a ₹299 fare plus ₹21 GST. Nothing else is added at payment — no booking fee or coupon.'],
     ['Can I cancel after paying?', 'Cancel more than 24 hours before departure for a full refund. Inside 24 hours the fare is non-refundable.'],
     ['My payment went through but I saw an error.', 'Do not pay again. We verify every payment on our server and finish or review the booking from that result.'],
   ]],
@@ -922,6 +922,8 @@ class Component extends DCLogic {
        of empty placeholders. */
     const trips = st.data.trips;
     const fare = trips.length ? String(trips[0].price) : '320';
+    const fareSplit = api && api.fare ? api.fare.split(Number(fare)) : null;
+    const fareNote = fareSplit ? ' (₹' + fareSplit.base + ' + ₹' + fareSplit.gst + ' GST)' : '';
     const first = trips[0] || null;
     const noActiveTrips = st.data.tripsLoaded && trips.length === 0;
 
@@ -951,7 +953,7 @@ class Component extends DCLogic {
         ? 'Seat ' + next.passengers.map(p => p.seatNumber).join(', ') + ' · report ' + fmt.time(next.trip.reportingAt)
         : '',
 
-      fare,
+      fare, fareNote,
       departLabel: first ? fmt.time(first.departureAt) : 'by schedule',
       reportLabel: first ? fmt.time(first.reportingAt) : '30 min before',
       arriveLabel: first ? fmt.time(first.arrivalEstimateAt) : '2 h',

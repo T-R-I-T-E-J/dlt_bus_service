@@ -161,7 +161,7 @@
   <section aria-labelledby="trips-h">
     <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Woxsen ⇄ Miyapur</div>
     <h1 id="trips-h" style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1.04;letter-spacing:-.02em">Choose your departure</h1>
-    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹320 per seat, up to five passengers on one booking. Seats are held for 10 minutes once you pick them.</p>
+    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹320 per seat (₹299 fare + ₹21 GST), up to five passengers on one booking. Seats are held for 10 minutes once you pick them.</p>
 
     <sc-if value="{{ noTrips }}" hint-placeholder-val="{{ false }}">
       <div style="margin:28px 0 0;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(22px,4vw,38px)">
@@ -622,6 +622,11 @@
     <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;color:#3D423C">
       <span>{{ summaryLineLabel }}</span><span>{{ summaryLineAmount }}</span>
     </div>
+    <sc-if value="{{ summaryGst }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;color:#3D423C">
+      <span>GST</span><span>{{ summaryGst }}</span>
+    </div>
+    </sc-if>
     <div style="display:flex;justify-content:space-between;gap:10px;font-size:16px;font-weight:700;padding-top:9px;border-top:1px solid rgba(14,16,20,.12)">
       <span>Total payable</span><span>{{ summaryTotal }}</span>
     </div>
@@ -1184,7 +1189,7 @@ class Component extends DCLogic {  state = {
         primaryLabel: 'Loading', primaryDisabled: true, primaryBg: '#E4E1D8', primaryFg: '#7A7F77',
         primaryCursor: 'wait', primary: () => {}, noSeats: true, total: 0, unitPrice: null,
         seatCountLabel: '0 seats', summaryLineLabel: 'Fare after departure',
-        summaryLineAmount: '—', summaryTotal: '—',
+        summaryLineAmount: '—', summaryTotal: '—', summaryGst: null,
         routeLabel: 'Woxsen <-> Miyapur', tripSummary: 'Reading live departures', primaryHint: '',
         notice: null, clearNotice: () => {}, barLine: '', repriced: false,
         signedOut: true, signedIn: false };
@@ -1207,8 +1212,14 @@ class Component extends DCLogic {  state = {
     const total = booking && ['done', 'pending', 'discrepancy', 'processing'].indexOf(step) >= 0
       ? booking.totalAmount : (unitPrice === null ? null : n * unitPrice);
     const money = value => value === null || value === undefined ? '—' : '₹' + value;
-    const summaryLineLabel = n && unitPrice !== null ? (n === 1 ? '1 seat' : n + ' seats') + ' x ₹' + unitPrice : 'Fare after departure';
-    const summaryLineAmount = n && total !== null ? money(total) : '—';
+    /* Shown as fare + GST. Split from the per-seat amount actually due, so the
+       two lines always add back up to the total the server charges. */
+    const split = n && total !== null ? DLT.fare.split(total / n, n) : null;
+    const seatWord = n === 1 ? '1 seat' : n + ' seats';
+    const summaryLineLabel = split ? seatWord + ' × ₹' + (split.base / n) + ' fare'
+      : n && unitPrice !== null ? seatWord + ' x ₹' + unitPrice : 'Fare after departure';
+    const summaryLineAmount = split ? money(split.base) : n && total !== null ? money(total) : '—';
+    const summaryGst = split ? money(split.gst) : null;
     const summaryTotal = n && total !== null ? money(total) : '—';
 
     /* The clock runs off the SERVER's holdExpiresAt. The client starts no timer
@@ -1487,7 +1498,7 @@ class Component extends DCLogic {  state = {
       seatCountLabel: n === 1 ? '1 seat' : n + ' seats',
       seatList: (booking ? booking.passengers.map(p => p.seatNumber) : held.map(s => s.seatNumber)).join(', ') || '—',
       unitPrice, total,
-      summaryLineLabel, summaryLineAmount, summaryTotal,
+      summaryLineLabel, summaryLineAmount, summaryTotal, summaryGst,
       holdActive: holdLeft > 0, holdClock: DLT.fmt.countdown(holdLeft),
       holdBg: lowHold ? '#FFFDF6' : '#F4F7F3', holdFg: lowHold ? '#8A5A0E' : '#0E4B34',
 
