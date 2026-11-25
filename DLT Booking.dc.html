@@ -321,7 +321,7 @@
 
     <div style="margin:22px 0 0;border-top:1px solid rgba(14,16,20,.16);padding-top:18px">
       <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Booking contact</div>
-      <p style="margin:8px 0 0;max-width:50ch;font-size:13px;line-height:1.6;color:#3D423C">Updates for this booking go to this number. Changing it here applies to this booking only — your account is unchanged.</p>
+      <p style="margin:8px 0 0;max-width:50ch;font-size:13px;line-height:1.6;color:#3D423C">Updates for this booking go to this number. Leave it blank to use the first passenger's phone. Changing it here applies to this booking only — your account is unchanged.</p>
       <label style="display:block;margin-top:12px;max-width:260px">
         <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Contact number</span>
         <input type="tel" value="{{ contact }}" onChange="{{ onContact }}" autocomplete="tel" placeholder="10-digit mobile" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid {{ contactBd }};border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
@@ -987,6 +987,44 @@ class Component extends DCLogic {  state = {
     pax: Object.assign({}, s.pax, { [seat]: Object.assign({}, s.pax[seat] || {}, { [key]: v }) }),
   }));
 
+  /* Most students book for themselves: the first seat starts with the signed-in
+     account's own name, student ID and phone, so nobody types their number
+     twice. A seat with anything already entered is never overwritten. */
+  toPassengers = () => {
+    const me = DLT.auth.current();
+    const first = this.heldSeats()[0];
+    const patch = { step: 'passengers', open: 0, error: null };
+    if (me && first) {
+      const p = this.state.pax[first.seatNumber] || {};
+      if (!p.name && !p.studentId && !p.phone) {
+        patch.pax = Object.assign({}, this.state.pax, { [first.seatNumber]: {
+          name: me.name || '', studentId: me.studentId || '', phone: me.phone || '' } });
+      }
+    }
+    this.setState(patch);
+  };
+
+  toReview = () => {
+    if (!this.allValid()) {
+      const bad = this.heldSeats().findIndex(s => {
+        const v = this.validSeat(s.seatNumber);
+        return !(v.name && v.studentId && v.phone);
+      });
+      this.setState({ touched: true, open: bad < 0 ? 0 : bad });
+      return;
+    }
+    /* An empty contact number falls back to the first passenger's phone,
+       which was just validated - not a second box to fill with the same digits. */
+    const first = this.heldSeats()[0];
+    const contact = String(this.state.contact || '').replace(/\s/g, '')
+      || (first ? String(this.paxFor(first.seatNumber).phone).replace(/\s/g, '') : '');
+    if (!/^[6-9]\d{9}$/.test(contact)) {
+      this.setState({ touched: true, error: 'Enter a valid booking contact number.' });
+      return;
+    }
+    this.setState({ touched: true, contact: contact, step: 'review', error: null });
+  };
+
   /* The basket, as the server reported it in the seat-map response. */
   heldSeats() { return this.state.data.held || []; }
 
@@ -1278,26 +1316,12 @@ class Component extends DCLogic {  state = {
       primaryLabel = n ? 'Continue to passengers' : 'Select at least one seat';
       primaryDisabled = !n;
       primaryHint = n ? 'Your seats are held for 10 minutes.' : 'Tap a seat on the map to hold it.';
-      onPrimary = () => this.setState({ step: 'passengers', open: 0, error: null });
+      onPrimary = this.toPassengers;
     } else if (step === 'passengers') {
       primaryLabel = 'Review booking';
       primaryDisabled = false;
       primaryHint = this.allValid() ? '' : 'Every passenger needs a name, student ID and phone.';
-      onPrimary = () => {
-        if (!this.allValid()) {
-          const bad = held.findIndex(s => {
-            const v = this.validSeat(s.seatNumber);
-            return !(v.name && v.studentId && v.phone);
-          });
-          this.setState({ touched: true, open: bad < 0 ? 0 : bad });
-          return;
-        }
-        if (!/^[6-9]\d{9}$/.test(String(st.contact || '').replace(/\s/g, ''))) {
-          this.setState({ touched: true, error: 'Enter a valid booking contact number.' });
-          return;
-        }
-        this.setState({ touched: true, step: 'review', error: null });
-      };
+      onPrimary = this.toReview;
     } else if (step === 'review') {
       if (st.reprice) {
         primaryLabel = 'Accept ₹' + st.reprice.amount;

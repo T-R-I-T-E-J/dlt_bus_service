@@ -108,3 +108,31 @@ test('a payment confirmed while Checkout is open still shows the confirmed booki
   assert.equal(page.state.bookingId, 'b1');
   assert.equal(page.state.data.booking && page.state.data.booking.code, 'DLT-7Q2K');
 });
+
+test('the signed-in student is not asked to type their own details twice', () => {
+  const me = { name: 'Asha Rao', phone: '9876543210', studentId: 'WU2024017', role: 'STUDENT' };
+  const page = component('DLT Booking.dc.html', {
+    auth: { current: () => me },
+    bookings: { validatePassenger: p => ({ name: !!p.name, studentId: !!p.studentId, phone: /^[6-9]\d{9}$/.test(p.phone) }) },
+  });
+  Object.assign(page.state, { ready: true, step: 'seats', tripId: 't1', contact: '',
+    data: { ...page.state.data, trip: { id: 't1', price: 320 }, held: [{ seatNumber: '2B' }, { seatNumber: '2C' }] } });
+  page.toPassengers();                     // Continue to passengers
+  assert.equal(page.state.step, 'passengers');
+  assert.deepEqual(page.paxFor('2B'), { name: 'Asha Rao', studentId: 'WU2024017', phone: '9876543210', seatNumber: '2B' });
+  assert.deepEqual(page.paxFor('2C'), { name: '', studentId: '', phone: '', seatNumber: '2C' });
+  page.setField('2C', 'name', 'Friend'); page.setField('2C', 'studentId', 'WU2024099'); page.setField('2C', 'phone', '9123456780');
+  page.toReview();                         // Review booking: no second entry of the contact number
+  assert.equal(page.state.error, null);
+  assert.equal(page.state.step, 'review');
+  assert.equal(page.state.contact, '9876543210');
+});
+
+test('details already typed for a seat are never overwritten by the account', () => {
+  const page = component('DLT Booking.dc.html', { auth: { current: () => ({ name: 'Asha Rao', phone: '9876543210', studentId: 'WU2024017' }) } });
+  Object.assign(page.state, { ready: true, step: 'seats', tripId: 't1',
+    pax: { '2B': { name: 'Someone Else' } },
+    data: { ...page.state.data, trip: { id: 't1', price: 320 }, held: [{ seatNumber: '2B' }] } });
+  page.toPassengers();
+  assert.deepEqual(page.paxFor('2B'), { name: 'Someone Else', studentId: '', phone: '', seatNumber: '2B' });
+});
