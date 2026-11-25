@@ -1,9 +1,9 @@
 # DLT — production deployment guide
 
 > **Frontend-only move from Vercel to a personal VPS:** follow
-> [VPS_FRONTEND.md](VPS_FRONTEND.md). Keep the existing Railway backend and
-> database in place. The full-stack provisioning steps below do not apply
-> to that move.
+> [VPS_FRONTEND.md](VPS_FRONTEND.md). Supply the new Railway API origin and
+> connect that backend to the existing database. The full-stack provisioning
+> steps below do not apply to that frontend move.
 
 Status: the application (Homepage/3D, Booking, Dashboard, Account, Admin,
 Razorpay payments/refunds) is feature-complete and verified — 378/378

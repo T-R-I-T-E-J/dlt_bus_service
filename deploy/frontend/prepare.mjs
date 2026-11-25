@@ -6,17 +6,19 @@ import { fileURLToPath } from 'node:url';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const args = process.argv.slice(2);
-const options = { domain: 'dltservices.tech', alias: '', 'api-origin': 'https://dlt-api-production.up.railway.app', out: '' };
+const options = { domain: 'dltservices.tech', alias: '', 'api-origin': '', out: '' };
 for (let i = 0; i < args.length; i += 2) {
   const key = args[i].replace(/^--/, '');
   if (!args[i].startsWith('--') || !Object.hasOwn(options, key) || !args[i + 1])
-    throw new Error('Usage: node deploy/frontend/prepare.mjs --out /tmp/dlt-release [--domain dltservices.tech] [--alias www.dltservices.tech] [--api-origin https://your-existing-api.up.railway.app]');
+    throw new Error('Usage: node deploy/frontend/prepare.mjs --api-origin https://your-new-api.up.railway.app --out /tmp/dlt-release [--domain dltservices.tech] [--alias www.dltservices.tech]');
   options[key] = args[i + 1];
 }
 const validDomain = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 for (const name of [options.domain, options.alias].filter(Boolean)) {
   if (!validDomain.test(name)) throw new Error(`Invalid domain: ${name}`);
 }
+if (!options['api-origin'])
+  throw new Error('--api-origin is required; supply the new Railway backend public HTTPS origin.');
 const api = new URL(options['api-origin']);
 if (api.protocol !== 'https:' || api.username || api.password || api.pathname !== '/' || api.search || api.hash || !validDomain.test(api.hostname))
   throw new Error('--api-origin must be an HTTPS origin without credentials, path or query.');
@@ -57,7 +59,7 @@ ${acme}
     location / { return 503; }
 }
 `);
-await writeFile(join(out, 'nginx-dlt.conf'), `# Frontend on VPS; backend and database remain on Railway.
+await writeFile(join(out, 'nginx-dlt.conf'), `# Frontend on VPS; proxy to the configured Railway backend.
 server {
     listen 80;
     listen [::]:80;
@@ -81,7 +83,7 @@ server {
     add_header Strict-Transport-Security "max-age=31536000" always;
     add_header Cache-Control "no-cache" always;
 
-    # Match the current Vercel API rewrite. Preserve /api and query strings.
+    # Use the new Railway origin. Preserve /api and query strings.
     location ^~ /api/ {
         proxy_pass ${api.origin};
         proxy_http_version 1.1;
@@ -124,4 +126,5 @@ server {
 }
 `);
 console.log(`Frontend release prepared at ${out}`);
-console.log('API: existing Railway backend. No backend environment, migrations or data were changed.');
+console.log(`API origin: ${api.origin}`);
+console.log('No backend environment, migrations or data were changed.');

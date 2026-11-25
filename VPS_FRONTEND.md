@@ -1,32 +1,32 @@
 # Move the Vercel frontend to a personal VPS
 
 Use branch `codex/vps-frontend-deployment`, based on `master` commit
-`f15c446`. This moves **only the frontend**. The API continues at
-`https://dlt-api-production.up.railway.app`, using its existing database,
-users, bookings, payments and environment variables. Do not run database
-migrations, seed scripts, or the backend systemd template for this move.
+`f15c446`. This moves **only the frontend** to the VPS and routes API
+requests to your **new Railway backend public URL**. To retain existing
+users, bookings and payments, connect that backend to the existing database.
+Do not run database migrations, seed scripts, or the backend systemd template
+as part of this frontend move.
 
 The browser continues to use `/api` on the DLT domain. Nginx proxies those
-requests to Railway over verified HTTPS, replacing the rewrite in
-`vercel.json`. Sessions use secure cookies, so HTTPS is required. Keep the
+requests to the supplied Railway origin over verified HTTPS. The VPS does not
+use the old upstream in `vercel.json`. Sessions use secure cookies, so HTTPS is required. Keep the
 existing domain, including whichever of the apex and `www` names customers
 use; the examples below cover both `dltservices.tech` and
 `www.dltservices.tech`.
 
 ## Confirm the backend before cutover
 
-On 25 November 2026 the repository's Railway hostname returned HTTP 404
-`Application not found`, and the current DLT domain returned Vercel HTTP 402
-`DEPLOYMENT_DISABLED`. These responses do not prove that database records
-have been lost. Before DNS cutover, open the existing Railway project and
-confirm its service, database/volume and environment variables still exist.
-Restore service availability or obtain its current public URL. Do not create
-a replacement database or seed a fresh one to work around the hostname error.
-Verify existing records through the running application before switching DNS.
+Deploy the compatible DLT API on Railway and obtain its public HTTPS origin
+(for example, `https://your-new-api.up.railway.app`, without `/api`). Configure
+its runtime database connection to use the existing database and restricted
+role, and carry over the required email/payment configuration through
+Railway's environment settings. Keep those credentials off the frontend VPS.
+Do not provision or seed an empty replacement database for this hosting move.
+Confirm the new API can read existing records before switching DNS. A new
+API URL alone does not transfer data from an old database.
 
-The packager defaults to the URL in `vercel.json`. If that service now uses
-a different address, add `--api-origin https://CURRENT-SERVICE.up.railway.app`
-to the packaging command. Use the API service backed by the existing data.
+The packager requires `--api-origin` and has no default upstream. Every release
+must explicitly name the new backend; it never falls back to the old URL.
 
 ## Prepare on the VPS
 
@@ -40,7 +40,10 @@ server configuration through that panel instead of creating a competing site.
 git clone --branch codex/vps-frontend-deployment https://github.com/T-R-I-T-E-J/dlt_bus_service.git
 cd dlt_bus_service
 RELEASE_ID=$(git rev-parse --short HEAD)
-node deploy/frontend/prepare.mjs --domain dltservices.tech --alias www.dltservices.tech --out /tmp/dlt-$RELEASE_ID
+read -r -p 'New Railway public API origin (https://...): ' RAILWAY_API_ORIGIN
+curl --max-time 20 -fsS "$RAILWAY_API_ORIGIN/api/healthz"
+curl --max-time 20 -fsS "$RAILWAY_API_ORIGIN/api/ready"
+node deploy/frontend/prepare.mjs --api-origin "$RAILWAY_API_ORIGIN" --domain dltservices.tech --alias www.dltservices.tech --out /tmp/dlt-$RELEASE_ID
 sudo install -d -m 755 /var/www/dlt/releases /var/www/letsencrypt
 sudo cp -a /tmp/dlt-$RELEASE_ID/public /var/www/dlt/releases/$RELEASE_ID
 sudo chown -R root:root /var/www/dlt/releases/$RELEASE_ID
@@ -49,7 +52,7 @@ sudo ln -s /var/www/dlt/releases/$RELEASE_ID /var/www/dlt/current-next
 sudo mv -Tf /var/www/dlt/current-next /var/www/dlt/current
 ```
 
-The output directory must be new; the packager refuses to overwrite an
+Proceed only if both backend checks return `ok: true`. The output directory must be new; the packager refuses to overwrite an
 existing one. Only the six customer pages, public scripts and static assets
 are copied. Backend code, environment files, uploads, tests, prototypes and
 internal audit documents are excluded. Vercel analytics script tags are
@@ -119,9 +122,12 @@ bookings/passes and admin records match the current site. Check that API
 requests go through the DLT domain and retain secure cookies. Do not create
 real payments or refunds merely to smoke-test hosting.
 
-Existing data stays intact because every request reaches the **same running
-Railway service and database**; this package does not copy or recreate data.
-Keep the current Razorpay webhook URL and Railway environment unchanged.
+This package does not copy or recreate data. Existing records remain available
+when the new Railway backend uses the **existing database**. Confirm that
+connection and the existing records before cutover.
+If Razorpay sends webhooks directly to the old Railway hostname, update the
+provider's webhook destination to the new backend's existing webhook route,
+retaining its configured signing secret and event subscriptions.
 If a webhook already uses the DLT domain, its `/api/` path is forwarded to
 Railway with the original request body and signature headers. Verify delivery
 status through the existing provider tooling after cutover.
