@@ -5,7 +5,7 @@
  * migrations are applied, but before opening traffic.
  */
 
-const REQUIRED_MIGRATIONS = 24;
+const REQUIRED_MIGRATIONS = 26;
 
 const failures = [];
 const warnings = [];

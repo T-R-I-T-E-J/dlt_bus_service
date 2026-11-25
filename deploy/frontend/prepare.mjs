@@ -25,8 +25,9 @@ if (preview && options['api-origin'])
 if (!preview && !options['api-origin'])
   throw new Error('--api-origin is required; supply the new Railway backend public HTTPS origin.');
 const api = preview ? null : new URL(options['api-origin']);
-if (api && (api.protocol !== 'https:' || api.username || api.password || api.pathname !== '/' || api.search || api.hash || !validDomain.test(api.hostname)))
-  throw new Error('--api-origin must be an HTTPS origin without credentials, path or query.');
+const localApi = api && api.protocol === 'http:' && api.hostname === '127.0.0.1' && Boolean(api.port);
+if (api && ((!localApi && (api.protocol !== 'https:' || !validDomain.test(api.hostname))) || api.username || api.password || api.pathname !== '/' || api.search || api.hash))
+  throw new Error('--api-origin must be http://127.0.0.1:PORT or a public HTTPS origin, without credentials, path or query.');
 if (!options.out) throw new Error('--out is required; use a new directory for each release.');
 const out = resolve(options.out);
 // mkdir without recursive refuses to overwrite an existing release.
@@ -83,6 +84,12 @@ server {
 }
 `);
 } else {
+const tlsUpstream = localApi ? '' : `        proxy_ssl_server_name on;
+        proxy_ssl_name ${api.hostname};
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 3;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+`;
 const acme = `    location ^~ /.well-known/acme-challenge/ {
         root /var/www/letsencrypt;
         try_files $uri =404;
@@ -96,7 +103,7 @@ ${acme}
     location / { return 503; }
 }
 `);
-await writeFile(join(out, 'nginx-dlt.conf'), `# Frontend on VPS; proxy to the configured Railway backend.
+await writeFile(join(out, 'nginx-dlt.conf'), `# Frontend on VPS; proxy to the configured API backend.
 server {
     listen 80;
     listen [::]:80;
@@ -120,21 +127,16 @@ server {
     add_header Strict-Transport-Security "max-age=31536000" always;
     add_header Cache-Control "no-cache" always;
 
-    # Use the new Railway origin. Preserve /api and query strings.
+    # Preserve /api and query strings. The VPS API uses a loopback-only port.
     location ^~ /api/ {
         proxy_pass ${api.origin};
         proxy_http_version 1.1;
-        proxy_set_header Host ${api.host};
+        proxy_set_header Host ${localApi ? '$host' : api.host};
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header Connection "";
-        proxy_ssl_server_name on;
-        proxy_ssl_name ${api.hostname};
-        proxy_ssl_verify on;
-        proxy_ssl_verify_depth 3;
-        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
-        proxy_connect_timeout 10s;
+${tlsUpstream}        proxy_connect_timeout 10s;
         proxy_read_timeout 60s;
         client_max_body_size 256k;
         # API responses, sessions, payments and webhooks must not be cached.

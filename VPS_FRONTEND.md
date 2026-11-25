@@ -1,5 +1,9 @@
 # Move the Vercel frontend to a personal VPS
 
+> For the current fresh VPS backend/database plan, use
+> [VPS_FRESH.md](VPS_FRESH.md). The preview instructions here remain useful;
+> the Railway connection instructions describe the earlier external-API option.
+
 ## Static preview before connecting the backend
 
 For frontend-first testing, package without an API connection:
