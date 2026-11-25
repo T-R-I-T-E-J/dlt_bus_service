@@ -143,6 +143,7 @@ ${tlsUpstream}        proxy_connect_timeout 10s;
         proxy_cache off;
         proxy_hide_header Cache-Control;
         add_header Cache-Control "no-store" always;
+        add_header X-Robots-Tag "noindex" always;
         add_header X-Content-Type-Options nosniff always;
         add_header X-Frame-Options DENY always;
         add_header Referrer-Policy strict-origin-when-cross-origin always;
