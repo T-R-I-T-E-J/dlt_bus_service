@@ -110,6 +110,23 @@ forwards it to the VPS API. This preserves secure, HttpOnly login cookies and
 requires no cross-origin credentials. No public Railway API URL is involved.
 Keep one API instance: the background jobs currently run in-process.
 
+## Activate the prepared main domain
+
+After preparing `/var/www/dlt/pending-main-release`, pointing the apex/www DNS
+at the VPS, issuing their certificate and enabling the matching Live webhook,
+save the live key pair and webhook secret in `/etc/dlt-vps/runtime.env`. Run:
+
+```sh
+bash deploy/vps/activate-main.sh
+```
+
+The script verifies the live key pair with a read-only Razorpay request, runs
+production preflight, backs up PostgreSQL and recreates only the API. It then
+activates the prepared frontend and checks both hostnames over verified local
+HTTPS. Nginx/frontend activation failures restore their previous configuration;
+API credentials and database records are retained. A successful captured
+payment, webhook and QR pass still require end-to-end verification.
+
 ## First admin, staff and boarding
 
 1. Create an account through the normal Account page and verify the emailed
