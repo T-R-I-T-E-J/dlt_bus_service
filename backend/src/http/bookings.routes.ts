@@ -9,7 +9,7 @@ import * as boarding from '../domain/boarding.ts';
 import { MAX_SEATS_PER_BOOKING } from '../domain/seats.ts';
 import { requireAuth, requirePermission, GUEST_COOKIE } from './auth.routes.ts';
 import { AppError } from '../domain/errors.ts';
-import type { PaymentProvider } from '../domain/payment-provider.ts';
+import type { PaymentProvider, NormalizedEvent } from '../domain/payment-provider.ts';
 import { invalidatePublicTripCache } from '../domain/cache.ts';
 
 export default function bookingRoutes(provider: PaymentProvider) {
@@ -197,13 +197,9 @@ export default function bookingRoutes(provider: PaymentProvider) {
    */
   router.post('/payments/webhook', raw({ type: '*/*' }), async (req, res) => {
     const body = (req.body as Buffer)?.toString('utf8') ?? '';
+    let event: NormalizedEvent;
     try {
-      const event = provider.verifyAndParseWebhook(body, req.headers as Record<string, string>);
-      await pay.recordWebhook(event, true);
-      res.status(200).json({ received: true });
-      void pay.processPendingEvents(provider)
-        .then(() => pay.dispatchPendingRefunds(provider))
-        .catch(e => console.error('[webhook] process', e));
+      event = provider.verifyAndParseWebhook(body, req.headers as Record<string, string>);
     } catch (e) {
       /* A bad signature, or a delivery with no x-razorpay-event-id, is refused
        * and never processed. 200 so a hostile sender learns nothing from the
@@ -211,7 +207,22 @@ export default function bookingRoutes(provider: PaymentProvider) {
        * hours of retries against an endpoint that will keep refusing it. */
       console.warn('[webhook] rejected:', (e as Error).message);
       res.status(200).json({ received: true });
+      return;
     }
+    try {
+      await pay.recordWebhook(event, true);
+    } catch (e) {
+      // A valid event must be durable before we acknowledge it. Let the
+      // provider retry if storage fails, including after an uncertain commit.
+      // The unique provider event ID makes a repeated delivery safe.
+      console.error('[webhook] intake failed:', (e as Error).message);
+      res.status(503).json({ received: false });
+      return;
+    }
+    res.status(200).json({ received: true });
+    void pay.processPendingEvents(provider)
+      .then(() => pay.dispatchPendingRefunds(provider))
+      .catch(e => console.error('[webhook] process', e));
   });
 
   /* ------------------------------------------------------------ admin money */

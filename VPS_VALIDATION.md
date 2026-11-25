@@ -97,16 +97,47 @@ Preview: `https://dlt-187-127-177-22.sslip.io`, deployed revision `3eab74b`.
   The follow-up frontend fix clears cached identity and permissions before
   notifying the screen, stops the camera and polling, and shows sign-in.
   Invalid credentials remain distinct from an expired session. All three
-  new regression tests pass. This fix needs static release activation on VPS.
+  new regression tests pass. Frontend revision `073e3a6` was subsequently
+  activated and its public files were checked for the fix.
+- A fresh Super Admin sign-in opened the operations console. Trips, Vehicles,
+  Bookings, Payments and Audit loaded without browser console errors. Boarding
+  showed its trip selector, camera control, manual validation and manifest.
+  One deliberately invalid code was rejected and recorded as INVALID; no
+  passenger was boarded. There are no boarding-staff accounts/assignments yet.
 
 These short read bursts do not establish sustained capacity or 200 concurrent
 payments. The high-contention booking/login/scan results above used local
-fixtures, not the live database. Authenticated admin and boarding verification
-is waiting for a browser sign-in; it is not recorded as passed.
+fixtures, not the live database. Valid-pass scanning with an assigned staff
+account remains unverified on the VPS.
+
+## Payment follow-up
+
+- The live payment-create and checkout-handback endpoints returned 401 for
+  anonymous requests. Unsigned webhook requests retain the existing HTTP 200
+  acknowledgement; that response alone does not establish that an event was
+  accepted. Local integration tests assert that bad signatures write no event.
+- Razorpay's existing dashboard was checked in Test Mode. The correct VPS
+  webhook URL is enabled, with 57 event subscriptions. There were no delivery
+  logs in the selected past-three-hours range and no live DLT payment records.
+- Found and fixed a reliability defect: storage errors for valid webhooks
+  were caught with signature errors and acknowledged as success. A valid
+  event that cannot be saved now returns 503, allowing provider retries.
+  Invalid signatures retain their existing refusal path.
+- The new regression injects a PostgreSQL insert failure, verifies HTTP 503
+  and no event row, removes the failure, then delivers the same signed event
+  twice. Both retries return 200 and exactly one event exists. This test runs
+  only in the disposable local database. API image rebuild/activation is
+  required to deploy this fix; no schema migration is needed.
+- After this fix, typecheck and all 392 backend tests passed against a
+  disposable PostgreSQL database. All 25 frontend tests also passed.
+- Successful/failed payment settlement, tampered signatures, duplicate events,
+  late settlement, partial allocation and refund behavior are covered by the
+  local provider-simulated suite. A real Razorpay test checkout and webhook
+  delivery have not yet been verified against this VPS.
 
 ## Remaining server checks
 
-Activate the frontend session fix, then verify authenticated boarding and
+Deploy the webhook storage fix, then verify assigned staff boarding and
 real phone camera behavior. Verify Razorpay test-mode checkout, webhook
 delivery and refund behavior, scheduled off-server backups and a disposable
 transactional load run on the VPS. Resend's temporary onboarding sender is

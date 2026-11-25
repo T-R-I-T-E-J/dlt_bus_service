@@ -206,6 +206,42 @@ describe('HTTP integration — real Express, real middleware, real fetch', () =>
   });
 
   describe('payments webhook: raw bytes survive real Express routing', () => {
+    test('valid delivery retries after a storage failure and replay records one event', async () => {
+      const eventId = 'evt-http-storage-retry';
+      const payload = JSON.stringify({ event: 'payment.captured', payload: {
+        payment: { entity: { id: 'pay_STORAGE_RETRY', order_id: 'order_STORAGE_RETRY', status: 'captured', amount: 32000 } },
+      } });
+      const signature = createHmac('sha256', WEBHOOK_SECRET).update(payload, 'utf8').digest('hex');
+      const deliver = () => fetch(BASE + '/api/payments/webhook', {
+        method: 'POST', body: payload,
+        headers: { 'content-type': 'application/json', 'x-razorpay-signature': signature, 'x-razorpay-event-id': eventId },
+      });
+      await q(`CREATE FUNCTION test_fail_webhook_intake() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.provider_event_id = 'evt-http-storage-retry' THEN
+            RAISE EXCEPTION 'simulated webhook storage outage';
+          END IF;
+          RETURN NEW;
+        END $$`);
+      try {
+        await q(`CREATE TRIGGER test_webhook_storage_failure BEFORE INSERT ON provider_events
+          FOR EACH ROW EXECUTE FUNCTION test_fail_webhook_intake()`);
+        const failed = await deliver();
+        assert.equal(failed.status, 503, 'a valid event that was not saved must remain retryable');
+        assert.deepEqual(await failed.json(), { received: false });
+        assert.equal((await q('SELECT 1 FROM provider_events WHERE provider_event_id=$1', [eventId])).rowCount, 0);
+      } finally {
+        await q('DROP TRIGGER IF EXISTS test_webhook_storage_failure ON provider_events');
+        await q('DROP FUNCTION test_fail_webhook_intake()');
+      }
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const retry = await deliver();
+        assert.equal(retry.status, 200);
+        await retry.json();
+      }
+      assert.equal((await q('SELECT 1 FROM provider_events WHERE provider_event_id=$1', [eventId])).rowCount, 1);
+    });
+
     test('a genuinely signed webhook is accepted and recorded exactly once', async () => {
       const payload = JSON.stringify({
         event: 'payment.captured',
