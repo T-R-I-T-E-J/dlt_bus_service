@@ -137,6 +137,16 @@ account remains unverified on the VPS.
 
 ## Remaining server checks
 
+The first main-domain activation verified the live Razorpay key pair and
+production database readiness, wrote a backup and recreated a healthy API.
+Its immediate post-reload HTTPS check received 503 and restored the prior
+frontend/Nginx setup. The preview API was checked afterward and remained
+healthy. Activation checks now retry transient HTTP failures during worker
+handover. A local HTTP regression returned 503 twice then 200: the original
+check failed immediately, while the updated check succeeded on request three.
+A persistent 503 still failed after eleven attempts. Actual activation must
+be rerun; successful payment/webhook delivery remains unverified.
+
 Deploy the webhook storage fix, then verify assigned staff boarding and
 real phone camera behavior. Verify Razorpay test-mode checkout, webhook
 delivery and refund behavior, scheduled off-server backups and a disposable

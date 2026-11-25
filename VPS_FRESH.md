@@ -126,6 +126,8 @@ activates the prepared frontend and checks both hostnames over verified local
 HTTPS. Nginx/frontend activation failures restore their previous configuration;
 API credentials and database records are retained. A successful captured
 payment, webhook and QR pass still require end-to-end verification.
+The readiness check retries transient responses during Nginx worker handover;
+persistent failure still triggers rollback and prints readiness diagnostics.
 
 ## First admin, staff and boarding
 

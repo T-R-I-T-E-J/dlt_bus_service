@@ -54,6 +54,10 @@ restore_on_failure() {
   local result=$?
   trap - EXIT
   if (( result != 0 && TASK_FRONTEND_CHANGED == 1 )); then
+    echo 'Readiness diagnostics before rollback (no credentials):' >&2
+    curl --noproxy '*' --max-time 5 -sS http://127.0.0.1:3100/api/ready >&2 || true
+    printf '\n' >&2
+    curl --noproxy '*' --max-time 5 -sS -i --resolve 'dltservices.tech:443:127.0.0.1' https://dltservices.tech/api/ready >&2 || true
     echo 'Activation failed; restoring the previous frontend and Nginx configuration.' >&2
     cp -p "$TASK_CONFIG_BACKUP" /etc/nginx/sites-available/dlt-main || true
     ln -s "$TASK_OLD_TARGET" "$TASK_LINK.rollback" && mv -Tf "$TASK_LINK.rollback" /var/www/dlt/current || true
@@ -69,10 +73,14 @@ nginx -t
 ln -s "$TASK_RELEASE_DIR/public" "$TASK_LINK"
 mv -Tf "$TASK_LINK" /var/www/dlt/current
 systemctl reload nginx
+# systemctl returns after signalling Nginx; old setup workers can briefly
+# answer 503 while the new configuration takes over. Retry transient failures,
+# but retain rollback if the new site never becomes ready.
+TASK_CURL=(curl --noproxy '*' --max-time 20 --retry 10 --retry-delay 1 --retry-max-time 30 --retry-connrefused -fsS)
 for TASK_DOMAIN in dltservices.tech www.dltservices.tech; do
-  curl --max-time 20 -fsS --resolve "$TASK_DOMAIN:443:127.0.0.1" "https://$TASK_DOMAIN/api/ready"
+  "${TASK_CURL[@]}" --resolve "$TASK_DOMAIN:443:127.0.0.1" "https://$TASK_DOMAIN/api/ready"
   printf '\n'
-  curl --max-time 20 -fsS -o /dev/null --resolve "$TASK_DOMAIN:443:127.0.0.1" "https://$TASK_DOMAIN/booking"
+  "${TASK_CURL[@]}" -o /dev/null --resolve "$TASK_DOMAIN:443:127.0.0.1" "https://$TASK_DOMAIN/booking"
 done
 printf '%s\n' "$TASK_RELEASE" > /var/www/dlt/active-main-release
 TASK_FRONTEND_CHANGED=0
