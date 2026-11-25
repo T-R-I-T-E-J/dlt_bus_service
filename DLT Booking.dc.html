@@ -173,7 +173,7 @@
   <section aria-labelledby="trips-h">
     <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Woxsen ⇄ Miyapur</div>
     <h1 id="trips-h" style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1.04;letter-spacing:-.02em">Choose your departure</h1>
-    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹299 per seat, up to five passengers on one booking. Seats are held for 10 minutes once you pick them.</p>
+    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹320 per seat, up to five passengers on one booking. Seats are held for 10 minutes once you pick them.</p>
 
     <sc-if value="{{ noTrips }}" hint-placeholder-val="{{ false }}">
       <div style="margin:28px 0 0;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(22px,4vw,38px)">
@@ -1011,6 +1011,8 @@ class Component extends DCLogic {  state = {
   }
 
   doAuth = async () => {
+    if (this._authInFlight) return;
+    this._authInFlight = true;
     const st = this.state;
     this.setState({ busy: true, error: null });
     try {
@@ -1022,11 +1024,15 @@ class Component extends DCLogic {  state = {
         await DLT.auth.signIn(st.authEmail, st.authPassword);
       }
       const me = DLT.auth.current();
+      if (me && me.role !== 'STUDENT') { location.href = './DLT Admin.dc.html'; return; }
       this.setState({ busy: false, authPassword: '', contact: this.state.contact || (me ? me.phone : '') });
     } catch (e) { this.fail(e); }
+    finally { this._authInFlight = false; }
   };
 
   startPayment = async () => {
+    if (this._paymentInFlight) return;
+    this._paymentInFlight = true;
     const st = this.state;
     this.setState({ busy: true, error: null });
     try {
@@ -1095,6 +1101,7 @@ class Component extends DCLogic {  state = {
     } catch (e) {
       this.fail(e);
     }
+    finally { this._paymentInFlight = false; }
   };
   acceptReprice = async () => {
     try {

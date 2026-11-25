@@ -1241,7 +1241,7 @@ class Component extends DCLogic {
     boardTripId: null, manualToken: '', manifestQuery: '', scan: null, choose: null,
     cameraOn: false, cameraSupported: false, cameraError: null, engine: null,
     payFilter: 'All', wlTripId: null, auditQuery: '',
-    newTripOpen: false, ntDate: '', ntTime: '17:30', ntRoute: '', ntVehicle: '', ntPrice: 299,
+    newTripOpen: false, ntDate: '', ntTime: '17:30', ntRoute: '', ntVehicle: '', ntPrice: 320,
     validation: null, validationTripId: null,
     cancelTripId: null, cancelReason: '', template: null,
     repTripId: '', repFrom: '', repTo: '', preview: null,
@@ -1390,7 +1390,8 @@ class Component extends DCLogic {
   }
 
   _go = (section) => {
-    this.setState({ section, toast: null });
+    if (section !== 'Boarding') this._stopCamera();
+    this.setState({ section, toast: null, cameraOn: section === 'Boarding' && this.state.cameraOn });
     this._loadSection(section);
   };
 
@@ -1410,7 +1411,8 @@ class Component extends DCLogic {
   async _loadBoarding(opts = {}) {
     const me = DLT.auth.current();
     let scannerTrip = this.state.data.scannerTrip;
-    if (me.role === 'BOARDING_STAFF' && !scannerTrip) {
+    if (!me) return;
+    if (me.role === 'BOARDING_STAFF') {
       scannerTrip = await DLT.boarding.context();
       this._patch({ scannerTrip });
     }
@@ -1513,69 +1515,103 @@ class Component extends DCLogic {
   };
 
   /* ---- camera scanning. Two decoders, one validation chain ---- */
-  _decoder() {
-    if (typeof window.BarcodeDetector === 'function') return 'native';
-    if (typeof window.jsQR === 'function') return 'jsqr';
-    return null;
+  async _decoder() {
+    if (typeof window.BarcodeDetector === 'function') {
+      try {
+        const formats = typeof window.BarcodeDetector.getSupportedFormats === 'function'
+          ? await window.BarcodeDetector.getSupportedFormats() : ['qr_code'];
+        if (formats.includes('qr_code'))
+          return { engine: 'native', detector: new window.BarcodeDetector({ formats: ['qr_code'] }) };
+      } catch (e) { /* jsQR is the fallback when QR detection is unsupported. */ }
+    }
+    return typeof window.jsQR === 'function' ? { engine: 'jsqr', detector: null } : null;
+  }
+  _attachVideo(el) {
+    if (!el || !this._stream) return;
+    el.muted = true;
+    el.playsInline = true;
+    if (el.srcObject !== this._stream) el.srcObject = this._stream;
+    Promise.resolve(el.play()).catch(() => {
+      this.setState({ cameraError: 'Camera playback could not start. Stop and restart the camera, or enter the boarding code.' });
+    });
   }
   async _startCamera() {
-    const engine = this._decoder();
-    if (!engine) {
-      this.setState({ cameraOn: false,
-        cameraError: 'No QR decoder is available in this browser. Enter the boarding code below instead.' });
-      return;
-    }
-    let stream;
+    if (this._cameraStarting || this._stream) return;
+    this._cameraStarting = true;
+    const run = this._cameraRun = (this._cameraRun || 0) + 1;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const decoder = await this._decoder();
+      if (!decoder) {
+        this.setState({ cameraOn: false,
+          cameraError: 'No QR decoder is available in this browser. Enter the boarding code below instead.' });
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        this.setState({ cameraOn: false,
+          cameraError: 'Camera scanning requires HTTPS and a supported browser. You can still enter the boarding code.' });
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false,
+      });
+      if (run !== this._cameraRun) { stream.getTracks().forEach(t => t.stop()); return; }
+      this._stream = stream;
+      this.setState({ cameraOn: true, cameraError: null, engine: decoder.engine }, () => this._attachVideo(this._video));
+      let detector = decoder.detector;
+      const canvas = document.createElement('canvas');
+      let frameInFlight = false;
+      this._scanLoop = setInterval(async () => {
+        const v = this._video;
+        if (frameInFlight || this._scanInFlight || this.state.choose || run !== this._cameraRun || !v || v.readyState < 2 || !v.videoWidth) return;
+        frameInFlight = true;
+        try {
+          let value = null;
+          if (detector) {
+            try {
+              const codes = await detector.detect(v);
+              value = codes && codes.length ? codes[0].rawValue : null;
+            } catch (e) {
+              if (typeof window.jsQR !== 'function') throw e;
+              detector = null;
+              this.setState({ engine: 'jsqr' });
+            }
+          }
+          if (!detector) {
+            // Preserve small QR detail, including downloaded passes on phones.
+            const w = Math.min(960, v.videoWidth), h = Math.round(v.videoHeight * w / v.videoWidth);
+            canvas.width = w; canvas.height = h;
+            const g = canvas.getContext('2d', { willReadFrequently: true });
+            g.drawImage(v, 0, 0, w, h);
+            const img = g.getImageData(0, 0, w, h);
+            const found = window.jsQR(img.data, w, h, { inversionAttempts: 'attemptBoth' });
+            value = found ? found.data : null;
+          }
+          if (run !== this._cameraRun) return;
+          if (!value) { this._lastCode = null; return; }
+          if (value !== this._lastCode) {
+            this._lastCode = value;
+            await this._doScan(value);
+          }
+        } catch (e) {
+          this.setState({ cameraError: 'This camera frame could not be decoded. Reposition the ticket or enter the boarding code.' });
+        } finally { frameInFlight = false; }
+      }, 300);
     } catch (e) {
       const name = e && e.name;
       const msg = name === 'NotAllowedError' || name === 'SecurityError'
         ? 'Camera permission was refused. Allow the camera in the browser, or enter the boarding code below.'
         : name === 'NotFoundError' || name === 'OverconstrainedError'
           ? 'No camera on this device. Enter the boarding code below.'
-          : 'The camera could not be started (' + (name || e.message || e) + '). Enter the boarding code below.';
+          : 'The camera could not be started. Enter the boarding code below.';
       this.setState({ cameraOn: false, cameraError: msg });
-      return;
-    }
-    this._stream = stream;
-    this.setState({ cameraOn: true, cameraError: null, engine });
-    setTimeout(() => {
-      if (this._video) { this._video.srcObject = stream; this._video.play(); }
-    }, 60);
-    const detector = engine === 'native' ? new window.BarcodeDetector({ formats: ['qr_code'] }) : null;
-    const canvas = document.createElement('canvas');
-    this._scanLoop = setInterval(async () => {
-      const v = this._video;
-      if (!v || v.readyState < 2 || !v.videoWidth) return;
-      let value = null;
-      try {
-        if (detector) {
-          const codes = await detector.detect(v);
-          value = codes && codes.length ? codes[0].rawValue : null;
-        } else {
-          /* sample the frame down before decoding: a 640-wide frame decodes in a
-             few milliseconds and keeps the door queue moving */
-          const w = 480, h = Math.round(v.videoHeight * (480 / v.videoWidth));
-          canvas.width = w; canvas.height = h;
-          const g = canvas.getContext('2d', { willReadFrequently: true });
-          g.drawImage(v, 0, 0, w, h);
-          const img = g.getImageData(0, 0, w, h);
-          const found = window.jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
-          value = found ? found.data : null;
-        }
-      } catch (e) { return; }
-      if (value && value !== this._lastCode) {
-        this._lastCode = value;
-        this._doScan(value);
-        setTimeout(() => { this._lastCode = null; }, 2500);
-      }
-    }, engine === 'native' ? 400 : 250);
+    } finally { this._cameraStarting = false; }
   }
   _stopCamera() {
+    this._cameraRun = (this._cameraRun || 0) + 1;
     clearInterval(this._scanLoop);
     if (this._stream) this._stream.getTracks().forEach(t => t.stop());
     this._stream = null;
+    this._lastCode = null;
   }
 
   /* §Boarding 5 — staff are scoped server-side to their assigned trip
@@ -1583,8 +1619,10 @@ class Component extends DCLogic {
      This is only for the console's own display and for ops/super, who may
      scope a desk scan explicitly. */
   async _doScan(code, passengerId) {
+    if (this._scanInFlight) return;
+    this._scanInFlight = true;
     const me = DLT.auth.current();
-    const tripId = this._tripIdFor(me, this.state);
+    const tripId = me ? this._tripIdFor(me, this.state) : null;
     try {
       const res = await DLT.boarding.scan({ code, tripId, passengerId });
       if (res.result === 'CHOOSE') {
@@ -1593,7 +1631,8 @@ class Component extends DCLogic {
       }
       this.setState({ scan: res, choose: null, manualToken: '' });
       await this._loadBoarding();
-    } catch (e) { this.bad(e); }
+    } catch (e) { this._lastCode = null; this.bad(e); }
+    finally { this._scanInFlight = false; }
   }
 
   renderVals() {
@@ -2404,7 +2443,7 @@ class Component extends DCLogic {
       boardTripId: tripId || '',
       boardTripOptions: allTrips.filter(t => ['OPEN', 'BOOKING_CLOSED', 'BOARDING', 'DEPARTED'].indexOf(t.status) >= 0)
         .map(t => ({ id: t.id, label: DLT.fmt.when(t.departureAt) + ' · ' + t.status.replace('_', ' ') })),
-      onBoardTrip: e => { this.setState({ boardTripId: e.target.value, scan: null }); this._loadBoarding(); },
+      onBoardTrip: e => this.setState({ boardTripId: e.target.value, scan: null }, () => this._loadBoarding()),
       boardedCount, manifestCount: manifest.length,
       pendingCount: manifest.filter(x => x.boardingStatus === 'NOT_BOARDED').length,
       scanResult: scan ? scan.result : 'Ready to scan',
@@ -2432,7 +2471,7 @@ class Component extends DCLogic {
         if (st.cameraOn) { this._stopCamera(); this.setState({ cameraOn: false }); }
         else this._startCamera();
       },
-      videoRef: el => { this._video = el; if (el && this._stream) { el.srcObject = this._stream; el.play(); } },
+      videoRef: el => { this._video = el; this._attachVideo(el); },
       manualToken: st.manualToken,
       onManualToken: e => this.setState({ manualToken: e.target.value }),
       scanManual: () => {

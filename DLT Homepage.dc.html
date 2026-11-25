@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DLT Services | Woxsen to Miyapur Student Bus Booking</title>
-<meta name="description" content="DLT Services is the student-run Woxsen University to Miyapur Metro shuttle booking site. Check trips, book seats for Rs 299, pay online, and get QR boarding passes.">
+<meta name="description" content="DLT Services is the student-run Woxsen University to Miyapur Metro shuttle booking site. Check trips, book seats for Rs 320, pay online, and get QR boarding passes.">
 <link rel="canonical" href="https://www.dltservices.tech/">
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="DLT Services">
 <meta property="og:title" content="DLT Services | Woxsen to Miyapur Student Bus Booking">
-<meta property="og:description" content="Student-run Woxsen University to Miyapur Metro shuttle booking with Rs 299 seats, online payment, and QR boarding.">
+<meta property="og:description" content="Student-run Woxsen University to Miyapur Metro shuttle booking with Rs 320 seats, online payment, and QR boarding.">
 <meta property="og:url" content="https://www.dltservices.tech/">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="DLT Services | Woxsen to Miyapur Student Bus Booking">
@@ -50,7 +50,7 @@
       ],
       "offers": {
         "@type": "Offer",
-        "price": "299",
+        "price": "320",
         "priceCurrency": "INR",
         "availability": "https://schema.org/LimitedAvailability",
         "url": "https://www.dltservices.tech/booking"
@@ -79,10 +79,10 @@
         },
         {
           "@type": "Question",
-          "name": "What is the DLT Services launch fare?",
+          "name": "What is the DLT Services current fare?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "The launch fare is Rs 299 per seat, with online payment and QR boarding passes."
+            "text": "The current fare is Rs 320 per seat, with online payment and QR boarding passes."
           }
         }
       ]
@@ -159,14 +159,14 @@
 <helmet>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DLT Services | Woxsen to Miyapur Student Bus Booking</title>
-<meta name="description" content="DLT Services is the student-run Woxsen University to Miyapur Metro shuttle booking site. Check trips, book seats for Rs 299, pay online, and get QR boarding passes.">
+<meta name="description" content="DLT Services is the student-run Woxsen University to Miyapur Metro shuttle booking site. Check trips, book seats for Rs 320, pay online, and get QR boarding passes.">
 <link rel="canonical" href="https://www.dltservices.tech/">
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="DLT Services">
 <meta property="og:title" content="DLT Services | Woxsen to Miyapur Student Bus Booking">
-<meta property="og:description" content="Student-run Woxsen University to Miyapur Metro shuttle booking with Rs 299 seats, online payment, and QR boarding.">
+<meta property="og:description" content="Student-run Woxsen University to Miyapur Metro shuttle booking with Rs 320 seats, online payment, and QR boarding.">
 <meta property="og:url" content="https://www.dltservices.tech/">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="DLT Services | Woxsen to Miyapur Student Bus Booking">
@@ -611,7 +611,7 @@
       <h2 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(22px,2.4vw,30px);line-height:1.06;letter-spacing:-.018em">Getting to the city shouldn't be the hardest part of the week</h2>
     </div>
     <div style="display:flex;flex-direction:column;gap:14px;max-width:62ch">
-      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">DLT gives Woxsen students a predictable way to reach Miyapur: published departures, a named pickup point, a numbered seat and a fixed launch fare of ₹{{ fare }}.</p>
+      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">DLT gives Woxsen students a predictable way to reach Miyapur: published departures, a named pickup point, a numbered seat and a fixed current fare of ₹{{ fare }}.</p>
       <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">We are starting with Woxsen to Miyapur and adding Miyapur to Woxsen when the schedule is ready. The booking system already supports both directions, so each new trip works the same way.</p>
     </div>
   </div>
@@ -704,7 +704,7 @@ const FAQ = [
     ['How long are seats held?', 'Ten minutes from the first seat you pick. The clock is shown in the summary and the seats reopen when it runs out.'],
   ]],
   ['Payment & refunds', [
-    ['What is the fare?', 'The launch fare is ₹299 per seat. No booking fee, coupon or tax line is added in this release.'],
+    ['What is the fare?', 'The current fare is ₹320 per seat. No booking fee, coupon or tax line is added in this release.'],
     ['Can I cancel after paying?', 'Cancel more than 24 hours before departure for a full refund. Inside 24 hours the fare is non-refundable.'],
     ['My payment went through but I saw an error.', 'Do not pay again. We verify every payment on our server and finish or review the booking from that result.'],
   ]],
@@ -932,10 +932,10 @@ class Component extends DCLogic {
 
     /* the next three open departures, live — pure read of state.data, filled
        only by _load(). No request and no fare arithmetic here: when no trips
-       are active, the page shows the launch fare and policy timing instead
+       are active, the page shows the current fare and policy timing instead
        of empty placeholders. */
     const trips = st.data.trips;
-    const fare = trips.length ? String(trips[0].price) : '299';
+    const fare = trips.length ? String(trips[0].price) : '320';
     const first = trips[0] || null;
     const noActiveTrips = st.data.tripsLoaded && trips.length === 0;
 

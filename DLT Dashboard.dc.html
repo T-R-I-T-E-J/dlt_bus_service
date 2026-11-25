@@ -285,7 +285,7 @@
 
       <div data-m="noprint" style="margin:20px 0 0;display:flex;gap:9px">
         <button type="button" onClick="{{ printPass }}" style="flex:1;background:#0E1014;color:#F7F5F0;border:0;padding:13px 14px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Print / PDF</button>
-        <button type="button" onClick="{{ savePng }}" style="flex:1;border:1px solid rgba(14,16,20,.2);background:none;padding:12px 14px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Save pass image</button>
+        <button type="button" onClick="{{ savePng }}" style="flex:1;border:1px solid rgba(14,16,20,.2);background:none;padding:12px 14px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Download ticket (PNG)</button>
       </div>
       <p data-m="noprint" style="margin:12px 0 0;font-size:11.5px;line-height:1.5;color:#5F6560">{{ passNote }}</p>
     </div>
@@ -486,10 +486,13 @@ class Component extends DCLogic {
 
   /* ------------------------------------------------------------ actions */
 
-  savePng = () => {
+  savePng = async () => {
+    if (this._ticketDownloadInFlight) return;
+    this._ticketDownloadInFlight = true;
+    try {
     const passes = this._passes();
     const p = passes[Math.min(this.state.paxIndex, passes.length - 1)];
-    if (!p) return;
+    if (!p || !p.qrToken || !window.DLTQR) throw new Error('Your ticket is still loading. Try downloading it again in a moment.');
     /* a real pass image: the whole pass drawn to canvas, not just the QR */
     const W = 760, H = 1120, cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
@@ -523,7 +526,8 @@ class Component extends DCLogic {
 
     const qrCanvas = document.createElement('canvas');
     qrCanvas.width = 360; qrCanvas.height = 360;
-    DLTQR.draw(qrCanvas, p.qrToken, { dark: p.passStatus === 'VALID' ? '#0E1014' : '#9DA298' });
+    const qr = DLTQR.draw(qrCanvas, p.qrToken, { dark: p.passStatus === 'VALID' ? '#0E1014' : '#9DA298' });
+    if (!qr) throw new Error('The ticket QR could not be generated. Try downloading it again.');
     g.drawImage(qrCanvas, (W - 360) / 2, 316);
     g.textAlign = 'center';
     label('SCAN AT THE DOOR · ONE SCAN PER PASSENGER', W / 2, 706);
@@ -544,13 +548,19 @@ class Component extends DCLogic {
       label(k, x, y); value(v, x, y + 30, 19);
     });
     g.fillStyle = '#5F6560'; g.font = '500 12px "Martian Mono", monospace';
-    g.fillText('TOKEN ' + p.qrToken.toUpperCase(), 44, H - 34);
+    g.fillText('TOKEN ' + p.qrToken, 44, H - 34);
 
+    const blob = await new Promise((resolve, reject) => cv.toBlob(
+      value => value ? resolve(value) : reject(new Error('The ticket image could not be saved.')), 'image/png'));
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = cv.toDataURL('image/png');
-    a.download = 'dlt-pass-' + p.bookingCode + '-' + p.seatNumber + '.png';
-    a.click();
-    this.setState({ notice: 'Saved ' + a.download + ' — the full pass, QR included.' });
+    a.href = url;
+    a.download = 'dlt-ticket-' + p.bookingCode + '-' + p.seatNumber + '.png';
+    document.body.appendChild(a);
+    try { a.click(); } finally { a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); }
+    this.setState({ notice: 'Ticket download started. Save the PNG in Files or Photos and show its QR at boarding without opening DLT.' });
+    } catch (e) { this.fail(e); }
+    finally { this._ticketDownloadInFlight = false; }
   };
 
   /* Whole-booking cancellation: the only shape the server supports. Partial
@@ -879,7 +889,7 @@ class Component extends DCLogic {
       ] : [],
       passNote: p && p.passStatus !== 'VALID'
         ? 'Cancelled passes stay visible for your records but fail at the scanner.'
-        : 'One scan per passenger. A second scan reads ALREADY BOARDED at the door.',
+        : 'Download this ticket to Files or Photos before travelling. Show its QR offline at the door. One scan per passenger; cancelled passes remain invalid.',
       qrRef: el => { this._cv = el; if (el) this._paint(); },
       printPass: () => print(),
       savePng: this.savePng,

@@ -157,6 +157,17 @@
       </label>
     </div>
 
+    <sc-if value="{{ showVerify }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top:20px;padding:16px;border:1px solid rgba(14,75,52,.25);background:#EEF3EE">
+        <label style="display:block;font-size:13px;font-weight:600">Verification code from your email
+          <input type="text" value="{{ verificationCode }}" onChange="{{ onVerificationCode }}" autocomplete="one-time-code" style="display:block;margin-top:8px;padding:12px;border:1px solid rgba(14,16,20,.2);background:#FFFFFF;max-width:100%;box-sizing:border-box" />
+        </label>
+        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+          <button type="button" onClick="{{ verifyEmail }}" disabled="{{ verificationBusy }}" style="padding:12px 16px;border:0;background:#0E1014;color:#F7F5F0;min-height:44px;cursor:pointer">Verify email</button>
+          <button type="button" onClick="{{ resendVerification }}" disabled="{{ verificationBusy }}" style="padding:12px 16px;border:1px solid rgba(14,16,20,.2);background:#FFFFFF;min-height:44px;cursor:pointer">Send a new code</button>
+        </div>
+      </div>
+    </sc-if>
     <div style="margin:22px 0 0;padding-top:18px;border-top:1px solid rgba(14,16,20,.12)">
       <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Emergency contact</div>
       <p style="margin:8px 0 0;max-width:56ch;font-size:12.5px;line-height:1.6;color:#4A4F49">Held for emergencies only. Boarding staff never see it, and any admin who views it must give a reason that is written to the audit log.</p>
@@ -238,6 +249,7 @@ class Component extends DCLogic {
     name: '', email: '', phone: '', studentId: '', password: '', resetToken: '',
     fName: '', fPhone: '', fStudentId: '', ecName: '', ecPhone: '', ecRelation: '',
     delReason: '',
+    verificationCode: '', verificationBusy: false,
     /* server state, filled only by _load() */
     data: { bookings: [], pendingRequests: [] },
   };
@@ -255,7 +267,10 @@ class Component extends DCLogic {
     } catch (e) {
       if (e.isOffline) this.setState({ offline: true });
     }
-    this.setState({ ready: true }, () => this._load());
+    this.setState({ ready: true }, () => {
+      if (DLT.auth.current()) this._afterSignIn(() => this._load());
+      else this._load();
+    });
   }
 
   fail(e) {
@@ -289,6 +304,8 @@ class Component extends DCLogic {
   }
 
   submit = async () => {
+    if (this._submitInFlight) return;
+    this._submitInFlight = true;
     const st = this.state;
     this.setState({ busy: true, error: null, message: null });
     try {
@@ -314,6 +331,7 @@ class Component extends DCLogic {
         this._afterSignIn(() => this._load());
       }
     } catch (e) { this.setState({ busy: false, error: e.message || String(e) }); }
+    finally { this._submitInFlight = false; }
   };
 
   _afterSignIn(then) {
@@ -324,6 +342,26 @@ class Component extends DCLogic {
     if (next === 'trips') { location.href = './DLT Dashboard.dc.html'; return; }
     if (then) then();
   }
+
+  verifyEmail = async () => {
+    if (this._verificationInFlight) return;
+    this._verificationInFlight = true;
+    this.setState({ verificationBusy: true, error: null, message: null });
+    try {
+      await DLT.auth.verifyEmail(this.state.verificationCode.trim());
+      this.setState({ verificationCode: '', message: 'Email verified.' });
+      await this._load();
+    } catch (e) { this.fail(e); }
+    finally { this._verificationInFlight = false; this.setState({ verificationBusy: false }); }
+  };
+  resendVerification = async () => {
+    if (this._verificationInFlight) return;
+    this._verificationInFlight = true;
+    this.setState({ verificationBusy: true, error: null, message: null });
+    try { await DLT.auth.resendVerification(); this.setState({ message: 'A new verification code has been sent to your email.' }); }
+    catch (e) { this.fail(e); }
+    finally { this._verificationInFlight = false; this.setState({ verificationBusy: false }); }
+  };
 
   saveProfile = async () => {
     const st = this.state;
@@ -427,6 +465,12 @@ class Component extends DCLogic {
 
       /* signed-in profile */
       roleLabel: me ? DLT.roleLabel(me.role) : '',
+      showVerify: !!me && !me.emailVerified,
+      verificationCode: st.verificationCode,
+      onVerificationCode: e => this.setState({ verificationCode: e.target.value }),
+      verificationBusy: st.verificationBusy,
+      verifyEmail: this.verifyEmail,
+      resendVerification: this.resendVerification,
       joined: me ? DLT.fmt.date(me.createdAt) : '',
       name: me ? me.name : st.name,
       email: me ? me.email : st.email,
