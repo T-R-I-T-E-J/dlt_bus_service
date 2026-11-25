@@ -8,6 +8,7 @@
 # these files ARE committed, they simply must not be published.
 
 backend/
+deploy/
 test/
 uploads/
 .claude/
