@@ -1262,6 +1262,11 @@ class Component extends DCLogic {
   };
 
   async componentDidMount() {
+    DLT.setUnauthenticatedHandler(() => {
+      this._stopLiveRefresh();
+      this._stopCamera();
+      this.setState({ ready: true, cameraOn: false, toast: 'Your session ended. Sign in again.', toastKind: 'bad' });
+    });
     try { await DLT.boot(); } catch (e) { /* offline: renders signed-out */ }
     const d = new Date(); d.setDate(d.getDate() + 7);
     const supported = typeof window.BarcodeDetector === 'function' || typeof window.jsQR === 'function';
@@ -1277,9 +1282,10 @@ class Component extends DCLogic {
       await this._loadCore();
       await this._loadSection(section);
     }
-    this._startLiveRefresh();
+    if (DLT.auth.current()) this._startLiveRefresh();
   }
   componentWillUnmount() {
+    DLT.setUnauthenticatedHandler(null);
     this._stopLiveRefresh();
     this._stopCamera();
     clearTimeout(this._searchDebounce);

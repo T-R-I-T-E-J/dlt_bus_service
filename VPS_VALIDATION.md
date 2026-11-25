@@ -1,7 +1,7 @@
-# DLT VPS preparation: validation
+# DLT VPS validation
 
-Verified locally on 25 November 2026. These are preparation results, not a
-claim that the user's VPS has been deployed or capacity-tested.
+Verified locally and on the HTTPS VPS preview on 25 November 2026. Local
+fixture results and live VPS measurements are distinguished below.
 
 ## Boarding and login
 
@@ -66,12 +66,51 @@ external-provider latency or behavior while sharing resources with another app.
 - The generated Nginx HTTPS config successfully proxied readiness to the
   production-mode API container through loopback.
 - Typecheck and all 391 existing backend tests passed after dependency
-  updates. All 22 frontend tests passed. The dependency audit reported zero
+  updates. All 25 frontend tests passed, including the subsequent session
+  expiry regressions. The dependency audit reported zero
   vulnerabilities; this is not an exhaustive security assessment.
+
+## Live VPS preview checks
+
+Preview: `https://dlt-187-127-177-22.sslip.io`, deployed revision `3eab74b`.
+
+- TLS and API readiness passed: PostgreSQL 17, all 26 migrations and
+  append-only audit permissions. Public trip fare is ₹320 with 44 seats;
+  the operator confirmed the physical bus has 44 passenger seats.
+- Booking, Account, My Trips, Admin and the coach asset returned HTTP 200.
+  Anonymous admin/boarding API access returned 401. Backend environment,
+  Git metadata, deployment configuration and deployment documentation paths
+  returned 404.
+- Short read bursts mixed the public trip list and seat-map endpoints:
+
+| Live scenario | Result | VPS p95 |
+|---|---|---:|
+| 100 simultaneous read requests | 100 HTTP 200 | 433 ms |
+| 200 simultaneous read requests | 200 HTTP 200 | 489 ms |
+
+- Two isolated guest clients simultaneously requested available seat 11D.
+  One received HTTP 200 and the other HTTP 409 CONFLICT. The winning client's
+  test hold was released, and the seat was verified AVAILABLE afterward.
+  No bookings, payments, refunds or existing account data were changed.
+- The admin browser retained its old Super Admin label after a protected
+  call returned UNAUTHENTICATED. Reloading showed the session was absent.
+  The follow-up frontend fix clears cached identity and permissions before
+  notifying the screen, stops the camera and polling, and shows sign-in.
+  Invalid credentials remain distinct from an expired session. All three
+  new regression tests pass. This fix needs static release activation on VPS.
+
+These short read bursts do not establish sustained capacity or 200 concurrent
+payments. The high-contention booking/login/scan results above used local
+fixtures, not the live database. Authenticated admin and boarding verification
+is waiting for a browser sign-in; it is not recorded as passed.
 
 ## Remaining server checks
 
-Check available RAM/CPU/disk, Compose version, certificate paths, real phone
-camera behavior, email delivery, Razorpay test-mode checkout/webhook/refund
-flows, scheduled off-server backups and a disposable load run on the actual
-VPS. Keep the main domain's DNS unchanged until the preview passes.
+Activate the frontend session fix, then verify authenticated boarding and
+real phone camera behavior. Verify Razorpay test-mode checkout, webhook
+delivery and refund behavior, scheduled off-server backups and a disposable
+transactional load run on the VPS. Resend's temporary onboarding sender is
+restricted to the account owner's email until the sending domain is verified.
+Rotate provider credentials exposed in screenshots before public use.
+Automatic ticket email was deferred; PNG ticket download is implemented.
+Keep the main domain's DNS unchanged until the preview passes.

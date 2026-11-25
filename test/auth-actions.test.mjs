@@ -27,6 +27,28 @@ test('signed-out Account with next=book does not redirect in a loop', async () =
   assert.equal(location.href, '');
 });
 
+test('admin expiry stops camera and polling and cannot restart polling during mount', async () => {
+  let handler, current = { role: 'SUPER_ADMIN' }, stopped = 0, cameraStopped = 0, started = 0;
+  const page = component('DLT Admin.dc.html', {
+    boot: async () => {}, setUnauthenticatedHandler: fn => { handler = fn; },
+    auth: { current: () => current },
+  });
+  page._stopLiveRefresh = () => stopped++;
+  page._stopCamera = () => cameraStopped++;
+  page._startLiveRefresh = () => started++;
+  page._loadCore = async () => { current = null; handler(); };
+  page._loadSection = async () => {};
+  await page.componentDidMount();
+  assert.equal(stopped, 1);
+  assert.equal(cameraStopped, 1);
+  assert.equal(started, 0);
+  assert.equal(page.state.cameraOn, false);
+  assert.equal(page.state.ready, true);
+  assert.match(page.state.toast, /session ended/i);
+  page.componentWillUnmount();
+  assert.equal(handler, null);
+});
+
 test('rapid login clicks send one authentication request', async () => {
   let calls = 0, resolve;
   const pending = new Promise(r => { resolve = r; });

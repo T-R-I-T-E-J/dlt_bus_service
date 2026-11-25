@@ -47,7 +47,7 @@ export class ApiError extends Error {
 /* ---------------------------------------------------------------- transport */
 
 let onUnauthenticated = null;
-/** Screens register a handler so a 401 anywhere lands the student on sign-in
+/** Screens register a handler so an expired session lands the student on sign-in
  *  once, rather than each call site inventing its own redirect. */
 export function setUnauthenticatedHandler(fn) { onUnauthenticated = fn; }
 
@@ -86,7 +86,13 @@ async function request(method, path, { body, idempotencyKey, signal } = {}) {
       (err && err.message) || 'Something went wrong. Try again.', payload);
     const ra = res.headers.get('Retry-After');
     if (ra) e._retryAfter = Number(ra);
-    if (res.status === 401 && onUnauthenticated) onUnauthenticated(e);
+    if (res.status === 401 && e.code === 'UNAUTHENTICATED') {
+      // The server has rejected the session. Drop its cached identity and
+      // permissions before any screen renders or handles the failure.
+      setMe(null);
+      notify();
+      if (onUnauthenticated) onUnauthenticated(e);
+    }
     throw e;
   }
   return payload;
