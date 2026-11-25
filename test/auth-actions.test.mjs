@@ -75,3 +75,36 @@ test('rapid checkout clicks create one checkout and allow retry after a failure'
   assert.equal(page._paymentInFlight, false);
   assert.equal(page.state.error, 'temporary failure');
 });
+
+test('a payment confirmed while Checkout is open still shows the confirmed booking', async () => {
+  /* Real failure: the webhook confirmed the booking while the student was in
+     their UPI app, the seat poll returned no HELD seats, and the expiry check
+     wiped bookingId - so the "confirmed" screen rendered with no booking. */
+  let openCheckout;
+  const booking = { id: 'b1', code: 'DLT-7Q2K', boardingCode: '4821', status: 'CONFIRMED',
+    totalAmount: 320, passengers: [{ name: 'Student', studentId: 'S1', seatNumber: '2B', seatType: 'WINDOW', passStatus: 'VALID' }] };
+  const page = component('DLT Booking.dc.html', {
+    bookings: { create: async () => ({ id: 'b1' }), get: async id => { assert.equal(id, 'b1'); return booking; } },
+    payments: { createIntent: async () => ({ paymentId: 'p1', providerOrderId: 'order_1' }) },
+    checkout: {
+      open: () => new Promise(r => { openCheckout = r; }),
+      awaitConfirmation: async () => booking,
+    },
+    trips: { listPublic: async () => [], get: async () => ({ id: 't1', price: 320 }), seatMap: async () => ({ rows: [], held: [] }) },
+    auth: { current: () => ({ phone: '9' }) },
+  });
+  page.state.tripId = 't1';
+  page.heldSeats = () => page.state.data.held.length ? page.state.data.held : [{ seatNumber: '2B' }];
+  page.paxFor = () => ({ name: 'Student' });
+  page.state.data.held = [{ seatNumber: '2B' }];
+  const paying = page.startPayment();
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(page.state.step, 'checkout');
+  page.state.data.held = [];        // seat poll after the webhook booked the seat
+  page._expireCheck();              // the 1s presentation tick
+  openCheckout({});
+  await paying;
+  assert.equal(page.state.step, 'done');
+  assert.equal(page.state.bookingId, 'b1');
+  assert.equal(page.state.data.booking && page.state.data.booking.code, 'DLT-7Q2K');
+});

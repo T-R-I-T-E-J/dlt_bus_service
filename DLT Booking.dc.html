@@ -832,7 +832,12 @@ class Component extends DCLogic {  state = {
   _expireCheck() {
     const st = this.state;
     if (!st.tripId) return;
-    if (['seats', 'passengers', 'review', 'checkout', 'failed'].indexOf(st.step) < 0) return;
+    /* Once Checkout is open the seats legitimately stop being HELD the moment
+       the webhook books them, so an empty basket is NOT an expiry there. The
+       server decides that payment's outcome; expiring here wiped bookingId and
+       rendered "confirmed" with no booking. */
+    if (this._paymentInFlight) return;
+    if (['seats', 'passengers', 'review', 'failed'].indexOf(st.step) < 0) return;
     /* The basket comes from the seat-map response (state.data.held), which the
        server computes. This no longer recomputes anything. */
     const held = st.data.held || [];
@@ -1072,6 +1077,9 @@ class Component extends DCLogic {  state = {
         const confirmed = await DLT.checkout.awaitConfirmation(bookingId, {
           onStatus: function () { self.setState({ step: 'verifying' }); },
         });
+        /* The booking this payment belongs to is the one we paid for, whatever
+           happened to state meanwhile - _load reads it from state. */
+        this.setState({ bookingId: bookingId, paymentId: intent.paymentId });
         await this._load({ quiet: true });
         if (confirmed.status === 'CONFIRMED') this.setState({ step: 'done' });
         else if (confirmed.pendingTimeout) this.setState({ step: 'pending' });
