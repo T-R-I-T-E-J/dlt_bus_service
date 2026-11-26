@@ -40,9 +40,19 @@
     [data-m="hide"] { display: none !important; }
     [data-m="pass"] { position: static !important; order: -1; }
   }
+  @media (max-width: 720px) {
+    [data-booking-card] { grid-template-columns: minmax(0,1fr) !important; gap: 12px !important; }
+    [data-booking-card] > * { min-width: 0; overflow-wrap: anywhere; }
+    [data-booking-card] > button { width: 100%; min-height: 48px !important; }
+  }
   @media print {
     [data-m="noprint"] { display: none !important; }
     body { background: #FFFFFF; }
+  }
+  @media (max-width: 720px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea {
+      font-size: 16px !important; min-height: 48px; box-sizing: border-box; max-width: 100%;
+    }
   }
 </style>
 <script src="./dlt-qr.js"></script>
@@ -187,7 +197,7 @@
 
     <div role="list" style="margin:18px 0 0;border-top:1px solid rgba(14,16,20,.16)">
       <sc-for list="{{ rows }}" as="r" hint-placeholder-count="3">
-        <article role="listitem" style="display:grid;grid-template-columns:minmax(88px,.6fr) minmax(0,1.5fr) minmax(104px,.8fr) auto;align-items:center;gap:clamp(10px,2vw,24px);padding:18px 0;border-bottom:1px solid rgba(14,16,20,.16)">
+        <article role="listitem" data-booking-card style="display:grid;grid-template-columns:minmax(88px,.6fr) minmax(0,1.5fr) minmax(104px,.8fr) auto;align-items:center;gap:clamp(10px,2vw,24px);padding:18px 0;border-bottom:1px solid rgba(14,16,20,.16)">
           <div>
             <div style="font-stretch:125%;font-weight:700;font-size:20px;line-height:1;letter-spacing:-.018em;font-variant-numeric:tabular-nums">{{ r.time }}</div>
             <div style="margin-top:6px;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ r.date }}</div>
