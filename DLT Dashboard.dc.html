@@ -503,7 +503,7 @@ class Component extends DCLogic {
     const p = passes[Math.min(this.state.paxIndex, passes.length - 1)];
     if (!p || !p.qrToken || !window.DLTQR) throw new Error('Your ticket is still loading. Try downloading it again in a moment.');
     /* a real pass image: the whole pass drawn to canvas, not just the QR */
-    const W = 760, H = 1120, cv = document.createElement('canvas');
+    const W = 760, H = 1200, cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const g = cv.getContext('2d');
     g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, W, H);
@@ -545,11 +545,13 @@ class Component extends DCLogic {
 
     /* No PICKUP row: no column holds a pickup point, and a printed boarding pass
        is the last place to guess at one. */
+    const ticketFare = DLT.fare.split(p.fareShare);
     const facts = [
       ['ROUTE', p.route], ['DEPARTS', DLT.fmt.when(p.departureAt)],
       ['REPORT BY', DLT.fmt.time(p.reportingAt)], ['COACH', p.vehicle || '—'],
       ['BOOKING', p.bookingCode], ['BOARDING CODE', p.boardingCode],
-      ['PAYMENT', p.paymentStatus], ['FARE', '₹' + p.fareShare],
+      ['PAYMENT', p.paymentStatus], ['FARE (EXCLUDING TAX)', ticketFare ? '₹' + ticketFare.base : '—'],
+      ['GST', ticketFare ? '₹' + ticketFare.gst : '—'], ['SEAT TOTAL', '₹' + p.fareShare],
     ];
     facts.forEach(([k, v], i) => {
       const x = 44 + (i % 2) * (W / 2 - 22);
@@ -741,6 +743,7 @@ class Component extends DCLogic {
     const idx = Math.min(st.paxIndex, Math.max(0, passes.length - 1));
     const p = passes[idx] || null;
     const passable = !!active && passes.length > 0;
+    const passFare = p ? DLT.fare.split(p.fareShare) : null;
 
     /* ---- receipt, composed from the booking the server already returned ----
        M-2/M-3 put paidAt and the refund ROWS on that response, so there is no
@@ -785,7 +788,7 @@ class Component extends DCLogic {
 
       hasUpcoming: !!upcoming, noUpcoming: !upcoming,
       emptyBlurb: openTrips.length
-        ? openTrips.length + ' departures are open on Woxsen → Miyapur at ₹' + openTrips[0].price + ' a seat. Your details are saved, so booking takes about a minute.'
+        ? openTrips.length + ' departures are open on Woxsen → Miyapur at ₹' + (DLT.fare.split(openTrips[0].price)?.base ?? '—') + ' a seat (excluding tax). Your details are saved, so booking takes about a minute.'
         : 'No departures are open yet. Ask to be notified and we will message you when bookings open.',
       upcomingCode: upcoming ? upcoming.code : '',
       countdown: upcoming ? DLT.fmt.relativeDay(upcoming.trip.departureAt) : '',
@@ -834,11 +837,11 @@ class Component extends DCLogic {
         const s = DLT.fare.split(receipt.unitPrice, 1);
         const n = receipt.seats.length;
         return s ? [
-          { k: 'Fare', v: '₹' + s.base + ' × ' + n, fg: '#0E1014' },
+          { k: 'Fare (excluding tax)', v: '₹' + s.base + ' × ' + n, fg: '#0E1014' },
           { k: 'GST', v: '₹' + s.gst + ' × ' + n, fg: '#0E1014' },
         ] : [{ k: 'Fare', v: '₹' + receipt.unitPrice + ' × ' + n, fg: '#0E1014' }];
       })(), [
-        { k: 'Amount', v: '₹' + receipt.amount, fg: '#0E1014' },
+        { k: 'Total charged', v: '₹' + receipt.amount, fg: '#0E1014' },
         { k: 'Payment', v: receipt.paymentStatus, fg: receipt.paymentStatus === 'SUCCESS' ? '#0E4B34' : '#8A5A0E' },
         { k: 'Paid at', v: receipt.paidAt ? DLT.fmt.dateTime(receipt.paidAt) : '—', fg: '#0E1014' },
         { k: 'Reference', v: receipt.providerReference || '—', fg: '#0E1014' },
@@ -863,7 +866,7 @@ class Component extends DCLogic {
         : 'Nothing here yet — ' + st.filter.toLowerCase() + ' trips appear as they happen.',
 
       openTripsLabel: openTrips.length
-        ? '₹' + openTrips[0].price + ' · ' + openTrips.length + ' dates open' : 'No dates open',
+        ? '₹' + (DLT.fare.split(openTrips[0].price)?.base ?? '—') + ' excluding tax · ' + openTrips.length + ' dates open' : 'No dates open',
       passCount: passes.length
         ? passes.length + (passes.length === 1 ? ' pass' : ' passes') + ' · ' + DLT.fmt.date(passes[0].departureAt)
         : 'No passes yet',
@@ -903,7 +906,9 @@ class Component extends DCLogic {
         { k: 'Boarding code', v: p.boardingCode, fg: '#0E1014' },
         { k: 'Payment', v: p.paymentStatus === 'SUCCESS' ? 'Paid' : p.paymentStatus,
           fg: p.paymentStatus === 'SUCCESS' ? '#0E1014' : '#8A5A0E' },
-        { k: 'Fare', v: '₹' + p.fareShare + ' of ₹' + p.total, fg: '#0E1014' },
+        { k: 'Fare (excluding tax)', v: passFare ? '₹' + passFare.base : '—', fg: '#0E1014' },
+        { k: 'GST', v: passFare ? '₹' + passFare.gst : '—', fg: '#0E1014' },
+        { k: 'Seat total', v: '₹' + p.fareShare, fg: '#0E1014' },
       ] : [],
       passNote: p && p.passStatus !== 'VALID'
         ? 'Cancelled passes stay visible for your records but fail at the scanner.'

@@ -181,7 +181,7 @@
   <section aria-labelledby="trips-h">
     <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Woxsen ⇄ Miyapur</div>
     <h1 id="trips-h" style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1.04;letter-spacing:-.02em">Choose your departure</h1>
-    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹320 per seat (₹299 fare + ₹21 GST), up to five passengers on one booking. Seats are held for 10 minutes once you pick them.</p>
+    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹{{ departureFare }} per seat (excluding tax), up to five passengers on one booking. Seats are held for 10 minutes once you pick them.</p>
 
     <sc-if value="{{ noTrips }}" hint-placeholder-val="{{ false }}">
       <div style="margin:28px 0 0;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(22px,4vw,38px)">
@@ -625,7 +625,7 @@
           <div style="display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:10px">
             <span style="font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">Seat {{ s.id }}</span>
             <span style="font-size:12.5px;color:#4A4F49">{{ s.type }}</span>
-            <span style="font-size:13px;font-variant-numeric:tabular-nums">₹{{ s.price }}</span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums">₹{{ s.price }}<span style="display:block;margin-top:3px;font-size:10px;color:#5F6560">excluding tax</span></span>
             <sc-if value="{{ s.removable }}" hint-placeholder-val="{{ true }}">
               <button type="button" onClick="{{ s.onRemove }}" aria-label="Remove seat {{ s.id }}" style="background:none;border:0;width:44px;height:44px;margin:-11px -12px -11px 0;font-size:16px;color:#4A4F49;cursor:pointer">×</button>
             </sc-if>
@@ -648,7 +648,7 @@
     </div>
     </sc-if>
     <div style="display:flex;justify-content:space-between;gap:10px;font-size:16px;font-weight:700;padding-top:9px;border-top:1px solid rgba(14,16,20,.12)">
-      <span>Total payable</span><span>{{ summaryTotal }}</span>
+      <span>{{ summaryTotalLabel }}</span><span>{{ summaryTotal }}</span>
     </div>
   </div>
 
@@ -657,6 +657,7 @@
     <div style="display:none;flex-direction:column;gap:2px;min-width:0" data-m="barfacts">
       <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;white-space:nowrap">{{ barLine }}</span>
       <span style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums">{{ summaryTotal }}</span>
+      <span style="font-size:10.5px;line-height:1.35;color:#5F6560;max-width:145px">{{ summaryTaxNote }}</span>
     </div>
     <button type="button" onClick="{{ primary }}" disabled="{{ primaryDisabled }}" style="width:100%;background:{{ primaryBg }};color:{{ primaryFg }};border:0;padding:14px 18px;border-radius:2px;font-size:14px;font-weight:600;cursor:{{ primaryCursor }};min-height:48px">{{ primaryLabel }}</button>
     <sc-if value="{{ primaryHint }}" hint-placeholder-val="{{ true }}">
@@ -1208,7 +1209,7 @@ class Component extends DCLogic {  state = {
       return { atLoading: true, skeletons: [{}, {}, {}], showStepper: false,
         primaryLabel: 'Loading', primaryDisabled: true, primaryBg: '#E4E1D8', primaryFg: '#7A7F77',
         primaryCursor: 'wait', primary: () => {}, noSeats: true, total: 0, unitPrice: null,
-        seatCountLabel: '0 seats', summaryLineLabel: 'Fare after departure',
+        seatCountLabel: '0 seats', departureFare: '—', summaryTotalLabel: 'Fare (excluding tax)', summaryTaxNote: 'Excluding tax', summaryLineLabel: 'Fare after departure',
         summaryLineAmount: '—', summaryTotal: '—', summaryGst: null,
         routeLabel: 'Woxsen <-> Miyapur', tripSummary: 'Reading live departures', primaryHint: '',
         notice: null, clearNotice: () => {}, barLine: '', repriced: false,
@@ -1236,11 +1237,15 @@ class Component extends DCLogic {  state = {
        two lines always add back up to the total the server charges. */
     const split = n && total !== null ? DLT.fare.split(total / n, n) : null;
     const seatWord = n === 1 ? '1 seat' : n + ' seats';
-    const summaryLineLabel = split ? seatWord + ' × ₹' + (split.base / n) + ' fare'
+    const showTax = ['review', 'checkout', 'verifying', 'pending', 'processing', 'discrepancy', 'failed', 'done'].includes(step);
+    const departureFare = DLT.fare.split((trip || openTrips[0])?.price)?.base ?? '—';
+    const summaryLineLabel = split ? seatWord + ' × ₹' + (split.base / n) + ' (excluding tax)'
       : n && unitPrice !== null ? seatWord + ' x ₹' + unitPrice : 'Fare after departure';
     const summaryLineAmount = split ? money(split.base) : n && total !== null ? money(total) : '—';
-    const summaryGst = split ? money(split.gst) : null;
-    const summaryTotal = n && total !== null ? money(total) : '—';
+    const summaryGst = showTax && split ? money(split.gst) : null;
+    const summaryTotal = n && total !== null ? money(!showTax && split ? split.base : total) : '—';
+    const summaryTotalLabel = showTax ? 'Total payable' : 'Fare (excluding tax)';
+    const summaryTaxNote = showTax && split ? money(split.base) + ' excluding tax + ' + money(split.gst) + ' GST' : 'Excluding tax';
 
     /* The clock runs off the SERVER's holdExpiresAt. The client starts no timer
        of its own and never decides a hold has lapsed. */
@@ -1510,7 +1515,7 @@ class Component extends DCLogic {  state = {
       })) : [],
 
       seatRows: held.map(s => ({
-        id: s.seatNumber, type: s.seatType, price: unitPrice,
+        id: s.seatNumber, type: s.seatType, price: DLT.fare.split(unitPrice)?.base ?? '—',
         removable: ['seats', 'passengers', 'review'].indexOf(step) >= 0,
         onRemove: () => this.removeSeat(s.seatNumber),
       })),
@@ -1518,7 +1523,7 @@ class Component extends DCLogic {  state = {
       seatCountLabel: n === 1 ? '1 seat' : n + ' seats',
       seatList: (booking ? booking.passengers.map(p => p.seatNumber) : held.map(s => s.seatNumber)).join(', ') || '—',
       unitPrice, total,
-      summaryLineLabel, summaryLineAmount, summaryTotal, summaryGst,
+      departureFare, summaryLineLabel, summaryLineAmount, summaryTotal, summaryGst, summaryTotalLabel, summaryTaxNote,
       holdActive: holdLeft > 0, holdClock: DLT.fmt.countdown(holdLeft),
       holdBg: lowHold ? '#FFFDF6' : '#F4F7F3', holdFg: lowHold ? '#8A5A0E' : '#0E4B34',
 

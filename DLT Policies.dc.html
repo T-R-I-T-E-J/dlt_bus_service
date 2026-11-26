@@ -133,8 +133,8 @@ const SECTIONS = [
   ], null],
 
   ['payment', 'Payment', 'Payment information', [
-    'Fares are charged in Indian rupees. A seat costs ₹320 in total: a ₹299 fare plus ₹21 GST. Checkout itemises it before you pay — the fare for your seats, the GST, then the total payable — and your receipt shows the same breakdown.',
-    'GST is included in the ₹320; nothing is added on top at payment. No booking fee, convenience fee, coupon or discount is added in this release. If any fee or discount is introduced later, it must be shown before payment and reflected in the receipt.',
+    'Fares are charged in Indian rupees. The displayed seat fare is ₹299 (excluding tax). Checkout adds ₹21 GST per seat, bringing the total to ₹320. Checkout itemises it before you pay — the fare for your seats, the GST, then the total payable — and your receipt shows the same breakdown.',
+    'The advertised ₹299 fare excludes tax. The ₹21 GST is added at checkout; the final ₹320 total includes it. No booking fee, convenience fee, coupon or discount is added in this release. If any fee or discount is introduced later, it must be shown before payment and reflected in the receipt.',
     'Payment is taken through a payment provider; DLT never sees or stores your card details. Your booking is created only against a payment we have verified, and a payment record is never deleted.',
     'If a payment succeeds but something goes wrong before your seats are issued, the money stays with us against your booking and we finish the job — you are never asked to pay a second time. The same applies if we receive a different amount from the one due: the payment is held and resolved by our team.',
   ], [], null],

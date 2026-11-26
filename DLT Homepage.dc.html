@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DLT Services | Woxsen to Miyapur Student Bus Booking</title>
-<meta name="description" content="DLT Services is the student-run Woxsen University to Miyapur Metro shuttle booking site. Check trips, book seats for Rs 320, pay online, and get QR boarding passes.">
+<meta name="description" content="DLT Services is the student-run Woxsen University to Miyapur Metro shuttle booking site. Check trips, book seats from Rs 299 excluding tax, pay online, and get QR boarding passes.">
 <link rel="canonical" href="https://dltservices.tech/">
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="DLT Services">
 <meta property="og:title" content="DLT Services | Woxsen to Miyapur Student Bus Booking">
-<meta property="og:description" content="Student-run Woxsen University to Miyapur Metro shuttle booking with Rs 320 seats, online payment, and QR boarding.">
+<meta property="og:description" content="Student-run Woxsen University to Miyapur Metro shuttle booking with Rs 299 seats excluding tax, online payment, and QR boarding.">
 <meta property="og:url" content="https://dltservices.tech/">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="DLT Services | Woxsen to Miyapur Student Bus Booking">
@@ -50,7 +50,8 @@
       ],
       "offers": {
         "@type": "Offer",
-        "price": "320",
+        "price": "299",
+        "priceSpecification": { "@type": "UnitPriceSpecification", "price": "299", "priceCurrency": "INR", "valueAddedTaxIncluded": false },
         "priceCurrency": "INR",
         "availability": "https://schema.org/LimitedAvailability",
         "url": "https://dltservices.tech/booking"
@@ -82,7 +83,7 @@
           "name": "What is the DLT Services current fare?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "The current fare is Rs 320 per seat (Rs 299 fare + Rs 21 GST), with online payment and QR boarding passes."
+            "text": "The current fare is Rs 299 per seat excluding tax. Checkout adds Rs 21 GST per seat, making the total Rs 320, with online payment and QR boarding passes."
           }
         }
       ]
@@ -441,7 +442,7 @@
           </sc-if>
           <span style="font-size:12.5px;font-weight:{{ t.availWeight }};color:{{ t.availFg }};font-variant-numeric:tabular-nums">{{ t.avail }}</span>
         </div>
-        <div data-m="price" style="font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;color:{{ t.priceFg }}">₹{{ t.price }}</div>
+        <div data-m="price" style="font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;color:{{ t.priceFg }}"><div>₹{{ t.price }}</div><div style="margin-top:4px;font-size:10px;font-weight:400">excluding tax</div></div>
         <a href="{{ t.href }}" data-m="cta" style="background:{{ t.ctaBg }};color:{{ t.ctaFg }};border:1px solid #0E1014;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;white-space:nowrap;min-height:44px;display:flex;align-items:center;justify-content:center;box-sizing:border-box">{{ t.cta }}</a>
       </article>
     </sc-for>
@@ -591,7 +592,7 @@
     <div>
       <span style="display:block;width:22px;height:2px;background:#0E4B34"></span>
       <h3 style="margin:14px 0 0;font-size:16px;font-weight:600;letter-spacing:-.01em">Built for students</h3>
-      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">₹{{ fare }} flat, five passengers on one payment, and a full refund if you cancel more than 24 hours out.</p>
+      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">₹{{ fare }} per seat (excluding tax), five passengers on one payment, and a full refund if you cancel more than 24 hours out.</p>
     </div>
   </div>
 </section>
@@ -603,7 +604,7 @@
       <h2 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(22px,2.4vw,30px);line-height:1.06;letter-spacing:-.018em">Getting to the city shouldn't be the hardest part of the week</h2>
     </div>
     <div style="display:flex;flex-direction:column;gap:14px;max-width:62ch">
-      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">DLT gives Woxsen students a predictable way to reach Miyapur: published departures, a named pickup point, a numbered seat and a fixed current fare of ₹{{ fare }}.</p>
+      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">DLT gives Woxsen students a predictable way to reach Miyapur: published departures, a named pickup point, a numbered seat and a fixed current fare of ₹{{ fare }} per seat (excluding tax).</p>
       <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">We are starting with Woxsen to Miyapur and adding Miyapur to Woxsen when the schedule is ready. The booking system already supports both directions, so each new trip works the same way.</p>
     </div>
   </div>
@@ -696,7 +697,7 @@ const FAQ = [
     ['How long are seats held?', 'Ten minutes from the first seat you pick. The clock is shown in the summary and the seats reopen when it runs out.'],
   ]],
   ['Payment & refunds', [
-    ['What is the fare?', '₹320 per seat in total: a ₹299 fare plus ₹21 GST. Nothing else is added at payment — no booking fee or coupon.'],
+    ['What is the fare?', '₹299 per seat (excluding tax). Checkout adds ₹21 GST per seat, bringing the total to ₹320. No booking fee or coupon is added.'],
     ['Can I cancel after paying?', 'Cancel more than 24 hours before departure for a full refund. Inside 24 hours the fare is non-refundable.'],
     ['My payment went through but I saw an error.', 'Do not pay again. We verify every payment on our server and finish or review the booking from that result.'],
   ]],
@@ -927,9 +928,9 @@ class Component extends DCLogic {
        are active, the page shows the current fare and policy timing instead
        of empty placeholders. */
     const trips = st.data.trips;
-    const fare = trips.length ? String(trips[0].price) : '320';
-    const fareSplit = api && api.fare ? api.fare.split(Number(fare)) : null;
-    const fareNote = fareSplit ? ' (₹' + fareSplit.base + ' + ₹' + fareSplit.gst + ' GST)' : '';
+    const fareSplit = api && api.fare ? api.fare.split(trips.length ? trips[0].price : 320) : null;
+    const fare = fareSplit ? String(fareSplit.base) : '—';
+    const fareNote = ' (excluding tax)';
     const first = trips[0] || null;
     const noActiveTrips = st.data.tripsLoaded && trips.length === 0;
 
@@ -971,7 +972,7 @@ class Component extends DCLogic {
           time: fmt.time(t.departureAt), date: fmt.date(t.departureAt),
           route: t.origin + ' -> ' + t.destination,
           report: fmt.time(t.reportingAt), arrive: fmt.time(t.arrivalEstimateAt),
-          price: t.price, dim: t.soldOut ? 0.72 : 1,
+          price: api.fare.split(t.price)?.base ?? '—', dim: t.soldOut ? 0.72 : 1,
           showBar: !t.soldOut,
           barWidth: Math.max(4, 100 - pct) + '%',
           barColor: low ? '#8A5A0E' : '#0E4B34',
