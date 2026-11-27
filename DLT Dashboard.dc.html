@@ -134,7 +134,7 @@
       </sc-for>
     </dl>
     <div style="margin:24px 0 0;display:flex;flex-wrap:wrap;gap:10px">
-      <button type="button" onClick="{{ openPass }}" style="background:#F7F5F0;color:#0E1014;border:0;padding:14px 20px;border-radius:2px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px">{{ passCta }}</button>
+      <button type="button" onClick="{{ openUpcomingPass }}" style="background:#F7F5F0;color:#0E1014;border:0;padding:14px 20px;border-radius:2px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px">{{ passCta }}</button>
       <button type="button" onClick="{{ openCancel }}" style="background:none;color:#F7F5F0;border:1px solid rgba(247,245,240,.4);padding:13px 19px;border-radius:2px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px">Cancel booking</button>
       <button type="button" onClick="{{ openReceipt }}" style="background:none;color:#F7F5F0;border:0;padding:13px 8px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px;border-bottom:1px solid rgba(247,245,240,.4)">Receipt</button>
     </div>
@@ -248,7 +248,7 @@
 </div>
 
 <!-- BOARDING PASS -->
-<aside data-m="pass" aria-label="Boarding pass" style="position:sticky;top:84px">
+<aside data-m="pass" ref="{{ passPanelRef }}" aria-label="Boarding pass" style="position:sticky;top:84px;scroll-margin-top:84px">
   <sc-if value="{{ passOpen }}" hint-placeholder-val="{{ true }}">
   <div style="border:1px solid rgba(14,16,20,.16);background:#FFFFFF;animation:dltRise .3s ease">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid rgba(14,16,20,.12)">
@@ -305,7 +305,7 @@
   <div style="border:1px dashed rgba(14,16,20,.24);padding:26px 20px;text-align:center">
     <p style="margin:0;font-size:13px;line-height:1.6;color:#4A4F49">{{ passClosedCopy }}</p>
     <sc-if value="{{ canOpenPass }}" hint-placeholder-val="{{ false }}">
-      <button type="button" onClick="{{ openPass }}" style="margin:14px 0 0;background:none;border:0;padding:12px 4px;font-size:13px;font-weight:600;color:#0E4B34;cursor:pointer;min-height:44px;border-bottom:1px solid rgba(14,75,52,.4)">Show passes</button>
+      <button type="button" onClick="{{ openPass }}" style="margin:14px 0 0;background:none;border:0;padding:12px 4px;font-size:13px;font-weight:600;color:#0E4B34;cursor:pointer;min-height:44px;border-bottom:1px solid rgba(14,75,52,.4)">{{ passOpenLabel }}</button>
     </sc-if>
   </div>
   </sc-if>
@@ -339,11 +339,11 @@ class Component extends DCLogic {
     ready: false, loading: false, offline: false, authRequired: false,
     /* server state, filled only by _load() */
     data: { bookings: [], openTrips: [], waitlist: [], waitTrip: null,
-            passes: [], quote: null },
+            passes: [], passesBookingId: null, quote: null },
     /* presentation only */
     tick: 0, filter: 'Upcoming', paxIndex: 0, passOpen: true,
     activeBookingId: null, cancelOpen: false, receiptOpen: false,
-    busy: false, notice: null, error: null,
+    busy: false, notice: null, error: null, passesLoading: false, passesError: null,
   };
 
   async componentDidMount() {
@@ -370,16 +370,13 @@ class Component extends DCLogic {
     this._timer = setInterval(() => this.setState({ tick: this.state.tick + 1 }), 1000);
   }
 
-  componentDidUpdate(prevProps, prevState) {
-    /* The QR is painted from server state, never from a render return value. */
+  componentDidUpdate() {
+    /* The runtime supplies previous props only. Booking selection explicitly
+       loads its own passes instead of relying on a previous-state argument. */
     this._paint();
-    /* Passes belong to whichever booking is active; reload when that changes. */
-    if (prevState && prevState.activeBookingId !== this.state.activeBookingId) {
-      this._loadPasses();
-    }
   }
 
-  componentWillUnmount() { clearInterval(this._timer); }
+  componentWillUnmount() { clearInterval(this._timer); this._passRequest = (this._passRequest || 0) + 1; }
 
   /* ------------------------------------------------------------ server reads
    *
@@ -422,16 +419,36 @@ class Component extends DCLogic {
   /** M-1: the passes for the active booking. The ONLY route that returns a
       qr_token, and the server checks ownership on it. */
   async _loadPasses() {
+    const request = this._passRequest = (this._passRequest || 0) + 1;
     const b = this._activeBooking();
-    if (!b) return this.setState(s => ({ data: Object.assign({}, s.data, { passes: [] }) }));
+    this.setState(s => ({ passesLoading: !!b, passesError: null,
+      data: Object.assign({}, s.data, { passes: [], passesBookingId: null }) }));
+    if (!b) return;
+    const current = () => request === this._passRequest && this._activeBooking()?.id === b.id;
     try {
       const passes = await DLT.boarding.passesFor(b.id);
-      this.setState(s => ({ data: Object.assign({}, s.data, { passes: passes }) }),
+      if (!current()) return;
+      this.setState(s => ({ passesLoading: false,
+        data: Object.assign({}, s.data, { passes, passesBookingId: b.id }) }),
         () => this._paint());
     } catch (e) {
-      this.setState(s => ({ data: Object.assign({}, s.data, { passes: [] }) }));
+      if (!current()) return;
+      this.setState(s => ({ passesLoading: false, passesError: true,
+        data: Object.assign({}, s.data, { passes: [], passesBookingId: null }) }));
+      if (e.status === 401 || e.code === 'UNAUTHENTICATED') this.fail(e);
     }
   }
+
+  selectBooking = (id, receipt = false) => {
+    this._passRequest = (this._passRequest || 0) + 1;
+    this.setState({ activeBookingId: id, paxIndex: 0, passOpen: !receipt,
+      receiptOpen: receipt, cancelOpen: false }, () => {
+      this._loadPasses().then(() => {
+        if (!receipt && this._activeBooking()?.id === id)
+          this._passPanel?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      });
+    });
+  };
 
   /** The refund preview, quoted by the server. The browser never computes it. */
   async _loadQuote() {
@@ -472,13 +489,17 @@ class Component extends DCLogic {
   _activeBooking() {
     const all = this._all();
     if (this.state.activeBookingId) {
-      const found = all.filter(b => b.id === this.state.activeBookingId)[0];
+      const found = all.filter(b => (b.id === this.state.activeBookingId || b.code === this.state.activeBookingId))[0];
       if (found) return found;
     }
     return all.filter(b => this._bucket(b) === 'Upcoming')[0] || all[0] || null;
   }
 
-  _passes() { return this.state.data.passes || []; }
+  _passes() {
+    const active = this._activeBooking();
+    return active && this.state.data.passesBookingId === active.id
+      ? this.state.data.passes || [] : [];
+  }
 
   _paint() {
     if (!this._cv || !window.DLTQR) return;
@@ -732,8 +753,7 @@ class Component extends DCLogic {
         actionFg: primary ? '#F7F5F0' : '#0E1014',
         actionBd: primary ? '#0E1014' : 'rgba(14,16,20,.2)',
         onAction: () => {
-          if (action === 'View receipt') this.setState({ activeBookingId: b.id, receiptOpen: true, cancelOpen: false, paxIndex: 0 });
-          else this.setState({ activeBookingId: b.id, passOpen: true, paxIndex: 0, receiptOpen: false, cancelOpen: false });
+          this.selectBooking(b.id, action === 'View receipt');
         },
       };
     });
@@ -807,7 +827,8 @@ class Component extends DCLogic {
           : 'Inside 24 hours of departure, so the fare is no longer refundable.';
       })() : '',
 
-      openPass: () => this.setState({ passOpen: true, receiptOpen: false, cancelOpen: false }),
+      openPass: () => active && this.selectBooking(active.id),
+      openUpcomingPass: () => upcoming && this.selectBooking(upcoming.id),
       openCancel: this.openCancel,
       closeCancel: () => this.setState({ cancelOpen: false }),
       cancelOpen: st.cancelOpen && !!active,
@@ -872,8 +893,12 @@ class Component extends DCLogic {
         : 'No passes yet',
 
       passOpen: st.passOpen && passable, passClosed: !(st.passOpen && passable),
-      canOpenPass: passable,
-      passClosedCopy: passable
+      canOpenPass: passable || (!!active && !st.passesLoading),
+      passOpenLabel: st.passesError ? 'Retry loading tickets' : 'Show passes',
+      passPanelRef: el => { this._passPanel = el; },
+      passClosedCopy: st.passesLoading ? 'Loading tickets for ' + active.code + '…'
+        : st.passesError ? 'We couldn’t load tickets for ' + active.code + '. Please try again.'
+        : passable
         ? 'Your passes open here. Each passenger scans their own QR at the door.'
         : 'No boarding pass yet — a pass is issued for each passenger once a payment is verified.',
       multiPass: passes.length > 1,

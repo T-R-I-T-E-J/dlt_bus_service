@@ -77,7 +77,7 @@ test('boarding pass and receipt distinguish fare, tax and the actual charged tot
     unitPrice: 320, totalAmount: 640, passengers: [{ seatNumber: '2A' }, { seatNumber: '2B' }],
     payment: { status: 'SUCCESS' }, refunds: [] };
   Object.assign(page.state, { ready: true, loading: false, receiptOpen: true });
-  Object.assign(page.state.data, { bookings: [booking], openTrips: [trip], passes: [{
+  Object.assign(page.state.data, { bookings: [booking], openTrips: [trip], passesBookingId: booking.id, passes: [{
     name: 'Test Student', studentId: 'TEST1', seatNumber: '2A', passStatus: 'VALID',
     fareShare: 320, total: 640, paymentStatus: 'SUCCESS', departureAt: trip.departureAt,
     reportingAt: trip.reportingAt, route: 'Woxsen → Miyapur',
