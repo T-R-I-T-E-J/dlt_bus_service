@@ -103,6 +103,17 @@ export default function bookingRoutes(provider: PaymentProvider) {
     catch (e) { next(e); }
   });
 
+  // Navigation cleanup may discard unpaid work, but never cancel a paid ticket.
+  router.post('/bookings/:id/discard', requireAuth, jsonBody, async (req, res, next) => {
+    try {
+      const out = await pay.cancelBooking(UUID.parse(req.params.id),
+        { userId: req.session!.userId, role: req.session!.role, ip: req.ip }, 'Changed booking before paying', true);
+      invalidatePublicTripCache();
+      res.json(out);
+    }
+    catch (e) { next(e); }
+  });
+
   router.post('/bookings/:id/cancel', requireAuth, jsonBody, async (req, res, next) => {
     try {
       const reason = z.string().max(500).optional().parse(req.body?.reason);

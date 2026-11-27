@@ -181,7 +181,7 @@
   <section aria-labelledby="trips-h">
     <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Woxsen ⇄ Miyapur</div>
     <h1 id="trips-h" style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1.04;letter-spacing:-.02em">Choose your departure</h1>
-    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹{{ departureFare }} per seat (excluding tax), up to five passengers on one booking. Seats are held for 10 minutes once you pick them.</p>
+    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹{{ departureFare }} per seat (excluding tax), up to five passengers on one booking. Seats are held for 10 minutes once you pick them. All departure times are IST.</p>
 
     <sc-if value="{{ noTrips }}" hint-placeholder-val="{{ false }}">
       <div style="margin:28px 0 0;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(22px,4vw,38px)">
@@ -259,6 +259,8 @@
       <button type="button" onClick="{{ backToTrips }}" style="background:none;border:0;padding:6px 0;font-size:13px;font-weight:600;color:#0E4B34;cursor:pointer;border-bottom:1px solid rgba(14,75,52,.4)">Change trip</button>
     </div>
 
+    <div role="note" style="margin:20px 0;padding:16px 18px;border-left:3px solid #0E4B34;background:#EEF3EE;font-size:14px;line-height:1.6"><strong>Open seating — sit anywhere.</strong> Seats are not assigned. This diagram is only a representation of the bus. Select one place per passenger to reserve space; choose any available seat when boarding, first come, first served.</div>
+
     <div style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,auto));gap:10px 22px;align-items:center">
       <sc-for list="{{ legend }}" as="l" hint-placeholder-count="5">
         <span style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:#3D423C">
@@ -273,7 +275,7 @@
         <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">{{ vehicleLabel }} · 2 + 2 · {{ seatCount }} seats · {{ availableCount }} free</span>
         <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Front of coach ↑</span>
       </div>
-      <div role="group" aria-label="Seat map" style="margin:18px auto 0;display:grid;grid-template-columns:repeat(2,44px) 30px repeat(2,44px);gap:9px;justify-content:center">
+      <div role="group" aria-label="Bus representation for booking availability" style="margin:18px auto 0;display:grid;grid-template-columns:repeat(2,44px) 30px repeat(2,44px);gap:9px;justify-content:center">
         <sc-for list="{{ cells }}" as="c" hint-placeholder-count="55">
           <sc-if value="{{ c.isSeat }}" hint-placeholder-val="{{ true }}">
             <button type="button" onClick="{{ c.onClick }}" disabled="{{ c.disabled }}" aria-pressed="{{ c.pressed }}" aria-label="{{ c.aria }}" title="{{ c.aria }}" style="height:44px;width:44px;border-radius:3px 3px 6px 6px;border:1px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums;cursor:{{ c.cursor }};box-shadow:{{ c.shadow }};transition:background .12s ease, transform .12s ease" style-hover="{{ c.hover }}">{{ c.id }}</button>
@@ -285,7 +287,7 @@
       </div>
     </div>
 
-    <p style="margin:14px 0 0;font-size:12.5px;color:#4A4F49">Window seats are A and D. A held or blocked seat cannot be selected — the hold belongs to whoever took it first.</p>
+    <p style="margin:14px 0 0;font-size:12.5px;color:#4A4F49">The diagram represents availability only. Its numbers do not assign physical seats. Seating on the bus is first come, first served.</p>
   </section>
   </sc-if>
 
@@ -782,6 +784,9 @@ class Component extends DCLogic {  state = {
   async _load(opts) {
     const quiet = opts && opts.quiet;
     const st = this.state;
+    const request = this._loadRequest = (this._loadRequest || 0) + 1;
+    const tripId = st.tripId, bookingId = st.bookingId;
+    const current = () => request === this._loadRequest && this.state.tripId === tripId && this.state.bookingId === bookingId;
     if (!quiet) this.setState({ loading: true });
     const data = Object.assign({}, st.data);
     try {
@@ -817,8 +822,10 @@ class Component extends DCLogic {  state = {
         })()
       ]);
       if (!st.tripId) data.trip = data.openTrips[0] || null;
+      if (!current()) return;
       this.setState({ data: data, loading: false, offline: false });
     } catch (e) {
+      if (!current()) return;
       this.setState({ loading: false });
       this.fail(e);
     }
@@ -831,9 +838,12 @@ class Component extends DCLogic {  state = {
     const self = this;
     if (!on) return DLT.stopPolling();
     DLT.startPolling(async function () {
-      if (!self.state.tripId) return;
-      const map = await DLT.trips.seatMap(self.state.tripId);
+      const tripId = self.state.tripId;
+      if (!tripId || self.state.busy) return;
+      const selectionVersion=self._selectionVersion;
+      const map = await DLT.trips.seatMap(tripId);
       self.setState(function (s) {
+        if (s.tripId !== tripId || s.busy || self._selectionVersion!==selectionVersion) return null;
         return { data: Object.assign({}, s.data, { seatRows: map.rows || [], held: map.held || [] }) };
       });
     }, 5000);
@@ -915,6 +925,7 @@ class Component extends DCLogic {  state = {
   }
   pickTrip = async (trip) => {
     try {
+      if (this._paymentInFlight) return;
       if (!trip.bookable) {
         const me = DLT.auth.current();
         if (!me) { location.href = './DLT Account.dc.html?next=book'; return; }
@@ -927,7 +938,8 @@ class Component extends DCLogic {  state = {
       if (me && me.role !== 'STUDENT') {
         throw new Error('You are signed in as ' + DLT.roleLabel(me.role) + '. Sign out and use a student account to book.');
       }
-      this.setState({ tripId: trip.id, step: 'seats', pax: {}, error: null, bookingId: null, paymentId: null },
+      this.setState(s => ({ tripId: trip.id, step: 'seats', pax: {}, error: null, bookingId: null, paymentId: null,
+        busy: false, data: { ...s.data, trip, seatRows: [], held: [], booking: null } }),
         () => { this._load(); this._watchSeats(true); });
     } catch (e) { this.fail(e); }
   };
@@ -936,11 +948,16 @@ class Component extends DCLogic {  state = {
     /* §7.2 the flow may begin without an account: the SERVER holds the seat
        against this browser's guest cookie and adopts it on sign-in. Nothing is
        assumed held until the server says so. */
+    if (this._paymentInFlight || this.state.busy) return;
+    const tripId = this.state.tripId;
+    this._selectionVersion=(this._selectionVersion||0)+1;
+    this._loadRequest=(this._loadRequest||0)+1;
     const mine = (this.state.data.held || []).some(function (s) { return s.seatNumber === seatNumber; });
     if (mine) return this.removeSeat(seatNumber);
     this.setState({ busy: true, error: null });
     try {
-      await DLT.seats.hold(this.state.tripId, seatNumber);
+      await DLT.seats.hold(tripId, seatNumber);
+      if (this.state.tripId !== tripId) return;
       if (this._orphanPax && this._orphanPax.length) {
         const d = this._orphanPax.shift();
         this.setState(function (s) {
@@ -951,12 +968,14 @@ class Component extends DCLogic {  state = {
       this.setState({ busy: false, error: null });
       await this._load({ quiet: true });
     } catch (e) {
+      if (this.state.tripId !== tripId) return;
       if (e.isConflict) {
         /* Another device won the race. A 409 means the map on screen is stale,
            so refresh it and say plainly what happened. */
         await this._load({ quiet: true });
+        if (this.state.tripId !== tripId) return;
         return this.setState({ busy: false,
-          error: 'Seat ' + seatNumber + ' was just taken by someone else. The seat map has been refreshed.' });
+          error: 'Availability changed. Please choose the passenger count again.' });
       }
       this.fail(e);
     }
@@ -965,10 +984,16 @@ class Component extends DCLogic {  state = {
   /* §13.2 a seat the student takes off the booking is not an expired hold, and
      must never be reported as one. The server returns RELEASED_BY_STUDENT. */
   removeSeat = async (seatNumber) => {
+    if (this._paymentInFlight || this.state.busy) return;
+    const tripId = this.state.tripId;
+    this._selectionVersion=(this._selectionVersion||0)+1;
+    this._loadRequest=(this._loadRequest||0)+1;
     this.setState({ busy: true, error: null });
     try {
-      await DLT.seats.release(this.state.tripId, seatNumber);
+      await DLT.seats.release(tripId, seatNumber);
+      if (this.state.tripId !== tripId) return;
       await this._load({ quiet: true });
+      if (this.state.tripId !== tripId) return;
       const left = (this.state.data.held || []).length;
       this.setState(function (s) {
         const pax = Object.assign({}, s.pax);
@@ -976,9 +1001,10 @@ class Component extends DCLogic {  state = {
         return left
           ? { pax: pax, error: null, busy: false }
           : { pax: pax, error: null, busy: false, step: 'seats', bookingId: null, paymentId: null,
-              notice: 'Seat ' + seatNumber + ' removed. Nothing has been charged - pick the seats you want.' };
+              notice: 'Passenger removed. Nothing has been charged - pick the seats you want.' };
       });
     } catch (e) {
+      if (this.state.tripId !== tripId) return;
       /* The server refuses to free a seat that the booking already started still
          owns, because releasing it would leave that booking payable but
          seatless - which can only ever end in a refund. That refusal is correct,
@@ -987,26 +1013,23 @@ class Component extends DCLogic {  state = {
          sentence and no way forward. */
       if (e.isConflict) {
         await this._load({ quiet: true });
+        if (this.state.tripId !== tripId) return;
         return this.setState({ busy: false,
-          error: 'Seat ' + seatNumber + ' is part of the booking you have already started. '
-               + 'Choose "Change seats" to start the selection again - nothing has been charged.' });
+          error: 'This passenger is part of the booking you have already started. '
+               + 'Choose "Change passengers" to start the selection again - nothing has been charged.' });
       }
       this.fail(e);
     }
   };
 
-  /* 019: release_all_held deliberately SKIPS seats a live pending booking owns,
-     so releasing holds is no longer enough to free them. The booking itself has
-     to go. It is unpaid, so cancelling raises no refund - cancellationQuote
-     returns 0 - and release_booking_seats returns the seats properly, clearing
-     booking_id with them. Fire-and-forget, like the releaseMine it accompanies:
-     a booking that is already gone is not an error worth stopping the student
-     for. */
-  _discardBooking = async (bookingId) => {
+  /* Navigation cleanup may discard only an unpaid pending booking. The server
+     locks and checks payment status, so a stale page cannot cancel a paid ticket.
+     Clear only this attempt's idempotency key before starting a new selection. */
+  _discardBooking = async (bookingId, scope) => {
     if (!bookingId) return;
-    try { await DLT.bookings.cancel(bookingId, 'Changed seats before paying'); }
+    try { await DLT.bookings.discard(bookingId); }
     catch (e) { /* already cancelled, expired, or never created - nothing owed */ }
-    try { DLT.bookings.clearAttempt(this.state.tripId); } catch (e) {}
+    try { if (scope) DLT.bookings.clearAttempt(scope); } catch (e) {}
   };
 
   setField = (seat, key, v) => this.setState(s => ({
@@ -1093,6 +1116,9 @@ class Component extends DCLogic {  state = {
     const st = this.state;
     this.setState({ busy: true, error: null });
     try {
+      const selectedTripId = st.tripId;
+      const selectedScope = st.tripId + ':' + (this._attempt || 0);
+      const sameDeparture = () => this.state.tripId === selectedTripId;
       let bookingId = st.bookingId;
       if (!bookingId) {
         const held = this.heldSeats();
@@ -1105,6 +1131,7 @@ class Component extends DCLogic {  state = {
           scope: st.tripId + ':' + (this._attempt || 0),
         });
         bookingId = booking.id;
+        if (!sameDeparture()) { await this._discardBooking(bookingId, selectedScope); return; }
         this.setState({ bookingId: bookingId });
       }
 
@@ -1123,6 +1150,7 @@ class Component extends DCLogic {  state = {
         throw e;
       }
 
+      if (!sameDeparture()) { await this._discardBooking(bookingId, selectedScope); return; }
       this.setState({ bookingId: bookingId, paymentId: intent.paymentId,
         orderId: intent.providerOrderId, step: 'checkout', reprice: null });
 
@@ -1161,7 +1189,7 @@ class Component extends DCLogic {  state = {
     } catch (e) {
       this.fail(e);
     }
-    finally { this._paymentInFlight = false; }
+    finally { this._paymentInFlight = false; this.setState({ busy: false }); }
   };
   acceptReprice = async () => {
     try {
@@ -1177,7 +1205,7 @@ class Component extends DCLogic {  state = {
       const entry = (this.state.data.waits || []).filter(w => w.id === entryId)[0];
       this.setState({ tripId: entry ? entry.tripId : this.state.tripId, step: 'seats',
         waitlist: null, error: null, bookingId: null, paymentId: null,
-        notice: 'Seat ' + seat.seatNumber + ' is held for you. Add passenger details to confirm.' },
+        notice: 'Your place is held for you. Add passenger details to confirm.' },
         () => { this._load(); this._watchSeats(true); });
     } catch (e) { this.fail(e); }
   };
@@ -1265,7 +1293,7 @@ class Component extends DCLogic {  state = {
         : t.status === 'BOOKING_CLOSED' ? 'Booking closed'
         : t.available <= 8 ? t.available + ' seats left' : 'Seats available',
       availFg: t.soldOut ? '#5F6560' : t.available <= 8 ? '#8A5A0E' : '#3D423C',
-      cta: t.soldOut ? 'Join waitlist' : t.status === 'BOOKING_CLOSED' ? 'Closed' : 'Select seats',
+      cta: t.soldOut ? 'Join waitlist' : t.status === 'BOOKING_CLOSED' ? 'Closed' : 'Book tickets',
       ctaBg: t.bookable ? '#0E1014' : 'transparent',
       ctaFg: t.bookable ? '#F7F5F0' : '#0E1014',
       ctaBd: '#0E1014',
@@ -1349,9 +1377,9 @@ class Component extends DCLogic {  state = {
     if (step === 'trips') {
       primaryHint = 'Pick a departure above to start. Nothing is charged until you pay.';
     } else if (step === 'seats') {
-      primaryLabel = n ? 'Continue to passengers' : 'Select at least one seat';
-      primaryDisabled = !n;
-      primaryHint = n ? 'Your seats are held for 10 minutes.' : 'Tap a seat on the map to hold it.';
+      primaryLabel = n ? 'Continue to passenger details' : 'Select a place for each passenger';
+      primaryDisabled = !n || st.busy;
+      primaryHint = n ? 'Your places are reserved for 10 minutes. Seating is first come, first served.' : 'Select up to five places on the diagram. Physical seating is not assigned.';
       onPrimary = this.toPassengers;
     } else if (step === 'passengers') {
       primaryLabel = 'Review booking';
@@ -1385,7 +1413,7 @@ class Component extends DCLogic {  state = {
       primaryLabel = 'Retry payment'; primaryDisabled = false; onPrimary = this.retryPay;
       primaryHint = 'Nothing was charged.';
     } else if (step === 'expired') {
-      primaryLabel = 'Choose seats again'; primaryDisabled = false;
+      primaryLabel = 'Choose passengers again'; primaryDisabled = false;
       primaryHint = 'The 10-minute hold ran out.';
       onPrimary = () => this.setState({ step: 'seats', bookingId: null, paymentId: null, error: null });
     } else if (step === 'done') {
@@ -1546,8 +1574,8 @@ class Component extends DCLogic {  state = {
       },
       waitlistCopy: waitOffer
         ? (waitOffer.status === 'CLAIMED'
-          ? 'Seat ' + waitOffer.seatNumber + ' is held for you. Finish the booking before the window closes or it passes to the next student.'
-          : 'Seat ' + waitOffer.seatNumber + ' on the ' + (waitTrip ? DLT.fmt.when(waitTrip.departureAt) : 'departure') +
+          ? 'Your place is held for you. Finish the booking before the window closes or it passes to the next student.'
+          : 'Your place on the ' + (waitTrip ? DLT.fmt.when(waitTrip.departureAt) : 'departure') +
             ' is reserved for you for 30 minutes. Nobody else can take it while the window is open.')
         : waitEntry
           ? 'You are on the list. If a seat is released it is reserved for you and you get 30 minutes to claim and pay for it before it passes on.'
@@ -1579,38 +1607,46 @@ class Component extends DCLogic {  state = {
           .catch(this.fail);
       },
       backToTrips: () => {
+        if (this._paymentInFlight) return;
+        const oldScope = st.tripId + ':' + (this._attempt || 0);
+        this._attempt = (this._attempt || 0) + 1;
         this._watchSeats(false);
         const trip = st.tripId, had = st.bookingId;
         this.setState({ step: 'trips', tripId: null, error: null }, () => {
           /* Discard first: releaseMine cannot free seats this booking owns. */
-          this._discardBooking(had).then(() => {
+          this._discardBooking(had, oldScope).then(() => {
             if (trip) DLT.seats.releaseMine(trip).catch(() => {});
             this._load({ quiet: true });
           });
         });
       },
-      /* "Change seats" is the control the removeSeat conflict now points at, so
+      /* "Change passengers" is the control the removeSeat conflict now points at, so
          it has to genuinely release the seats rather than just forget the
          booking id locally. Dropping the id alone left a PAYMENT_PENDING
          booking still holding them, and the student met the same refusal again
          on the next tap - and, per 018, a refusal to rebook those seats too. */
       editSeats: () => {
+        if (this._paymentInFlight) return;
+        const oldScope = st.tripId + ':' + (this._attempt || 0);
+        this._attempt = (this._attempt || 0) + 1;
         const had = st.bookingId;
         this.setState({ step: 'seats', bookingId: null, paymentId: null, error: null },
-          () => { this._discardBooking(had).then(() => this._load({ quiet: true })); });
+          () => { this._discardBooking(had, oldScope).then(() => this._load({ quiet: true })); });
       },
-      editPax: () => this.setState({ step: 'passengers', error: null }),
+      editPax: () => { if (!this._paymentInFlight) this.setState({ step: 'passengers', error: null }); },
       /* Nothing to clear in the page any more: the hold lives on the server and
          the guest cookie is HttpOnly. Starting over just resets local view state
          and reloads from the server. */
       restart: () => {
+        if (this._paymentInFlight) return;
+        const oldScope = st.tripId + ':' + (this._attempt || 0);
         this._watchSeats(false);
         const had = st.bookingId;
         this._attempt = (this._attempt || 0) + 1;
         this.setState({ step: 'trips', tripId: null, pax: {}, touched: false,
           bookingId: null, paymentId: null, orderId: null, error: null, notice: null,
           reprice: null, waitlist: null },
-          () => { this._discardBooking(had).then(() => this._load()); });
+          () => { this._discardBooking(had, oldScope).then(() => this._load()); });
       },
     };
   }

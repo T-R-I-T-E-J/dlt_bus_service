@@ -309,34 +309,31 @@ const auth = {
 const pad = (n) => String(n).padStart(2, '0');
 const asDate = (v) => (v instanceof Date ? v : new Date(v));
 
+const SERVICE_TIME_ZONE = 'Asia/Kolkata';
+const indiaDate = new Intl.DateTimeFormat('en-IN', { timeZone: SERVICE_TIME_ZONE, weekday: 'short', day: 'numeric', month: 'short' });
+const indiaTime = new Intl.DateTimeFormat('en-IN', { timeZone: SERVICE_TIME_ZONE, hour: 'numeric', minute: '2-digit', hour12: true });
+const indiaDay = new Intl.DateTimeFormat('en-CA', { timeZone: SERVICE_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
+const validDate = v => { const d = asDate(v); return Number.isNaN(d.getTime()) ? null : d; };
+const dayNumber = v => {
+  const parts = Object.fromEntries(indiaDay.formatToParts(v).map(p => [p.type, p.value]));
+  return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)) / 86400000;
+};
 const fmt = {
   time(v) {
-    if (!v) return '—';
-    const d = asDate(v);
-    let h = d.getHours(); const m = pad(d.getMinutes());
-    const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12;
-    return h + ':' + m + ' ' + ap;
+    const d = v && validDate(v);
+    return d ? indiaTime.format(d).replace(/\s+/g, ' ').toLowerCase() : '—';
   },
-  date(v) {
-    if (!v) return '—';
-    const d = asDate(v);
-    return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-  },
+  date(v) { const d = v && validDate(v); return d ? indiaDate.format(d) : '—'; },
   when(v) { return v ? fmt.date(v) + ' · ' + fmt.time(v) : '—'; },
-  /** ms → m:ss, for the hold clock. The VALUE comes from the server's
-   *  holdExpiresAt; this only renders it. */
   countdown(ms) {
     const total = Math.max(0, Math.floor(Number(ms || 0) / 1000));
     return Math.floor(total / 60) + ':' + pad(total % 60);
   },
-  /** Ported verbatim from dlt-store: pure formatting, no authority. */
   dateTime(v) { return v ? fmt.date(v) + ' ' + fmt.time(v) : '—'; },
-  /** "today" / "tomorrow" / "in 3 days" / "2 days ago", from a server timestamp. */
   relativeDay(v) {
-    if (!v) return '—';
-    const d = asDate(v), t = new Date();
-    d.setHours(0, 0, 0, 0); t.setHours(0, 0, 0, 0);
-    const n = Math.round((d - t) / 86400000);
+    const d = v && validDate(v);
+    if (!d) return '—';
+    const n = dayNumber(d) - dayNumber(new Date());
     return n === 0 ? 'today' : n === 1 ? 'tomorrow'
       : n > 1 ? 'in ' + n + ' days' : Math.abs(n) + ' days ago';
   },
@@ -422,6 +419,7 @@ const bookings = {
   acceptPrice: (id) => POST(`/bookings/${id}/accept-price`).then((r) => r.booking),
   cancellationQuote: (id) => GET(`/bookings/${id}/cancellation-quote`),
   cancel: (id, reason) => POST(`/bookings/${id}/cancel`, { reason }),
+  discard: (id) => POST(`/bookings/${id}/discard`, {}),
 
   /** UX-only. The server is authoritative. */
   validatePassenger,

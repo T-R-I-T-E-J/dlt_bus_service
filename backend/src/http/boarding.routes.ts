@@ -14,10 +14,17 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import * as boarding from '../domain/boarding.ts';
+import { AppError } from '../domain/errors.ts';
 import { requireAuth, requirePermission } from './auth.routes.ts';
 
 const router = Router();
 const UUID = z.string().uuid();
+const tripContext = (req: any) => {
+  const id = UUID.nullish().parse(req.body?.tripId);
+  if (req.session.role !== 'BOARDING_STAFF' && !id)
+    throw new AppError('VALIDATION', 'Choose the departure before boarding or changing a passenger.');
+  return id;
+};
 /* The canonical Actor (domain/authz.ts) is { userId, role, ip?, guestToken? }.
  * The boarding domain reads only userId and role; it never referenced `name`,
  * which was not on the type. */
@@ -46,12 +53,12 @@ router.post('/boarding/scan', requireAuth, requirePermission('boarding.scan'), s
          * staff member typed. The server decides what it is. */
         code: z.string().min(1).max(256),
         /* Ignored entirely for BOARDING_STAFF, whose trip comes from their
-         * assignment (F-19). Honoured for ops, who may scope a desk scan. */
+         * assignment (F-19). Required for operations, who must select the departure being boarded. */
         tripId: UUID.nullish(),
         /* Set on the second call, after a CHOOSE. */
         passengerId: UUID.nullish(),
       }).parse(req.body);
-      res.json(await boarding.scan(body, actorOf(req)));
+      res.json(await boarding.scan({ ...body, tripId: tripContext(req) }, actorOf(req)));
     } catch (e) { next(e); }
   });
 
@@ -61,7 +68,7 @@ router.post('/boarding/passengers/:id/manual', requireAuth, requirePermission('b
   async (req, res, next) => {
     try {
       const reason = z.string().min(4).max(500).parse(req.body?.reason);
-      res.json(await boarding.manualBoard(UUID.parse(req.params.id), reason, actorOf(req)));
+      res.json(await boarding.manualBoard(UUID.parse(req.params.id), reason, actorOf(req), tripContext(req)));
     } catch (e) { next(e); }
   });
 
@@ -69,7 +76,7 @@ router.post('/boarding/passengers/:id/deny', requireAuth, requirePermission('boa
   async (req, res, next) => {
     try {
       const reason = z.string().min(4).max(500).parse(req.body?.reason);
-      res.json(await boarding.denyBoarding(UUID.parse(req.params.id), reason, actorOf(req)));
+      res.json(await boarding.denyBoarding(UUID.parse(req.params.id), reason, actorOf(req), tripContext(req)));
     } catch (e) { next(e); }
   });
 
@@ -77,7 +84,7 @@ router.post('/boarding/passengers/:id/no-show', requireAuth, requirePermission('
   async (req, res, next) => {
     try {
       const reason = z.string().min(4).max(500).parse(req.body?.reason);
-      res.json(await boarding.confirmNoShow(UUID.parse(req.params.id), reason, actorOf(req)));
+      res.json(await boarding.confirmNoShow(UUID.parse(req.params.id), reason, actorOf(req), tripContext(req)));
     } catch (e) { next(e); }
   });
 

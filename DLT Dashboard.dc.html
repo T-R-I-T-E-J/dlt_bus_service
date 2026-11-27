@@ -585,7 +585,8 @@ class Component extends DCLogic {
       label(k, x, y); value(v, x, y + 30, 19);
     });
     g.fillStyle = '#5F6560'; g.font = '500 12px "Martian Mono", monospace';
-    g.fillText('TOKEN ' + p.qrToken, 44, H - 34);
+    g.fillText('ALL DEPARTURE TIMES ARE IST (INDIA)', 44, H - 50);
+    g.fillText('TOKEN ' + p.qrToken, 44, H - 28);
 
     const blob = await new Promise((resolve, reject) => cv.toBlob(
       value => value ? resolve(value) : reject(new Error('The ticket image could not be saved.')), 'image/png'));
@@ -948,7 +949,7 @@ class Component extends DCLogic {
       ] : [],
       passNote: p && p.passStatus !== 'VALID'
         ? 'Cancelled passes stay visible for your records but fail at the scanner.'
-        : 'Download this ticket to Files or Photos before travelling. Show its QR offline at the door. One scan per passenger; cancelled passes remain invalid.',
+        : 'All departure times are IST (India). Download this ticket to Files or Photos before travelling. Show its QR offline at the door. One scan per passenger; cancelled passes remain invalid.',
       qrRef: el => { this._cv = el; if (el) this._paint(); },
       printPass: () => print(),
       savePng: this.savePng,

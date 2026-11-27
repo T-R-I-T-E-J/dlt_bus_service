@@ -50,3 +50,13 @@ test('manifest call links contain validated Indian numbers and distinguish the b
 test('boarding-only accounts do not get a Call control even if a malformed response includes a number',()=>{
  assert.equal(manifestView('BOARDING_STAFF',[{phone:'9876543210'}]).boardList[0].canCall,false);
 });
+
+test('operations creates a 1 pm Indian departure even on a device set to another timezone',async()=>{
+ const old=process.env.TZ;
+ try{for(const zone of ['UTC','America/Los_Angeles','Asia/Kolkata']){
+  process.env.TZ=zone;let saved;
+  const p=admin({can:()=>true,fmt:DLT.fmt,fare:DLT.fare,roleLabel:DLT.roleLabel,admin:{saveTrip:async v=>{saved=v;return {id:'new-trip'};},validateDraft:async()=>({})}});
+  p.state.ready=true;p.state.ntDate='2026-11-29';p.state.ntTime='13:00';p.state.ntVehicle='vehicle';p.state.ntRoute='route';p._reloadTrips=async()=>{};
+  await p.renderVals().createDraft();assert.equal(saved.departureAt,'2026-11-29T07:30:00.000Z',zone);
+ }}finally{if(old===undefined)delete process.env.TZ;else process.env.TZ=old;}
+});

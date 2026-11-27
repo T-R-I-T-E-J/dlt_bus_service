@@ -153,7 +153,7 @@ describe('HTTP integration — real Express, real middleware, real fetch', () =>
      * assertion below fails immediately, at the FIRST line, if that regresses
      * — a malformed/empty req.body or an undefined req.session breaks the
      * very first call, not some edge case three steps in. */
-    test('POST /bookings authenticates the real cookie and reads the real JSON body', async () => {
+    for (const action of ['cancel','discard']) test(`POST /bookings authenticates the cookie, reads JSON and permits unpaid ${action}`, async () => {
       const jar = new Jar();
       await call(jar, 'POST', '/api/auth/signup', STUDENT);
       await call(jar, 'POST', '/api/auth/login', { email: STUDENT.email, password: STUDENT.password });
@@ -189,7 +189,7 @@ describe('HTTP integration — real Express, real middleware, real fetch', () =>
       assert.notEqual(order.status, 401, 'the real cookie must authenticate this route');
 
       /* cancellation, same booking, same real-HTTP path */
-      const cancel = await call(jar, 'POST', `/api/bookings/${bookingId}/cancel`, { reason: 'HTTP integration test' });
+      const cancel = await call(jar, 'POST', `/api/bookings/${bookingId}/${action}`, { reason: 'HTTP integration test' });
       assert.equal(cancel.status, 200, JSON.stringify(cancel.body));
     });
 

@@ -1,3 +1,5 @@
+import {createBooking,withBookingCodeRetry} from '../src/domain/payments.ts';
+import {close as closeAppPool} from '../src/db/index.ts';
 /* DLT · test/seats.concurrency.test.ts
  *
  * The tests that matter most in the whole backend, and the ones that cannot be
@@ -83,7 +85,7 @@ before(async () => {
   const { rows: [v] } = await q('SHOW server_version_num');
   assert.ok(Number(v.server_version_num) >= 150000, 'PostgreSQL 15+ required');
 });
-after(async () => { await pool.end(); });
+after(async () => { await pool.end(); await closeAppPool(); });
 beforeEach(seed);
 
 /* ================================================================= holds */
@@ -598,4 +600,34 @@ describe('trip state', () => {
     await q('SELECT hold_seat($1,$2,$3::uuid,NULL)', [TRIP, '2B', ALICE]);
     await assert.rejects(q('SELECT materialise_trip_seats($1)', [TRIP]), /already held or booked/);
   });
+});
+
+describe('full coach contention',()=>{
+ test('200 competing students can settle at most the 44 distinct available seats',async()=>{
+  const inventory=(await q("SELECT seat_number FROM trip_seats WHERE trip_id=$1 AND status='AVAILABLE' ORDER BY seat_number",[TRIP])).rows;
+  assert.equal(inventory.length,44);
+  const people=(await q("INSERT INTO users(email,name,role,phone) SELECT 'capacity-'||n||'@example.invalid','Capacity Student '||n,'STUDENT','9876543210' FROM generate_series(1,200) n RETURNING id")).rows;
+  const attempts=await Promise.all(people.map(async(p,i)=>{
+   const seat=inventory[i%inventory.length].seat_number;
+   try{await q('SELECT * FROM hold_seat($1,$2,$3::uuid,NULL)',[TRIP,seat,p.id]);return {user:p.id,seat};}catch(e){assert.equal((e as any).code,'23505');return null;}
+  }));
+  const winners=attempts.filter((p):p is {user:string;seat:string}=>p!==null);
+  assert.equal(winners.length,44);assert.equal(new Set(winners.map(p=>p.seat)).size,44);
+  await Promise.all(winners.map(async(p,i)=>{
+   const payload=[{seatNumber:p.seat,name:'Capacity Passenger',studentId:'CAP'+i,phone:'9876543210'}];
+   const b=await createBooking({tripId:TRIP,holder:{userId:p.user},contactPhone:'9876543210',passengers:payload,idempotencyKey:'capacity-'+i});
+   const payment=(await q("INSERT INTO payments(booking_id,amount,status,provider,provider_payment_id) VALUES($1,$2,'SUCCESS','RAZORPAY',$3) RETURNING id",[b.id,b.totalAmount,'pay_capacity_'+i])).rows[0];
+   await q('SELECT * FROM settle_booking($1,$2)',[b.id,payment.id]);
+  }));
+  assert.equal((await q("SELECT count(*)::int n FROM trip_seats WHERE trip_id=$1 AND status='BOOKED'",[TRIP])).rows[0].n,44);
+  assert.equal((await q("SELECT count(*)::int n FROM boarding_passes WHERE trip_id=$1 AND status='VALID'",[TRIP])).rows[0].n,44);
+  assert.equal((await q("SELECT count(*)::int n FROM (SELECT bp.trip_seat_id FROM booking_passengers bp JOIN bookings b ON b.id=bp.booking_id WHERE b.trip_id=$1 AND b.status='CONFIRMED' GROUP BY bp.trip_seat_id HAVING count(*)>1) d",[TRIP])).rows[0].n,0);
+ });
+});
+
+test('booking-code collisions retry, while real seat conflicts do not',async()=>{
+ let calls=0;
+ const result=await withBookingCodeRetry(async()=>{if(++calls<3)throw {code:'23505',constraint:'bookings_boarding_code_key'};return 'created';});
+ assert.equal(result,'created');assert.equal(calls,3);
+ calls=0;await assert.rejects(withBookingCodeRetry(async()=>{calls++;throw {code:'23505',constraint:'some_seat_unique_constraint'};}));assert.equal(calls,1);
 });

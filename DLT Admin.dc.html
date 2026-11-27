@@ -1452,7 +1452,7 @@ class Component extends DCLogic {
 
   _go = (section) => {
     if (section !== 'Boarding') this._stopCamera();
-    this.setState({ section, toast: null, cameraOn: section === 'Boarding' && this.state.cameraOn });
+    this.setState({ section, toast: null, prompt: null, reasonValue: '', cameraOn: section === 'Boarding' && this.state.cameraOn });
     this._loadSection(section);
   };
 
@@ -1699,6 +1699,7 @@ class Component extends DCLogic {
     const me = DLT.auth.current();
     const tripId = me ? this._tripIdFor(me, this.state) : null;
     try {
+      if (!tripId) throw new Error('Select the departure before scanning a ticket.');
       const res = await DLT.boarding.scan({ code, tripId, passengerId });
       const currentUser = DLT.auth.current();
       if (!currentUser || this._tripIdFor(currentUser, this.state) !== tripId) return;
@@ -1839,8 +1840,8 @@ class Component extends DCLogic {
     /* ---------- reports ---------- */
     const repFilter = {
       tripId: st.repTripId || null,
-      from: st.repFrom ? new Date(st.repFrom + 'T00:00:00').toISOString() : null,
-      to: st.repTo ? new Date(st.repTo + 'T23:59:59').toISOString() : null,
+      from: st.repFrom ? new Date(st.repFrom + 'T00:00:00+05:30').toISOString() : null,
+      to: st.repTo ? new Date(st.repTo + 'T23:59:59+05:30').toISOString() : null,
     };
     /* occupancy/manifest/payments/posttrip (dlt-store.js kinds) have no
        server-side counterpart — see the report. 'trips' (real) covers most
@@ -2268,7 +2269,7 @@ class Component extends DCLogic {
           if (!vid) throw new Error('Add a vehicle before creating a trip');
           const rid = st.ntRoute || (routes[0] || {}).id;
           if (!rid) throw new Error('No route is configured');
-          const when = new Date(st.ntDate + 'T' + st.ntTime + ':00');
+          const when = new Date(st.ntDate + 'T' + st.ntTime + ':00+05:30');
           if (isNaN(when.getTime())) throw new Error('Choose a date and time');
           const tr = await DLT.admin.saveTrip({ routeId: rid, vehicleId: vid, departureAt: when.toISOString(), price: Number(st.ntPrice) });
           const validation = await DLT.admin.validateDraft(tr.id);
@@ -2514,7 +2515,7 @@ class Component extends DCLogic {
 
       /* boarding */
       boardTripLabel: boardTripInfo
-        ? 'Trip ' + DLT.fmt.when(boardTripInfo.departureAt) + ' · ' + (boardTripInfo.vehicle || '') + ' · ' + String(boardTripInfo.status).replace('_', ' ')
+        ? 'Trip ' + DLT.fmt.when(boardTripInfo.departureAt) + ' IST · ' + (boardTripInfo.vehicle || '') + ' · ' + String(boardTripInfo.status).replace('_', ' ')
         : (isStaff ? 'You are not assigned to a departure — operations puts staff on the door'
           : 'No trip selected'),
       canPickTrip: !isStaff,
@@ -2527,7 +2528,7 @@ class Component extends DCLogic {
       boardTripId: tripId || '',
       boardTripOptions: allTrips.filter(t => ['OPEN', 'BOOKING_CLOSED', 'BOARDING', 'DEPARTED'].indexOf(t.status) >= 0)
         .map(t => ({ id: t.id, label: DLT.fmt.when(t.departureAt) + ' · ' + t.status.replace('_', ' ') })),
-      onBoardTrip: e => { this._stopCamera(); this._patch({ manifest: null, boardingEvents: [] }); this.setState({ boardTripId: e.target.value, scan: null, choose: null }, () => this._loadBoarding()); },
+      onBoardTrip: e => { this._stopCamera(); this._patch({ manifest: null, boardingEvents: [] }); this.setState({ boardTripId: e.target.value, scan: null, choose: null, manualToken: '', prompt: null, reasonValue: '' }, () => this._loadBoarding()); },
       boardedCount, manifestCount: manifest.length,
       pendingCount: manifest.filter(x => x.boardingStatus === 'NOT_BOARDED').length,
       scanResult: scan ? scan.result : 'Ready to scan',

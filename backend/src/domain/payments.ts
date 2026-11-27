@@ -42,6 +42,18 @@ async function roleOf(userId: string): Promise<string> {
   return u.role;
 }
 
+// Human-readable codes use a small random namespace. Retry only their unique
+// constraints after a full rollback; seat ownership conflicts must still fail.
+export async function withBookingCodeRetry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt=0;;attempt++) {
+    try { return await operation(); }
+    catch(e: any) {
+      if (e.code !== '23505' || !['bookings_code_key','bookings_boarding_code_key'].includes(e.constraint)) throw e;
+      if (attempt>=7) throw new AppError('CONFLICT', 'Could not allocate a booking reference. Please try again.');
+    }
+  }
+}
+
 /* ---------------------------------------------------------------- creation */
 
 export interface PassengerInput { seatNumber: string; name: string; studentId: string; phone?: string }
@@ -54,7 +66,7 @@ export async function createBooking(input: {
 }) {
   validatePassengers(input.passengers, input.contactPhone);
 
-  return tx(async (c) => {
+  return withBookingCodeRetry(() => tx(async (c) => {
     const actor: AnyActor = input.holder.userId
       ? { userId: input.holder.userId, role: 'STUDENT' }
       : { guestToken: input.holder.guestToken! };
@@ -72,12 +84,13 @@ export async function createBooking(input: {
       await completeIdempotency(c, input.idempotencyKey, 'POST /bookings', view);
       return view;
     } catch (e: any) {
+      if (e.code === '23505' && ['bookings_code_key','bookings_boarding_code_key'].includes(e.constraint)) throw e;
       if (e.code === '23505' && /hold on seat/.test(e.message ?? ''))
         throw new AppError('CONFLICT', e.message);
       if (e.code === '23514' || e.code === '23505') throw new AppError('CONFLICT', e.message);
       throw e;
     }
-  });
+  }));
 }
 
 function validatePassengers(pax: PassengerInput[], contactPhone: string) {
@@ -88,9 +101,9 @@ function validatePassengers(pax: PassengerInput[], contactPhone: string) {
     throw new AppError('VALIDATION', 'Enter a valid Indian mobile number for the booking contact');
   for (const p of pax) {
     if (!p.name || p.name.trim().length < 3)
-      throw new AppError('VALIDATION', `Enter a full name for seat ${p.seatNumber}`);
+      throw new AppError('VALIDATION', 'Enter a full name for every passenger');
     if (!p.studentId || !/^[A-Za-z0-9]{4,20}$/.test(p.studentId))
-      throw new AppError('VALIDATION', `Enter a valid student ID for seat ${p.seatNumber}`);
+      throw new AppError('VALIDATION', 'Enter a valid student ID for every passenger');
   }
 }
 
@@ -811,7 +824,7 @@ export async function cancellationQuote(bookingId: string, actor: AnyActor) {
   };
 }
 
-export async function cancelBooking(bookingId: string, actor: Actor, reason?: string) {
+export async function cancelBooking(bookingId: string, actor: Actor, reason?: string, unpaidOnly = false) {
   const actorId = actor.userId;
   return tx(async (c) => {
     const { rows: [candidate] } = await c.query(
@@ -822,6 +835,12 @@ export async function cancelBooking(bookingId: string, actor: Actor, reason?: st
      * so the check and the mutation it guards are one transaction. */
     const b = await bookingFor(actor, bookingId,
       { permission: 'booking.cancel', forUpdate: true, client: c });
+    if (unpaidOnly) {
+      const { rows: [received] } = await c.query(
+        "SELECT EXISTS(SELECT 1 FROM payments WHERE booking_id=$1 AND status IN ('SUCCESS','NOT_APPLICABLE')) AS paid", [bookingId]);
+      if (b.status !== 'PAYMENT_PENDING' || received.paid)
+        throw new AppError('CONFLICT', 'This booking is already paid or being processed. Manage it explicitly from My Trips.');
+    }
     if (['CANCELLED_BY_STUDENT', 'CANCELLED_BY_DLT'].includes(b.status))
       throw new AppError('CONFLICT', 'That booking is already cancelled');
 
@@ -909,7 +928,7 @@ export async function createManualBooking(input: {
     throw new AppError('VALIDATION', 'A reason is required for a manual booking');
   validatePassengers(input.passengers, input.contactPhone);
 
-  return tx(async (c) => {
+  return withBookingCodeRetry(() => tx(async (c) => {
     if (input.idempotencyKey) {
       const prior = await claimIdempotency(c, input.idempotencyKey, 'booking.manual', input, { userId: input.actorId, role: 'SUPER_ADMIN' });
       if (prior) return prior;
@@ -961,7 +980,7 @@ export async function createManualBooking(input: {
     const result = await bookingView(c, b.id);
     if (input.idempotencyKey) await completeIdempotency(c, input.idempotencyKey, 'booking.manual', result);
     return result;
-  });
+  }));
 }
 
 /* ---------------------------------------------------------------- idempotency */

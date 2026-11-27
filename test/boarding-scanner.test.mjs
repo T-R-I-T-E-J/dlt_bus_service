@@ -50,6 +50,7 @@ test('repeated scan clicks send only one in-flight validation request', async ()
   const pending = new Promise(r => { resolve = r; });
   const { page } = scanner({ scan: () => { calls++; return pending; } });
   page._loadBoarding = async () => {};
+  page.state.data.scannerTrip = { assigned: true, trip: { id: 'assigned-trip' } };
   const first = page._doScan('token');
   const second = page._doScan('token');
   assert.equal(calls, 1);

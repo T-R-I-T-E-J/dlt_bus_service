@@ -33,6 +33,7 @@ export type ScanResult = 'VALID' | 'INVALID' | 'ALREADY BOARDED' | 'DENIED' | 'N
 export interface ScanOutcome {
   result: ScanResult;
   detail: string;
+  trip?: { id: string; departureAt: Date | string; origin: string; destination: string };
   passenger?: {
     id: string; name: string; seatNumber: string; seatType: string;
     studentId: string; bookingCode: string; boardedAt?: string;
@@ -147,6 +148,23 @@ async function resolveIdentifier(
 
 /* ---------------------------------------------------------------- scan */
 
+const indiaDeparture = (value: Date | string) => new Intl.DateTimeFormat('en-IN', {
+  timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short',
+  hour: 'numeric', minute: '2-digit', hour12: true,
+}).format(new Date(value)).replace(/\s+/g, ' ') + ' IST';
+
+async function boardingTrip(c: PoolClient, id: string) {
+  const { rows: [trip] } = await c.query(
+    `SELECT t.id, t.departure_at AS "departureAt", r.origin, r.destination
+       FROM trips t JOIN routes r ON r.id=t.route_id WHERE t.id=$1`, [id]);
+  return trip;
+}
+async function wrongTripDetail(c: PoolClient, ticketTripId: string, selectedTripId: string) {
+  const trip = await boardingTrip(c, ticketTripId);
+  const selected = await boardingTrip(c, selectedTripId);
+  return { trip, detail: `This ticket is for ${indiaDeparture(trip.departureAt)}, not the trip you are boarding (${selected ? indiaDeparture(selected.departureAt) : 'selected departure'}). No boarding recorded.` };
+}
+
 export async function scan(
   input: { code: string; tripId?: string | null; passengerId?: string | null },
   actor: Actor
@@ -170,6 +188,12 @@ export async function scan(
     /* CHOOSE is a question, not an outcome: nothing is mutated and nothing is
      * logged, because nobody has been boarded or refused yet. */
     if (r.choose) {
+      const { rows: [booking] } = await c.query('SELECT trip_id FROM bookings WHERE id=$1', [r.choose.bookingId]);
+      if (scopeTripId && booking.trip_id !== scopeTripId) {
+        await c.query('SELECT log_boarding($1,NULL,$2,$3,$4,$5,$6)',
+          [scopeTripId, actor.userId, 'INVALID', r.method, 'wrong trip', tokenPrefix]);
+        return { result: 'INVALID' as const, ...await wrongTripDetail(c, booking.trip_id, scopeTripId) };
+      }
       const { rows: pax } = await c.query(
         `SELECT bp.id, bp.name, bp.seat_number AS "seatNumber", bp.student_id AS "studentId",
                 bp.boarding_status AS "boardingStatus"
@@ -188,8 +212,13 @@ export async function scan(
       'SELECT * FROM board_by_pass($1,$2,$3::user_role,$4,$5,$6)',
       [r.passId, actor.userId, actor.role, scopeTripId, r.method, tokenPrefix]);
 
-    if (v.result !== 'VALID')
+    if (v.result !== 'VALID') {
+      if (v.reason === 'wrong trip' && scopeTripId) {
+        const { rows: [pass] } = await c.query('SELECT trip_id FROM boarding_passes WHERE id=$1', [r.passId]);
+        return { result: 'INVALID' as const, ...await wrongTripDetail(c, pass.trip_id, scopeTripId) };
+      }
       return { result: v.result as ScanResult, detail: v.detail };
+    }
 
     await audit(c, { actorId: actor.userId },
       r.method === 'CODE' ? 'boarding.code_entry' : 'boarding.scanned',
@@ -201,7 +230,8 @@ export async function scan(
               bp.student_id AS "studentId", b.code AS "bookingCode"
          FROM booking_passengers bp JOIN bookings b ON b.id = bp.booking_id
         WHERE bp.id = $1`, [v.passenger_id]);
-    return { result: 'VALID' as const, detail: v.detail,
+    const trip = await boardingTrip(c, scopeTripId || (await c.query('SELECT trip_id FROM boarding_passes WHERE id=$1', [r.passId])).rows[0].trip_id);
+    return { result: 'VALID' as const, detail: v.detail + ' · ' + indiaDeparture(trip.departureAt), trip,
       passenger: { ...p, boardedAt: new Date().toISOString() } };
   });
 }
