@@ -47,7 +47,7 @@ export class ApiError extends Error {
 /* ---------------------------------------------------------------- transport */
 
 let onUnauthenticated = null;
-/** Screens register a handler so a 401 anywhere lands the student on sign-in
+/** Screens register a handler so an expired session lands the student on sign-in
  *  once, rather than each call site inventing its own redirect. */
 export function setUnauthenticatedHandler(fn) { onUnauthenticated = fn; }
 
@@ -86,7 +86,13 @@ async function request(method, path, { body, idempotencyKey, signal } = {}) {
       (err && err.message) || 'Something went wrong. Try again.', payload);
     const ra = res.headers.get('Retry-After');
     if (ra) e._retryAfter = Number(ra);
-    if (res.status === 401 && onUnauthenticated) onUnauthenticated(e);
+    if (res.status === 401 && e.code === 'UNAUTHENTICATED') {
+      // The server has rejected the session. Drop its cached identity and
+      // permissions before any screen renders or handles the failure.
+      setMe(null);
+      notify();
+      if (onUnauthenticated) onUnauthenticated(e);
+    }
     throw e;
   }
   return payload;
@@ -303,34 +309,31 @@ const auth = {
 const pad = (n) => String(n).padStart(2, '0');
 const asDate = (v) => (v instanceof Date ? v : new Date(v));
 
+const SERVICE_TIME_ZONE = 'Asia/Kolkata';
+const indiaDate = new Intl.DateTimeFormat('en-IN', { timeZone: SERVICE_TIME_ZONE, weekday: 'short', day: 'numeric', month: 'short' });
+const indiaTime = new Intl.DateTimeFormat('en-IN', { timeZone: SERVICE_TIME_ZONE, hour: 'numeric', minute: '2-digit', hour12: true });
+const indiaDay = new Intl.DateTimeFormat('en-CA', { timeZone: SERVICE_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
+const validDate = v => { const d = asDate(v); return Number.isNaN(d.getTime()) ? null : d; };
+const dayNumber = v => {
+  const parts = Object.fromEntries(indiaDay.formatToParts(v).map(p => [p.type, p.value]));
+  return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)) / 86400000;
+};
 const fmt = {
   time(v) {
-    if (!v) return '—';
-    const d = asDate(v);
-    let h = d.getHours(); const m = pad(d.getMinutes());
-    const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12;
-    return h + ':' + m + ' ' + ap;
+    const d = v && validDate(v);
+    return d ? indiaTime.format(d).replace(/\s+/g, ' ').toLowerCase() : '—';
   },
-  date(v) {
-    if (!v) return '—';
-    const d = asDate(v);
-    return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-  },
+  date(v) { const d = v && validDate(v); return d ? indiaDate.format(d) : '—'; },
   when(v) { return v ? fmt.date(v) + ' · ' + fmt.time(v) : '—'; },
-  /** ms → m:ss, for the hold clock. The VALUE comes from the server's
-   *  holdExpiresAt; this only renders it. */
   countdown(ms) {
     const total = Math.max(0, Math.floor(Number(ms || 0) / 1000));
     return Math.floor(total / 60) + ':' + pad(total % 60);
   },
-  /** Ported verbatim from dlt-store: pure formatting, no authority. */
   dateTime(v) { return v ? fmt.date(v) + ' ' + fmt.time(v) : '—'; },
-  /** "today" / "tomorrow" / "in 3 days" / "2 days ago", from a server timestamp. */
   relativeDay(v) {
-    if (!v) return '—';
-    const d = asDate(v), t = new Date();
-    d.setHours(0, 0, 0, 0); t.setHours(0, 0, 0, 0);
-    const n = Math.round((d - t) / 86400000);
+    const d = v && validDate(v);
+    if (!d) return '—';
+    const n = dayNumber(d) - dayNumber(new Date());
     return n === 0 ? 'today' : n === 1 ? 'tomorrow'
       : n > 1 ? 'in ' + n + ' days' : Math.abs(n) + ' days ago';
   },
@@ -416,6 +419,7 @@ const bookings = {
   acceptPrice: (id) => POST(`/bookings/${id}/accept-price`).then((r) => r.booking),
   cancellationQuote: (id) => GET(`/bookings/${id}/cancellation-quote`),
   cancel: (id, reason) => POST(`/bookings/${id}/cancel`, { reason }),
+  discard: (id) => POST(`/bookings/${id}/discard`, {}),
 
   /** UX-only. The server is authoritative. */
   validatePassenger,
@@ -607,6 +611,24 @@ const admin = {
     { idempotencyKey: idempotencyKeyFor(JSON.stringify(['manual', input])) }).then((r) => r.booking),
 };
 
+/* ================================================================= fare
+ *
+ * How a seat price is SHOWN: fare + GST. The server's trip price is still the
+ * only amount charged (₹320); this splits it for display so every page shows
+ * the same ₹299 + ₹21 GST. GST_PER_SEAT is a fixed amount set by DLT - if the
+ * trip price changes, only the fare part moves. No price, no breakdown.
+ */
+const GST_PER_SEAT = 21;
+const fare = {
+  GST_PER_SEAT,
+  split(price, seats = 1) {
+    const p = Number(price), n = Number(seats);
+    if (price === null || price === undefined || !Number.isFinite(p) || p <= GST_PER_SEAT
+      || !Number.isFinite(n) || n < 0) return null;
+    return { base: (p - GST_PER_SEAT) * n, gst: GST_PER_SEAT * n, total: p * n };
+  },
+};
+
 /* ================================================================= export
  *
  * Note what is absent, permanently: DLT.provider (the sandbox acquirer),
@@ -616,7 +638,7 @@ const admin = {
 
 export const DLT = {
   auth, trips, seats, bookings, payments, checkout, waitlist, boarding, polls, admin,
-  notifications, fmt, seatType, roleLabel, can,
+  notifications, fmt, fare, seatType, roleLabel, can,
   subscribe, startPolling, stopPolling,
   boot, isReady, setUnauthenticatedHandler,
   ApiError,

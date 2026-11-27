@@ -1,5 +1,9 @@
 # DLT — production deployment guide
 
+> **Current VPS plan:** follow [VPS_FRESH.md](VPS_FRESH.md) for a fresh VPS
+> backend and database, alongside the VPS frontend. Existing Neon/Railway data
+> is not imported or deleted. The full-stack notes below are historical.
+
 Status: the application (Homepage/3D, Booking, Dashboard, Account, Admin,
 Razorpay payments/refunds) is feature-complete and verified — 378/378
 backend database tests passing, frontend Node tests 12/12 passing,

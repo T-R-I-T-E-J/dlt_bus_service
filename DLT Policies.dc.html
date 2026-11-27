@@ -1,51 +1,40 @@
 <!DOCTYPE html>
-<html>
+<html lang="en-IN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DLT Services Policies | Refunds, Boarding, Privacy</title>
 <meta name="description" content="Read DLT Services policies for Woxsen-Miyapur student shuttle bookings: 24-hour refunds, boarding rules, student eligibility, payments, privacy, and data retention.">
-<link rel="canonical" href="https://www.dltservices.tech/policies">
+<link rel="canonical" href="https://dltservices.tech/policies">
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="DLT Services">
 <meta property="og:title" content="DLT Services Policies | Refunds, Boarding, Privacy">
 <meta property="og:description" content="Launch policies for DLT Services student shuttle bookings between Woxsen University and Miyapur Metro.">
-<meta property="og:url" content="https://www.dltservices.tech/policies">
+<meta property="og:url" content="https://dltservices.tech/policies">
 <meta name="twitter:card" content="summary">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  "@id": "https://www.dltservices.tech/policies#webpage",
-  "url": "https://www.dltservices.tech/policies",
+  "@id": "https://dltservices.tech/policies#webpage",
+  "url": "https://dltservices.tech/policies",
   "name": "DLT Services Policies",
   "description": "Refund, boarding, payment, eligibility, privacy, and data retention policies for DLT Services Woxsen-Miyapur student shuttle bookings.",
-  "isPartOf": { "@id": "https://www.dltservices.tech/#website" },
-  "about": { "@id": "https://www.dltservices.tech/#student-shuttle" },
+  "isPartOf": { "@id": "https://dltservices.tech/#website" },
+  "about": { "@id": "https://dltservices.tech/#student-shuttle" },
   "inLanguage": "en-IN"
 }
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script src="./support.js"></script>
+<link rel="stylesheet" href="./dlt-mobile.css">
 </head>
-<body>
+<body data-dlt-page="policies">
 <x-dc>
 <helmet>
-<title>DLT Services Policies | Refunds, Boarding, Privacy</title>
-<meta name="description" content="Read DLT Services policies for Woxsen-Miyapur student shuttle bookings: 24-hour refunds, boarding rules, student eligibility, payments, privacy, and data retention.">
-<link rel="canonical" href="https://www.dltservices.tech/policies">
-<link rel="icon" href="./favicon.svg" type="image/svg+xml">
-<meta name="robots" content="index,follow">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="DLT Services">
-<meta property="og:title" content="DLT Services Policies | Refunds, Boarding, Privacy">
-<meta property="og:description" content="Launch policies for DLT Services student shuttle bookings between Woxsen University and Miyapur Metro.">
-<meta property="og:url" content="https://www.dltservices.tech/policies">
-<meta name="twitter:card" content="summary">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400;100,500;100,600;100,700;125,600;125,700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -69,7 +58,7 @@
     <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Policies</span>
   </a>
   <nav style="display:flex;align-items:center;gap:clamp(14px,2.4vw,26px);font-size:13.5px;font-weight:500">
-    <a href="/#help" style="color:#3D423C">Help</a>
+    <a data-phone-secondary href="/#help" style="color:#3D423C">Help</a>
     <a href="/booking" style="background:#0E1014;color:#F7F5F0;padding:12px 17px;border-radius:2px;font-weight:600;font-size:13px;min-height:44px;display:flex;align-items:center;box-sizing:border-box">Book a seat</a>
   </nav>
 </header>
@@ -119,6 +108,7 @@
   </div>
 </div>
 </main>
+<nav class="dlt-phone-nav" aria-label="Mobile navigation"><a href="/booking">Book tickets</a><a href="/my-trips">My trips</a><a href="/account">Account</a></nav>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{
   &quot;$preview&quot;: { &quot;width&quot;: 1120, &quot;height&quot;: 900 }
@@ -129,7 +119,7 @@ const SECTIONS = [
     'A booking is confirmed when we have verified the payment on our own side. Until then the seats are held, not sold, and nothing is guaranteed. What a payment page shows you in your browser is never what confirms a booking.',
     'You must travel on the departure you booked, with the passenger details you gave us. Bookings are not transferable between people, and a pass belongs to one named passenger.',
   ], [
-    'Up to five passengers may travel on one booking, each with their own seat and pass.',
+    'Up to five passengers may travel on one booking, each with their own place and QR pass.',
     'The person who paid owns the booking and can see all of it. Other passengers see only their own pass.',
     'We may change a departure or a vehicle for operational reasons. Where that materially affects your journey, refund options are offered even inside the normal refund window.',
   ], null],
@@ -145,8 +135,8 @@ const SECTIONS = [
   ], null],
 
   ['payment', 'Payment', 'Payment information', [
-    'Fares are charged in Indian rupees. The launch fare is ₹299 per seat, and checkout itemises it: seats multiplied by the fare, then the total payable.',
-    'No booking fee, convenience fee, coupon, discount, tax line or GST invoice is added in this release. If any fee, tax or discount is introduced later, it must be shown before payment and reflected in the receipt.',
+    'Fares are charged in Indian rupees. The displayed seat fare is ₹299 (excluding tax). Checkout adds ₹21 GST per seat, bringing the total to ₹320. Checkout itemises it before you pay — the fare for your seats, the GST, then the total payable — and your receipt shows the same breakdown.',
+    'The advertised ₹299 fare excludes tax. The ₹21 GST is added at checkout; the final ₹320 total includes it. No booking fee, convenience fee, coupon or discount is added in this release. If any fee or discount is introduced later, it must be shown before payment and reflected in the receipt.',
     'Payment is taken through a payment provider; DLT never sees or stores your card details. Your booking is created only against a payment we have verified, and a payment record is never deleted.',
     'If a payment succeeds but something goes wrong before your seats are issued, the money stays with us against your booking and we finish the job — you are never asked to pay a second time. The same applies if we receive a different amount from the one due: the payment is held and resolved by our team.',
   ], [], null],

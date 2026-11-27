@@ -1,17 +1,11 @@
 User-agent: *
 Allow: /
-Disallow: /DLT Dashboard.dc.html
-Disallow: /DLT Account.dc.html
-Disallow: /DLT Admin.dc.html
-Disallow: /my-trips
-Disallow: /account
-Disallow: /admin
 Disallow: /backend/
+Disallow: /deploy/
 Disallow: /test/
 Disallow: /uploads/
-Disallow: /store-tests.html
-Disallow: /DLT Readiness Audit.dc.html
-Disallow: /DLT Second Audit.dc.html
-Disallow: /DLT Final Verification.dc.html
 
-Sitemap: https://www.dltservices.tech/sitemap.xml
+# Account, My Trips and Admin pages carry noindex directives in their HTML.
+# Crawlers must be allowed to fetch those pages to read the directives.
+# Public API reads are needed to render departures; API responses carry noindex.
+Sitemap: https://dltservices.tech/sitemap.xml

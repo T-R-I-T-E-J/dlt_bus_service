@@ -1,18 +1,18 @@
 <!DOCTYPE html>
-<html>
+<html lang="en-IN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DLT Services | Woxsen to Miyapur Student Bus Booking</title>
-<meta name="description" content="DLT Services is the student-run Woxsen University to Miyapur Metro shuttle booking site. Check trips, book seats for Rs 299, pay online, and get QR boarding passes.">
-<link rel="canonical" href="https://www.dltservices.tech/">
+<meta name="description" content="DLT Services is the student-run Woxsen University to Miyapur Metro shuttle booking site. Check trips, book seats from Rs 299 excluding tax, pay online, and get QR boarding passes.">
+<link rel="canonical" href="https://dltservices.tech/">
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="DLT Services">
 <meta property="og:title" content="DLT Services | Woxsen to Miyapur Student Bus Booking">
-<meta property="og:description" content="Student-run Woxsen University to Miyapur Metro shuttle booking with Rs 299 seats, online payment, and QR boarding.">
-<meta property="og:url" content="https://www.dltservices.tech/">
+<meta property="og:description" content="Student-run Woxsen University to Miyapur Metro shuttle booking with Rs 299 seats excluding tax, online payment, and QR boarding.">
+<meta property="og:url" content="https://dltservices.tech/">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="DLT Services | Woxsen to Miyapur Student Bus Booking">
 <meta name="twitter:description" content="Book DLT Services student shuttle seats between Woxsen University and Miyapur Metro.">
@@ -22,27 +22,27 @@
   "@graph": [
     {
       "@type": "Organization",
-      "@id": "https://www.dltservices.tech/#organization",
+      "@id": "https://dltservices.tech/#organization",
       "name": "DLT Services",
-      "url": "https://www.dltservices.tech/",
-      "logo": "https://www.dltservices.tech/favicon.svg",
+      "url": "https://dltservices.tech/",
+      "logo": "https://dltservices.tech/favicon.svg",
       "sameAs": ["https://wa.me/message/SIRNC3QVOEFLO1"]
     },
     {
       "@type": "WebSite",
-      "@id": "https://www.dltservices.tech/#website",
-      "url": "https://www.dltservices.tech/",
+      "@id": "https://dltservices.tech/#website",
+      "url": "https://dltservices.tech/",
       "name": "DLT Services",
-      "publisher": { "@id": "https://www.dltservices.tech/#organization" },
+      "publisher": { "@id": "https://dltservices.tech/#organization" },
       "inLanguage": "en-IN"
     },
     {
       "@type": "Service",
-      "@id": "https://www.dltservices.tech/#student-shuttle",
+      "@id": "https://dltservices.tech/#student-shuttle",
       "name": "DLT Services Woxsen Miyapur Student Shuttle",
       "alternateName": ["DLT Service", "DLT Student Shuttle", "Woxsen to Miyapur bus"],
       "serviceType": "Student shuttle bus booking",
-      "provider": { "@id": "https://www.dltservices.tech/#organization" },
+      "provider": { "@id": "https://dltservices.tech/#organization" },
       "areaServed": [
         { "@type": "Place", "name": "Woxsen University" },
         { "@type": "Place", "name": "Miyapur Metro Station" },
@@ -51,15 +51,16 @@
       "offers": {
         "@type": "Offer",
         "price": "299",
+        "priceSpecification": { "@type": "UnitPriceSpecification", "price": "299", "priceCurrency": "INR", "valueAddedTaxIncluded": false },
         "priceCurrency": "INR",
         "availability": "https://schema.org/LimitedAvailability",
-        "url": "https://www.dltservices.tech/booking"
+        "url": "https://dltservices.tech/booking"
       },
       "description": "Student-run shuttle booking between Woxsen University and Miyapur Metro with online payment and QR boarding passes."
     },
     {
       "@type": "FAQPage",
-      "@id": "https://www.dltservices.tech/#faq",
+      "@id": "https://dltservices.tech/#faq",
       "mainEntity": [
         {
           "@type": "Question",
@@ -79,10 +80,10 @@
         },
         {
           "@type": "Question",
-          "name": "What is the DLT Services launch fare?",
+          "name": "What is the DLT Services current fare?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "The launch fare is Rs 299 per seat, with online payment and QR boarding passes."
+            "text": "The current fare is Rs 299 per seat excluding tax. Checkout adds Rs 21 GST per seat, making the total Rs 320, with online payment and QR boarding passes."
           }
         }
       ]
@@ -153,24 +154,11 @@
   }
 
 </script>
+<link rel="stylesheet" href="./dlt-mobile.css">
 </head>
-<body>
+<body data-dlt-page="home">
 <x-dc>
 <helmet>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DLT Services | Woxsen to Miyapur Student Bus Booking</title>
-<meta name="description" content="DLT Services is the student-run Woxsen University to Miyapur Metro shuttle booking site. Check trips, book seats for Rs 299, pay online, and get QR boarding passes.">
-<link rel="canonical" href="https://www.dltservices.tech/">
-<link rel="icon" href="./favicon.svg" type="image/svg+xml">
-<meta name="robots" content="index,follow">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="DLT Services">
-<meta property="og:title" content="DLT Services | Woxsen to Miyapur Student Bus Booking">
-<meta property="og:description" content="Student-run Woxsen University to Miyapur Metro shuttle booking with Rs 299 seats, online payment, and QR boarding.">
-<meta property="og:url" content="https://www.dltservices.tech/">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="DLT Services | Woxsen to Miyapur Student Bus Booking">
-<meta name="twitter:description" content="Book DLT Services student shuttle seats between Woxsen University and Miyapur Metro.">
 <!-- The three.js import map is deliberately NOT here — it is in the document's
      real <head>. See the comment there: a <helmet>-hosted import map is
      re-inserted by support.js as a second map and has its rules stripped. -->
@@ -207,8 +195,9 @@
     color: #F7F5F0; padding: 12px 18px; font-size: 13px; font-weight: 600; }
   .dlt-skip:focus { left: 8px; top: 8px; color: #F7F5F0; }
   @media (max-width: 720px) {
-    [data-m="hide"] { display: none; }
-    [data-m="row"] { grid-template-columns: 1fr auto; row-gap: 12px; }
+    [data-m="hide"] { display: none !important; }
+    [data-m="row"] { grid-template-columns: minmax(0,1fr) auto !important; row-gap: 12px !important; }
+    [data-m="row"] > * { min-width: 0; overflow-wrap: anywhere; }
     [data-m="time"] { grid-area: 1 / 1; }
     [data-m="price"] { grid-area: 1 / 2; justify-self: end; }
     [data-m="route"] { grid-area: 2 / 1 / 3 / -1; }
@@ -250,6 +239,11 @@
     .journey-progress { bottom:24px !important; right:54% !important; }
     .journey-labels { display:none !important; }
     .journey-skip { left:auto !important; right:18px; transform:none !important; bottom:12px !important; }
+  }
+  @media (max-width: 720px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea {
+      font-size: 16px !important; min-height: 48px; box-sizing: border-box; max-width: 100%;
+    }
   }
 </style>
 
@@ -429,7 +423,7 @@
       <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">DLT Services · Woxsen ⇄ Miyapur</div>
       <h2 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.8vw,36px);line-height:1.05;letter-spacing:-.018em">Next departures</h2>
     </div>
-    <p style="margin:0;max-width:44ch;font-size:13px;line-height:1.55;color:#4A4F49">₹{{ fare }} per seat, up to five passengers on one booking. Free cancellation until 24 hours before departure.</p>
+    <p style="margin:0;max-width:44ch;font-size:13px;line-height:1.55;color:#4A4F49">₹{{ fare }} per seat{{ fareNote }}, up to five passengers on one booking. Free cancellation until 24 hours before departure.</p>
   </div>
 
   <div role="list" style="--h:var(--journey-handoff, 0);opacity:calc(.18 + var(--h) * .82);transform:translateY(calc((1 - var(--h)) * 30px));display:flex;flex-direction:column;gap:0;border-top:1px solid rgba(14,16,20,.16)">
@@ -449,7 +443,7 @@
           </sc-if>
           <span style="font-size:12.5px;font-weight:{{ t.availWeight }};color:{{ t.availFg }};font-variant-numeric:tabular-nums">{{ t.avail }}</span>
         </div>
-        <div data-m="price" style="font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;color:{{ t.priceFg }}">₹{{ t.price }}</div>
+        <div data-m="price" style="font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;color:{{ t.priceFg }}"><div>₹{{ t.price }}</div><div style="margin-top:4px;font-size:10px;font-weight:400">excluding tax</div></div>
         <a href="{{ t.href }}" data-m="cta" style="background:{{ t.ctaBg }};color:{{ t.ctaFg }};border:1px solid #0E1014;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;white-space:nowrap;min-height:44px;display:flex;align-items:center;justify-content:center;box-sizing:border-box">{{ t.cta }}</a>
       </article>
     </sc-for>
@@ -563,7 +557,7 @@
     <li style="border-top:2px solid rgba(14,16,20,.2);padding-top:13px">
       <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Step 02</div>
       <h3 style="margin:8px 0 0;font-size:15.5px;font-weight:600">Select your seat</h3>
-      <p style="margin:7px 0 0;font-size:13px;line-height:1.55;color:#3D423C">Window or aisle, up to five seats. Your choice is held for 10 minutes.</p>
+      <p style="margin:7px 0 0;font-size:13px;line-height:1.55;color:#3D423C">Reserve up to five places on the bus diagram. Your places are held for 10 minutes.</p>
     </li>
     <li style="border-top:2px solid rgba(14,16,20,.2);padding-top:13px">
       <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Step 03</div>
@@ -589,7 +583,7 @@
     <div>
       <span style="display:block;width:22px;height:2px;background:#0E4B34"></span>
       <h3 style="margin:14px 0 0;font-size:16px;font-weight:600;letter-spacing:-.01em">One route, done properly</h3>
-      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">A fixed departure, a named pickup point and a seat with your number on it. No haggling, no waiting at the gate.</p>
+      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">A fixed departure, a named pickup point and a reserved place on your departure. No haggling, no waiting at the gate.</p>
     </div>
     <div>
       <span style="display:block;width:22px;height:2px;background:#0E4B34"></span>
@@ -599,7 +593,7 @@
     <div>
       <span style="display:block;width:22px;height:2px;background:#0E4B34"></span>
       <h3 style="margin:14px 0 0;font-size:16px;font-weight:600;letter-spacing:-.01em">Built for students</h3>
-      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">₹{{ fare }} flat, five passengers on one payment, and a full refund if you cancel more than 24 hours out.</p>
+      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">₹{{ fare }} per seat (excluding tax), five passengers on one payment, and a full refund if you cancel more than 24 hours out.</p>
     </div>
   </div>
 </section>
@@ -611,7 +605,7 @@
       <h2 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(22px,2.4vw,30px);line-height:1.06;letter-spacing:-.018em">Getting to the city shouldn't be the hardest part of the week</h2>
     </div>
     <div style="display:flex;flex-direction:column;gap:14px;max-width:62ch">
-      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">DLT gives Woxsen students a predictable way to reach Miyapur: published departures, a named pickup point, a numbered seat and a fixed launch fare of ₹{{ fare }}.</p>
+      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">DLT gives Woxsen students a predictable way to reach Miyapur: published departures, a named pickup point, a reserved place and a fixed current fare of ₹{{ fare }} per seat (excluding tax).</p>
       <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">We are starting with Woxsen to Miyapur and adding Miyapur to Woxsen when the schedule is ready. The booking system already supports both directions, so each new trip works the same way.</p>
     </div>
   </div>
@@ -682,6 +676,7 @@
   <span style="flex:1"></span>
   <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase">Woxsen ⇄ Miyapur · INR</span>
 </footer>
+<nav class="dlt-phone-nav" aria-label="Mobile navigation"><a href="/booking" aria-current="page">Book tickets</a><a href="/my-trips">My trips</a><a href="/account">Account</a></nav>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{
   &quot;motionMode&quot;: {
@@ -704,7 +699,7 @@ const FAQ = [
     ['How long are seats held?', 'Ten minutes from the first seat you pick. The clock is shown in the summary and the seats reopen when it runs out.'],
   ]],
   ['Payment & refunds', [
-    ['What is the fare?', 'The launch fare is ₹299 per seat. No booking fee, coupon or tax line is added in this release.'],
+    ['What is the fare?', '₹299 per seat (excluding tax). Checkout adds ₹21 GST per seat, bringing the total to ₹320. No booking fee or coupon is added.'],
     ['Can I cancel after paying?', 'Cancel more than 24 hours before departure for a full refund. Inside 24 hours the fare is non-refundable.'],
     ['My payment went through but I saw an error.', 'Do not pay again. We verify every payment on our server and finish or review the booking from that result.'],
   ]],
@@ -845,7 +840,7 @@ class Component extends DCLogic {
         const mine = await api.bookings.mine();
         const upcoming = mine.filter(b => b.status === 'CONFIRMED'
           && b.trip && ['COMPLETED', 'DEPARTED'].indexOf(b.trip.status) < 0);
-        data.nextBooking = upcoming[0] || null;
+        data.nextBooking = upcoming.sort((a,b)=>new Date(a.trip.departureAt)-new Date(b.trip.departureAt))[0] || null;
       } catch (e) { data.nextBooking = null; }
     } else {
       data.nextBooking = null;
@@ -932,15 +927,18 @@ class Component extends DCLogic {
 
     /* the next three open departures, live — pure read of state.data, filled
        only by _load(). No request and no fare arithmetic here: when no trips
-       are active, the page shows the launch fare and policy timing instead
+       are active, the page shows the current fare and policy timing instead
        of empty placeholders. */
     const trips = st.data.trips;
-    const fare = trips.length ? String(trips[0].price) : '299';
+    const fareSplit = api && api.fare ? api.fare.split(trips.length ? trips[0].price : 320) : null;
+    const fare = fareSplit ? String(fareSplit.base) : '—';
+    const fareNote = ' (excluding tax)';
     const first = trips[0] || null;
     const noActiveTrips = st.data.tripsLoaded && trips.length === 0;
 
     /* the signed-in student's next trip, if they have one */
     const next = st.data.nextBooking;
+    const nextTrip = next && (trips.find(t => t.id === next.trip.id) || next.trip);
 
     const q = st.faqQuery.trim().toLowerCase();
     const faqGroups = FAQ.map(([category, items]) => ({
@@ -960,12 +958,12 @@ class Component extends DCLogic {
 
       hasNextTrip: !!next,
       nextTripWhen: next ? fmt.when(next.trip.departureAt) + ' · ' +
-        next.trip.origin + ' -> ' + next.trip.destination : '',
+        (nextTrip.origin && nextTrip.destination ? nextTrip.origin + ' -> ' + nextTrip.destination : 'Scheduled departure') : '',
       nextTripSeats: next
         ? 'Seat ' + next.passengers.map(p => p.seatNumber).join(', ') + ' · report ' + fmt.time(next.trip.reportingAt)
         : '',
 
-      fare,
+      fare, fareNote,
       departLabel: first ? fmt.time(first.departureAt) : 'by schedule',
       reportLabel: first ? fmt.time(first.reportingAt) : '30 min before',
       arriveLabel: first ? fmt.time(first.arrivalEstimateAt) : '2 h',
@@ -977,7 +975,7 @@ class Component extends DCLogic {
           time: fmt.time(t.departureAt), date: fmt.date(t.departureAt),
           route: t.origin + ' -> ' + t.destination,
           report: fmt.time(t.reportingAt), arrive: fmt.time(t.arrivalEstimateAt),
-          price: t.price, dim: t.soldOut ? 0.72 : 1,
+          price: api.fare.split(t.price)?.base ?? '—', dim: t.soldOut ? 0.72 : 1,
           showBar: !t.soldOut,
           barWidth: Math.max(4, 100 - pct) + '%',
           barColor: low ? '#8A5A0E' : '#0E4B34',
@@ -985,7 +983,7 @@ class Component extends DCLogic {
           availFg: t.soldOut ? '#0E1014' : low ? '#8A5A0E' : '#3D423C',
           availWeight: low ? 600 : 500,
           priceFg: t.soldOut ? '#5F6560' : '#0E1014',
-          cta: t.soldOut ? 'Join waitlist' : 'Select seats',
+          cta: t.status && t.status !== 'OPEN' ? 'Booking closed' : t.soldOut ? 'Join waitlist' : 'Select seats',
           ctaBg: t.soldOut ? 'transparent' : '#0E1014',
           ctaFg: t.soldOut ? '#0E1014' : '#F7F5F0',
           /* §10 the chosen departure travels with the click */

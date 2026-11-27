@@ -34,7 +34,12 @@ const router = Router();
 /* Transport-level throttle. This is NOT the brute-force control — that lives in
  * the database (register_login_failure) and survives a restart, a redeploy and
  * a second server. This only blunts the crude flood. */
-const loginThrottle = rateLimit({ windowMs: 60_000, limit: 20, standardHeaders: true });
+const loginLimit = Number(process.env.LOGIN_RATE_LIMIT_PER_MINUTE ?? 20);
+if (!Number.isInteger(loginLimit) || loginLimit < 20 || loginLimit > 1000)
+  throw new Error('LOGIN_RATE_LIMIT_PER_MINUTE must be an integer between 20 and 1000.');
+const loginThrottle = rateLimit({ windowMs: 60_000, limit: loginLimit, standardHeaders: true,
+  message: { error: { code: 'RATE_LIMITED', message: 'Too many sign-in requests. Please wait a minute and try again.' } },
+});
 const resetThrottle = rateLimit({ windowMs: 60 * 60_000, limit: 5, standardHeaders: true });
 
 const ctxOf = (req: Request) => ({

@@ -1,29 +1,29 @@
 <!DOCTYPE html>
-<html>
+<html lang="en-IN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Book DLT Services | Woxsen Miyapur Student Shuttle</title>
 <meta name="description" content="Book DLT Services student shuttle seats between Woxsen University and Miyapur Metro. Choose a departure, select seats, pay online, and get QR boarding.">
-<link rel="canonical" href="https://www.dltservices.tech/booking">
+<link rel="canonical" href="https://dltservices.tech/booking">
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="DLT Services">
 <meta property="og:title" content="Book DLT Services | Woxsen Miyapur Student Shuttle">
 <meta property="og:description" content="Book student shuttle seats between Woxsen University and Miyapur Metro with online payment and QR boarding.">
-<meta property="og:url" content="https://www.dltservices.tech/booking">
+<meta property="og:url" content="https://dltservices.tech/booking">
 <meta name="twitter:card" content="summary">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  "@id": "https://www.dltservices.tech/booking#webpage",
-  "url": "https://www.dltservices.tech/booking",
+  "@id": "https://dltservices.tech/booking#webpage",
+  "url": "https://dltservices.tech/booking",
   "name": "Book DLT Services Woxsen Miyapur Student Shuttle",
   "description": "Book DLT Services student shuttle seats between Woxsen University and Miyapur Metro.",
-  "isPartOf": { "@id": "https://www.dltservices.tech/#website" },
-  "about": { "@id": "https://www.dltservices.tech/#student-shuttle" },
+  "isPartOf": { "@id": "https://dltservices.tech/#website" },
+  "about": { "@id": "https://dltservices.tech/#student-shuttle" },
   "inLanguage": "en-IN"
 }
 </script>
@@ -34,22 +34,11 @@
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script src="./support.js"></script>
+<link rel="stylesheet" href="./dlt-mobile.css">
 </head>
-<body>
+<body data-dlt-page="booking">
 <x-dc>
 <helmet>
-<title>Book DLT Services | Woxsen Miyapur Student Shuttle</title>
-<meta name="description" content="Book DLT Services student shuttle seats between Woxsen University and Miyapur Metro. Choose a departure, select seats, pay online, and get QR boarding.">
-<link rel="canonical" href="https://www.dltservices.tech/booking">
-<link rel="icon" href="./favicon.svg" type="image/svg+xml">
-<meta name="robots" content="index,follow">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="DLT Services">
-<meta property="og:title" content="Book DLT Services | Woxsen Miyapur Student Shuttle">
-<meta property="og:description" content="Book student shuttle seats between Woxsen University and Miyapur Metro with online payment and QR boarding.">
-<meta property="og:url" content="https://www.dltservices.tech/booking">
-<meta name="twitter:card" content="summary">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400;100,500;100,600;100,700;125,600;125,700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -72,6 +61,21 @@
   @media (max-width: 1080px) and (min-width: 881px) {
     [data-m="cols"] { grid-template-columns: minmax(0,1fr) 300px !important; }
   }
+  @media (max-width: 720px) {
+    header > a { flex-shrink: 0; }
+    header > a > span:first-child { font-size: 16px !important; white-space: nowrap; }
+    header nav { gap: 12px !important; font-size: 12px !important; }
+    header nav a { display: inline-flex; align-items: center; min-height: 44px; white-space: nowrap; }
+    header nav button { white-space: nowrap; }
+    [data-departure-card] { grid-template-columns: minmax(0,1fr) !important; gap: 12px !important; }
+    [data-departure-card] > * { min-width: 0; overflow-wrap: anywhere; }
+    [data-departure-card] > button { width: 100%; min-height: 48px !important; }
+  }
+  @media (max-width: 360px) {
+    header > a > span:first-child { font-size: 14px !important; }
+    header nav { gap: 10px !important; }
+    header nav button { padding: 8px 10px !important; }
+  }
   @media (max-width: 880px) {
     [data-m="cols"] { grid-template-columns: minmax(0,1fr) !important; }
     [data-m="hide"] { display: none !important; }
@@ -81,10 +85,15 @@
       z-index: 30; border: 0 !important; border-top: 1px solid rgba(14,16,20,.16) !important;
       box-shadow: 0 -10px 30px -22px rgba(14,16,20,.7); }
     [data-m="asidefull"] { display: none !important; }
-    [data-m="asidebar"] { display: flex !important; align-items: center; gap: 14px; padding: 10px 16px !important; }
+    [data-m="asidebar"] { display: flex !important; align-items: center; gap: 14px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)) !important; }
     [data-m="asidebar"] > button { width: auto !important; flex: 1; }
     [data-m="barfacts"] { display: flex !important; }
-    [data-m="main"] { padding-bottom: 132px !important; }
+    [data-m="main"] { padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px)) !important; }
+  }
+  @media (max-width: 720px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea {
+      font-size: 16px !important; min-height: 48px; box-sizing: border-box; max-width: 100%;
+    }
   }
 </style>
 <!-- Razorpay Checkout. Loaded from Razorpay's own origin because they require
@@ -101,7 +110,7 @@
     <span data-m="hide" style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Book a seat</span>
   </a>
   <nav style="display:flex;align-items:center;gap:clamp(14px,2.4vw,28px);font-size:13.5px;font-weight:500">
-    <a href="/#help" style="color:#3D423C">Help</a>
+    <a data-phone-secondary href="/#help" style="color:#3D423C">Help</a>
     <a href="./DLT Dashboard.dc.html" style="color:#3D423C">My trips</a>
     <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
       <span style="display:flex;align-items:center;gap:9px">
@@ -173,7 +182,7 @@
   <section aria-labelledby="trips-h">
     <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">Woxsen ⇄ Miyapur</div>
     <h1 id="trips-h" style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(26px,3vw,38px);line-height:1.04;letter-spacing:-.02em">Choose your departure</h1>
-    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹299 per seat, up to five passengers on one booking. Seats are held for 10 minutes once you pick them.</p>
+    <p style="margin:10px 0 0;max-width:52ch;font-size:13.5px;line-height:1.6;color:#3D423C">₹{{ departureFare }} per seat (excluding tax), up to five passengers on one booking. Seats are held for 10 minutes once you pick them. All departure times are IST.</p>
 
     <sc-if value="{{ noTrips }}" hint-placeholder-val="{{ false }}">
       <div style="margin:28px 0 0;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:clamp(22px,4vw,38px)">
@@ -193,7 +202,7 @@
                  phone number is asked for and no request is recorded, so the copy
                  must not imply an automatic alert. -->
             <a href="{{ whatsappUrl }}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:8px;border:1px solid rgba(14,16,20,.2);padding:11px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Message us on WhatsApp<span aria-hidden="true" style="font-size:11px;color:#5F6560">↗</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Opens WhatsApp in a new tab</span></a>
-            <a href="/#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:11px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
+            <a data-phone-secondary href="/#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:11px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
           </div>
           <p style="margin:12px 0 0;max-width:52ch;font-size:12px;line-height:1.55;color:#5F6560">Email requests are logged for operations. WhatsApp opens a conversation — we reply there, and nothing is recorded automatically.</p>
         </sc-if>
@@ -205,7 +214,7 @@
 
     <div role="list" style="margin:26px 0 0;border-top:1px solid rgba(14,16,20,.16)">
       <sc-for list="{{ trips }}" as="tr" hint-placeholder-count="3">
-        <article role="listitem" style="display:grid;grid-template-columns:minmax(90px,.7fr) minmax(0,1.6fr) minmax(120px,1fr) auto;align-items:center;gap:clamp(12px,2vw,26px);padding:20px 0;border-bottom:1px solid rgba(14,16,20,.16);opacity:{{ tr.dim }}">
+        <article role="listitem" data-departure-card style="display:grid;grid-template-columns:minmax(90px,.7fr) minmax(0,1.6fr) minmax(120px,1fr) auto;align-items:center;gap:clamp(12px,2vw,26px);padding:20px 0;border-bottom:1px solid rgba(14,16,20,.16);opacity:{{ tr.dim }}">
           <div>
             <div style="font-stretch:125%;font-weight:700;font-size:clamp(22px,2.2vw,30px);line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ tr.depart }}</div>
             <div style="margin-top:6px;font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ tr.date }}</div>
@@ -251,7 +260,9 @@
       <button type="button" onClick="{{ backToTrips }}" style="background:none;border:0;padding:6px 0;font-size:13px;font-weight:600;color:#0E4B34;cursor:pointer;border-bottom:1px solid rgba(14,75,52,.4)">Change trip</button>
     </div>
 
-    <div style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,auto));gap:10px 22px;align-items:center">
+    <div class="dlt-seating-notice" role="note" style="margin:20px 0;padding:16px 18px;border-left:3px solid #0E4B34;background:#EEF3EE;font-size:14px;line-height:1.6"><strong>No assigned seats.</strong> This diagram reserves space only. Sit anywhere on the bus, first come, first served.</div>
+
+    <div data-booking-legend style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,auto));gap:10px 22px;align-items:center">
       <sc-for list="{{ legend }}" as="l" hint-placeholder-count="5">
         <span style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:#3D423C">
           <span aria-hidden="true" style="display:block;width:15px;height:15px;border-radius:2px;background:{{ l.bg }};border:1px solid {{ l.bd }}"></span>
@@ -265,7 +276,7 @@
         <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">{{ vehicleLabel }} · 2 + 2 · {{ seatCount }} seats · {{ availableCount }} free</span>
         <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Front of coach ↑</span>
       </div>
-      <div role="group" aria-label="Seat map" style="margin:18px auto 0;display:grid;grid-template-columns:repeat(2,44px) 30px repeat(2,44px);gap:9px;justify-content:center">
+      <div data-bus-map role="group" aria-label="Bus representation for booking availability" style="margin:18px auto 0;display:grid;grid-template-columns:repeat(2,44px) 30px repeat(2,44px);gap:9px;justify-content:center">
         <sc-for list="{{ cells }}" as="c" hint-placeholder-count="55">
           <sc-if value="{{ c.isSeat }}" hint-placeholder-val="{{ true }}">
             <button type="button" onClick="{{ c.onClick }}" disabled="{{ c.disabled }}" aria-pressed="{{ c.pressed }}" aria-label="{{ c.aria }}" title="{{ c.aria }}" style="height:44px;width:44px;border-radius:3px 3px 6px 6px;border:1px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums;cursor:{{ c.cursor }};box-shadow:{{ c.shadow }};transition:background .12s ease, transform .12s ease" style-hover="{{ c.hover }}">{{ c.id }}</button>
@@ -277,7 +288,7 @@
       </div>
     </div>
 
-    <p style="margin:14px 0 0;font-size:12.5px;color:#4A4F49">Window seats are A and D. A held or blocked seat cannot be selected — the hold belongs to whoever took it first.</p>
+    <p style="margin:14px 0 0;font-size:12.5px;color:#4A4F49">The diagram represents availability only. Its numbers do not assign physical seats. Seating on the bus is first come, first served.</p>
   </section>
   </sc-if>
 
@@ -299,7 +310,7 @@
             <span aria-hidden="true" style="font-size:12px;color:#5F6560">{{ p.chev }}</span>
           </button>
           <sc-if value="{{ p.open }}" hint-placeholder-val="{{ true }}">
-            <div style="padding:2px 18px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px 16px">
+            <div data-mobile-form style="padding:2px 18px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px 16px">
               <label style="display:block">
                 <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Full name</span>
                 <input type="text" value="{{ p.name }}" onChange="{{ p.onName }}" onBlur="{{ p.onBlur }}" autocomplete="name" placeholder="As on your student ID" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid {{ p.nameBd }};border-radius:2px;background:#FCFBF8;font-size:14px" />
@@ -333,7 +344,7 @@
 
     <div style="margin:22px 0 0;border-top:1px solid rgba(14,16,20,.16);padding-top:18px">
       <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Booking contact</div>
-      <p style="margin:8px 0 0;max-width:50ch;font-size:13px;line-height:1.6;color:#3D423C">Updates for this booking go to this number. Changing it here applies to this booking only — your account is unchanged.</p>
+      <p style="margin:8px 0 0;max-width:50ch;font-size:13px;line-height:1.6;color:#3D423C">Updates for this booking go to this number. Leave it blank to use the first passenger's phone. Changing it here applies to this booking only — your account is unchanged.</p>
       <label style="display:block;margin-top:12px;max-width:260px">
         <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Contact number</span>
         <input type="tel" value="{{ contact }}" onChange="{{ onContact }}" autocomplete="tel" placeholder="10-digit mobile" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid {{ contactBd }};border-radius:2px;background:#FCFBF8;font-size:14px;font-variant-numeric:tabular-nums" />
@@ -354,7 +365,7 @@
         <button type="button" onClick="{{ editPax }}" style="background:none;border:0;padding:6px 0;font-size:12.5px;font-weight:600;color:#0E4B34;cursor:pointer;border-bottom:1px solid rgba(14,75,52,.4)">Edit details</button>
       </div>
       <sc-for list="{{ pax }}" as="p" hint-placeholder-count="2">
-        <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(14,16,20,.09)">
+        <div data-review-passenger style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(14,16,20,.09)">
           <div>
             <div style="font-size:14px;font-weight:600">{{ p.name }}</div>
             <div style="margin-top:4px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">{{ p.sid }}</div>
@@ -385,7 +396,7 @@
       <div style="margin:20px 0 0;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:20px 22px">
         <h2 style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.01em">{{ authTitle }}</h2>
         <p style="margin:8px 0 0;max-width:48ch;font-size:13px;line-height:1.6;color:#3D423C">Your seats stay held while you sign in. We need an account to attach the booking, the passes and any refund to.</p>
-        <div style="margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;max-width:560px">
+        <div data-mobile-form style="margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;max-width:560px">
           <sc-if value="{{ authIsSignUp }}" hint-placeholder-val="{{ false }}">
             <label style="display:block">
               <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Full name</span>
@@ -506,7 +517,7 @@
     </dl>
     <div style="margin:22px 0 0;display:flex;flex-wrap:wrap;gap:10px">
       <a href="./DLT Dashboard.dc.html" style="display:flex;align-items:center;background:#0E1014;color:#F7F5F0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;min-height:44px;box-sizing:border-box">Track it in My Trips</a>
-      <a href="/#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
+      <a data-phone-secondary href="/#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
     </div>
   </section>
   </sc-if>
@@ -617,7 +628,7 @@
           <div style="display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:10px">
             <span style="font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">Seat {{ s.id }}</span>
             <span style="font-size:12.5px;color:#4A4F49">{{ s.type }}</span>
-            <span style="font-size:13px;font-variant-numeric:tabular-nums">₹{{ s.price }}</span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums">₹{{ s.price }}<span style="display:block;margin-top:3px;font-size:10px;color:#5F6560">excluding tax</span></span>
             <sc-if value="{{ s.removable }}" hint-placeholder-val="{{ true }}">
               <button type="button" onClick="{{ s.onRemove }}" aria-label="Remove seat {{ s.id }}" style="background:none;border:0;width:44px;height:44px;margin:-11px -12px -11px 0;font-size:16px;color:#4A4F49;cursor:pointer">×</button>
             </sc-if>
@@ -634,8 +645,13 @@
     <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;color:#3D423C">
       <span>{{ summaryLineLabel }}</span><span>{{ summaryLineAmount }}</span>
     </div>
+    <sc-if value="{{ summaryGst }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;color:#3D423C">
+      <span>GST</span><span>{{ summaryGst }}</span>
+    </div>
+    </sc-if>
     <div style="display:flex;justify-content:space-between;gap:10px;font-size:16px;font-weight:700;padding-top:9px;border-top:1px solid rgba(14,16,20,.12)">
-      <span>Total payable</span><span>{{ summaryTotal }}</span>
+      <span>{{ summaryTotalLabel }}</span><span>{{ summaryTotal }}</span>
     </div>
   </div>
 
@@ -644,6 +660,7 @@
     <div style="display:none;flex-direction:column;gap:2px;min-width:0" data-m="barfacts">
       <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;white-space:nowrap">{{ barLine }}</span>
       <span style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums">{{ summaryTotal }}</span>
+      <span style="font-size:10.5px;line-height:1.35;color:#5F6560;max-width:145px">{{ summaryTaxNote }}</span>
     </div>
     <button type="button" onClick="{{ primary }}" disabled="{{ primaryDisabled }}" style="width:100%;background:{{ primaryBg }};color:{{ primaryFg }};border:0;padding:14px 18px;border-radius:2px;font-size:14px;font-weight:600;cursor:{{ primaryCursor }};min-height:48px">{{ primaryLabel }}</button>
     <sc-if value="{{ primaryHint }}" hint-placeholder-val="{{ true }}">
@@ -768,6 +785,9 @@ class Component extends DCLogic {  state = {
   async _load(opts) {
     const quiet = opts && opts.quiet;
     const st = this.state;
+    const request = this._loadRequest = (this._loadRequest || 0) + 1;
+    const tripId = st.tripId, bookingId = st.bookingId;
+    const current = () => request === this._loadRequest && this.state.tripId === tripId && this.state.bookingId === bookingId;
     if (!quiet) this.setState({ loading: true });
     const data = Object.assign({}, st.data);
     try {
@@ -803,8 +823,10 @@ class Component extends DCLogic {  state = {
         })()
       ]);
       if (!st.tripId) data.trip = data.openTrips[0] || null;
+      if (!current()) return;
       this.setState({ data: data, loading: false, offline: false });
     } catch (e) {
+      if (!current()) return;
       this.setState({ loading: false });
       this.fail(e);
     }
@@ -817,9 +839,12 @@ class Component extends DCLogic {  state = {
     const self = this;
     if (!on) return DLT.stopPolling();
     DLT.startPolling(async function () {
-      if (!self.state.tripId) return;
-      const map = await DLT.trips.seatMap(self.state.tripId);
+      const tripId = self.state.tripId;
+      if (!tripId || self.state.busy) return;
+      const selectionVersion=self._selectionVersion;
+      const map = await DLT.trips.seatMap(tripId);
       self.setState(function (s) {
+        if (s.tripId !== tripId || s.busy || self._selectionVersion!==selectionVersion) return null;
         return { data: Object.assign({}, s.data, { seatRows: map.rows || [], held: map.held || [] }) };
       });
     }, 5000);
@@ -844,7 +869,12 @@ class Component extends DCLogic {  state = {
   _expireCheck() {
     const st = this.state;
     if (!st.tripId) return;
-    if (['seats', 'passengers', 'review', 'checkout', 'failed'].indexOf(st.step) < 0) return;
+    /* Once Checkout is open the seats legitimately stop being HELD the moment
+       the webhook books them, so an empty basket is NOT an expiry there. The
+       server decides that payment's outcome; expiring here wiped bookingId and
+       rendered "confirmed" with no booking. */
+    if (this._paymentInFlight) return;
+    if (['seats', 'passengers', 'review', 'failed'].indexOf(st.step) < 0) return;
     /* The basket comes from the seat-map response (state.data.held), which the
        server computes. This no longer recomputes anything. */
     const held = st.data.held || [];
@@ -896,6 +926,8 @@ class Component extends DCLogic {  state = {
   }
   pickTrip = async (trip) => {
     try {
+      if (this._paymentInFlight) return;
+      if (trip.status && trip.status !== 'OPEN') throw new Error('Booking is closed for this departure. Choose an open departure.');
       if (!trip.bookable) {
         const me = DLT.auth.current();
         if (!me) { location.href = './DLT Account.dc.html?next=book'; return; }
@@ -908,7 +940,8 @@ class Component extends DCLogic {  state = {
       if (me && me.role !== 'STUDENT') {
         throw new Error('You are signed in as ' + DLT.roleLabel(me.role) + '. Sign out and use a student account to book.');
       }
-      this.setState({ tripId: trip.id, step: 'seats', pax: {}, error: null, bookingId: null, paymentId: null },
+      this.setState(s => ({ tripId: trip.id, step: 'seats', pax: {}, error: null, bookingId: null, paymentId: null,
+        busy: false, data: { ...s.data, trip, seatRows: [], held: [], booking: null } }),
         () => { this._load(); this._watchSeats(true); });
     } catch (e) { this.fail(e); }
   };
@@ -917,11 +950,16 @@ class Component extends DCLogic {  state = {
     /* §7.2 the flow may begin without an account: the SERVER holds the seat
        against this browser's guest cookie and adopts it on sign-in. Nothing is
        assumed held until the server says so. */
+    if (this._paymentInFlight || this.state.busy) return;
+    const tripId = this.state.tripId;
+    this._selectionVersion=(this._selectionVersion||0)+1;
+    this._loadRequest=(this._loadRequest||0)+1;
     const mine = (this.state.data.held || []).some(function (s) { return s.seatNumber === seatNumber; });
     if (mine) return this.removeSeat(seatNumber);
     this.setState({ busy: true, error: null });
     try {
-      await DLT.seats.hold(this.state.tripId, seatNumber);
+      await DLT.seats.hold(tripId, seatNumber);
+      if (this.state.tripId !== tripId) return;
       if (this._orphanPax && this._orphanPax.length) {
         const d = this._orphanPax.shift();
         this.setState(function (s) {
@@ -932,12 +970,14 @@ class Component extends DCLogic {  state = {
       this.setState({ busy: false, error: null });
       await this._load({ quiet: true });
     } catch (e) {
+      if (this.state.tripId !== tripId) return;
       if (e.isConflict) {
         /* Another device won the race. A 409 means the map on screen is stale,
            so refresh it and say plainly what happened. */
         await this._load({ quiet: true });
+        if (this.state.tripId !== tripId) return;
         return this.setState({ busy: false,
-          error: 'Seat ' + seatNumber + ' was just taken by someone else. The seat map has been refreshed.' });
+          error: 'Availability changed. Please choose the passenger count again.' });
       }
       this.fail(e);
     }
@@ -946,10 +986,16 @@ class Component extends DCLogic {  state = {
   /* §13.2 a seat the student takes off the booking is not an expired hold, and
      must never be reported as one. The server returns RELEASED_BY_STUDENT. */
   removeSeat = async (seatNumber) => {
+    if (this._paymentInFlight || this.state.busy) return;
+    const tripId = this.state.tripId;
+    this._selectionVersion=(this._selectionVersion||0)+1;
+    this._loadRequest=(this._loadRequest||0)+1;
     this.setState({ busy: true, error: null });
     try {
-      await DLT.seats.release(this.state.tripId, seatNumber);
+      await DLT.seats.release(tripId, seatNumber);
+      if (this.state.tripId !== tripId) return;
       await this._load({ quiet: true });
+      if (this.state.tripId !== tripId) return;
       const left = (this.state.data.held || []).length;
       this.setState(function (s) {
         const pax = Object.assign({}, s.pax);
@@ -957,9 +1003,10 @@ class Component extends DCLogic {  state = {
         return left
           ? { pax: pax, error: null, busy: false }
           : { pax: pax, error: null, busy: false, step: 'seats', bookingId: null, paymentId: null,
-              notice: 'Seat ' + seatNumber + ' removed. Nothing has been charged - pick the seats you want.' };
+              notice: 'Passenger removed. Nothing has been charged - pick the seats you want.' };
       });
     } catch (e) {
+      if (this.state.tripId !== tripId) return;
       /* The server refuses to free a seat that the booking already started still
          owns, because releasing it would leave that booking payable but
          seatless - which can only ever end in a refund. That refusal is correct,
@@ -968,31 +1015,66 @@ class Component extends DCLogic {  state = {
          sentence and no way forward. */
       if (e.isConflict) {
         await this._load({ quiet: true });
+        if (this.state.tripId !== tripId) return;
         return this.setState({ busy: false,
-          error: 'Seat ' + seatNumber + ' is part of the booking you have already started. '
-               + 'Choose "Change seats" to start the selection again - nothing has been charged.' });
+          error: 'This passenger is part of the booking you have already started. '
+               + 'Choose "Change passengers" to start the selection again - nothing has been charged.' });
       }
       this.fail(e);
     }
   };
 
-  /* 019: release_all_held deliberately SKIPS seats a live pending booking owns,
-     so releasing holds is no longer enough to free them. The booking itself has
-     to go. It is unpaid, so cancelling raises no refund - cancellationQuote
-     returns 0 - and release_booking_seats returns the seats properly, clearing
-     booking_id with them. Fire-and-forget, like the releaseMine it accompanies:
-     a booking that is already gone is not an error worth stopping the student
-     for. */
-  _discardBooking = async (bookingId) => {
+  /* Navigation cleanup may discard only an unpaid pending booking. The server
+     locks and checks payment status, so a stale page cannot cancel a paid ticket.
+     Clear only this attempt's idempotency key before starting a new selection. */
+  _discardBooking = async (bookingId, scope) => {
     if (!bookingId) return;
-    try { await DLT.bookings.cancel(bookingId, 'Changed seats before paying'); }
+    try { await DLT.bookings.discard(bookingId); }
     catch (e) { /* already cancelled, expired, or never created - nothing owed */ }
-    try { DLT.bookings.clearAttempt(this.state.tripId); } catch (e) {}
+    try { if (scope) DLT.bookings.clearAttempt(scope); } catch (e) {}
   };
 
   setField = (seat, key, v) => this.setState(s => ({
     pax: Object.assign({}, s.pax, { [seat]: Object.assign({}, s.pax[seat] || {}, { [key]: v }) }),
   }));
+
+  /* Most students book for themselves: the first seat starts with the signed-in
+     account's own name, student ID and phone, so nobody types their number
+     twice. A seat with anything already entered is never overwritten. */
+  toPassengers = () => {
+    const me = DLT.auth.current();
+    const first = this.heldSeats()[0];
+    const patch = { step: 'passengers', open: 0, error: null };
+    if (me && first) {
+      const p = this.state.pax[first.seatNumber] || {};
+      if (!p.name && !p.studentId && !p.phone) {
+        patch.pax = Object.assign({}, this.state.pax, { [first.seatNumber]: {
+          name: me.name || '', studentId: me.studentId || '', phone: me.phone || '' } });
+      }
+    }
+    this.setState(patch);
+  };
+
+  toReview = () => {
+    if (!this.allValid()) {
+      const bad = this.heldSeats().findIndex(s => {
+        const v = this.validSeat(s.seatNumber);
+        return !(v.name && v.studentId && v.phone);
+      });
+      this.setState({ touched: true, open: bad < 0 ? 0 : bad });
+      return;
+    }
+    /* An empty contact number falls back to the first passenger's phone,
+       which was just validated - not a second box to fill with the same digits. */
+    const first = this.heldSeats()[0];
+    const contact = String(this.state.contact || '').replace(/\s/g, '')
+      || (first ? String(this.paxFor(first.seatNumber).phone).replace(/\s/g, '') : '');
+    if (!/^[6-9]\d{9}$/.test(contact)) {
+      this.setState({ touched: true, error: 'Enter a valid booking contact number.' });
+      return;
+    }
+    this.setState({ touched: true, contact: contact, step: 'review', error: null });
+  };
 
   /* The basket, as the server reported it in the seat-map response. */
   heldSeats() { return this.state.data.held || []; }
@@ -1011,6 +1093,8 @@ class Component extends DCLogic {  state = {
   }
 
   doAuth = async () => {
+    if (this._authInFlight) return;
+    this._authInFlight = true;
     const st = this.state;
     this.setState({ busy: true, error: null });
     try {
@@ -1022,14 +1106,21 @@ class Component extends DCLogic {  state = {
         await DLT.auth.signIn(st.authEmail, st.authPassword);
       }
       const me = DLT.auth.current();
+      if (me && me.role !== 'STUDENT') { location.href = './DLT Admin.dc.html'; return; }
       this.setState({ busy: false, authPassword: '', contact: this.state.contact || (me ? me.phone : '') });
     } catch (e) { this.fail(e); }
+    finally { this._authInFlight = false; }
   };
 
   startPayment = async () => {
+    if (this._paymentInFlight) return;
+    this._paymentInFlight = true;
     const st = this.state;
     this.setState({ busy: true, error: null });
     try {
+      const selectedTripId = st.tripId;
+      const selectedScope = st.tripId + ':' + (this._attempt || 0);
+      const sameDeparture = () => this.state.tripId === selectedTripId;
       let bookingId = st.bookingId;
       if (!bookingId) {
         const held = this.heldSeats();
@@ -1042,6 +1133,7 @@ class Component extends DCLogic {  state = {
           scope: st.tripId + ':' + (this._attempt || 0),
         });
         bookingId = booking.id;
+        if (!sameDeparture()) { await this._discardBooking(bookingId, selectedScope); return; }
         this.setState({ bookingId: bookingId });
       }
 
@@ -1060,6 +1152,7 @@ class Component extends DCLogic {  state = {
         throw e;
       }
 
+      if (!sameDeparture()) { await this._discardBooking(bookingId, selectedScope); return; }
       this.setState({ bookingId: bookingId, paymentId: intent.paymentId,
         orderId: intent.providerOrderId, step: 'checkout', reprice: null });
 
@@ -1078,6 +1171,9 @@ class Component extends DCLogic {  state = {
         const confirmed = await DLT.checkout.awaitConfirmation(bookingId, {
           onStatus: function () { self.setState({ step: 'verifying' }); },
         });
+        /* The booking this payment belongs to is the one we paid for, whatever
+           happened to state meanwhile - _load reads it from state. */
+        this.setState({ bookingId: bookingId, paymentId: intent.paymentId });
         await this._load({ quiet: true });
         if (confirmed.status === 'CONFIRMED') this.setState({ step: 'done' });
         else if (confirmed.pendingTimeout) this.setState({ step: 'pending' });
@@ -1095,6 +1191,7 @@ class Component extends DCLogic {  state = {
     } catch (e) {
       this.fail(e);
     }
+    finally { this._paymentInFlight = false; this.setState({ busy: false }); }
   };
   acceptReprice = async () => {
     try {
@@ -1110,7 +1207,7 @@ class Component extends DCLogic {  state = {
       const entry = (this.state.data.waits || []).filter(w => w.id === entryId)[0];
       this.setState({ tripId: entry ? entry.tripId : this.state.tripId, step: 'seats',
         waitlist: null, error: null, bookingId: null, paymentId: null,
-        notice: 'Seat ' + seat.seatNumber + ' is held for you. Add passenger details to confirm.' },
+        notice: 'Your place is held for you. Add passenger details to confirm.' },
         () => { this._load(); this._watchSeats(true); });
     } catch (e) { this.fail(e); }
   };
@@ -1142,8 +1239,8 @@ class Component extends DCLogic {  state = {
       return { atLoading: true, skeletons: [{}, {}, {}], showStepper: false,
         primaryLabel: 'Loading', primaryDisabled: true, primaryBg: '#E4E1D8', primaryFg: '#7A7F77',
         primaryCursor: 'wait', primary: () => {}, noSeats: true, total: 0, unitPrice: null,
-        seatCountLabel: '0 seats', summaryLineLabel: 'Fare after departure',
-        summaryLineAmount: '—', summaryTotal: '—',
+        seatCountLabel: '0 seats', departureFare: '—', summaryTotalLabel: 'Fare (excluding tax)', summaryTaxNote: 'Excluding tax', summaryLineLabel: 'Fare after departure',
+        summaryLineAmount: '—', summaryTotal: '—', summaryGst: null,
         routeLabel: 'Woxsen <-> Miyapur', tripSummary: 'Reading live departures', primaryHint: '',
         notice: null, clearNotice: () => {}, barLine: '', repriced: false,
         signedOut: true, signedIn: false };
@@ -1166,9 +1263,19 @@ class Component extends DCLogic {  state = {
     const total = booking && ['done', 'pending', 'discrepancy', 'processing'].indexOf(step) >= 0
       ? booking.totalAmount : (unitPrice === null ? null : n * unitPrice);
     const money = value => value === null || value === undefined ? '—' : '₹' + value;
-    const summaryLineLabel = n && unitPrice !== null ? (n === 1 ? '1 seat' : n + ' seats') + ' x ₹' + unitPrice : 'Fare after departure';
-    const summaryLineAmount = n && total !== null ? money(total) : '—';
-    const summaryTotal = n && total !== null ? money(total) : '—';
+    /* Shown as fare + GST. Split from the per-seat amount actually due, so the
+       two lines always add back up to the total the server charges. */
+    const split = n && total !== null ? DLT.fare.split(total / n, n) : null;
+    const seatWord = n === 1 ? '1 seat' : n + ' seats';
+    const showTax = ['review', 'checkout', 'verifying', 'pending', 'processing', 'discrepancy', 'failed', 'done'].includes(step);
+    const departureFare = DLT.fare.split((trip || openTrips[0])?.price)?.base ?? '—';
+    const summaryLineLabel = split ? seatWord + ' × ₹' + (split.base / n) + ' (excluding tax)'
+      : n && unitPrice !== null ? seatWord + ' x ₹' + unitPrice : 'Fare after departure';
+    const summaryLineAmount = split ? money(split.base) : n && total !== null ? money(total) : '—';
+    const summaryGst = showTax && split ? money(split.gst) : null;
+    const summaryTotal = n && total !== null ? money(!showTax && split ? split.base : total) : '—';
+    const summaryTotalLabel = showTax ? 'Total payable' : 'Fare (excluding tax)';
+    const summaryTaxNote = showTax && split ? money(split.base) + ' excluding tax + ' + money(split.gst) + ' GST' : 'Excluding tax';
 
     /* The clock runs off the SERVER's holdExpiresAt. The client starts no timer
        of its own and never decides a hold has lapsed. */
@@ -1188,11 +1295,11 @@ class Component extends DCLogic {  state = {
         : t.status === 'BOOKING_CLOSED' ? 'Booking closed'
         : t.available <= 8 ? t.available + ' seats left' : 'Seats available',
       availFg: t.soldOut ? '#5F6560' : t.available <= 8 ? '#8A5A0E' : '#3D423C',
-      cta: t.soldOut ? 'Join waitlist' : t.status === 'BOOKING_CLOSED' ? 'Closed' : 'Select seats',
+      cta: t.status !== 'OPEN' ? 'Booking closed' : t.soldOut ? 'Join waitlist' : 'Book tickets',
       ctaBg: t.bookable ? '#0E1014' : 'transparent',
       ctaFg: t.bookable ? '#F7F5F0' : '#0E1014',
       ctaBd: '#0E1014',
-      busy: t.status === 'BOOKING_CLOSED',
+      busy: t.status !== 'OPEN',
       onPick: () => this.pickTrip(t),
     }));
 
@@ -1272,29 +1379,15 @@ class Component extends DCLogic {  state = {
     if (step === 'trips') {
       primaryHint = 'Pick a departure above to start. Nothing is charged until you pay.';
     } else if (step === 'seats') {
-      primaryLabel = n ? 'Continue to passengers' : 'Select at least one seat';
-      primaryDisabled = !n;
-      primaryHint = n ? 'Your seats are held for 10 minutes.' : 'Tap a seat on the map to hold it.';
-      onPrimary = () => this.setState({ step: 'passengers', open: 0, error: null });
+      primaryLabel = n ? 'Continue to passenger details' : 'Select a place for each passenger';
+      primaryDisabled = !n || st.busy;
+      primaryHint = n ? 'Your places are reserved for 10 minutes. Seating is first come, first served.' : 'Select up to five places on the diagram. Physical seating is not assigned.';
+      onPrimary = this.toPassengers;
     } else if (step === 'passengers') {
       primaryLabel = 'Review booking';
       primaryDisabled = false;
       primaryHint = this.allValid() ? '' : 'Every passenger needs a name, student ID and phone.';
-      onPrimary = () => {
-        if (!this.allValid()) {
-          const bad = held.findIndex(s => {
-            const v = this.validSeat(s.seatNumber);
-            return !(v.name && v.studentId && v.phone);
-          });
-          this.setState({ touched: true, open: bad < 0 ? 0 : bad });
-          return;
-        }
-        if (!/^[6-9]\d{9}$/.test(String(st.contact || '').replace(/\s/g, ''))) {
-          this.setState({ touched: true, error: 'Enter a valid booking contact number.' });
-          return;
-        }
-        this.setState({ touched: true, step: 'review', error: null });
-      };
+      onPrimary = this.toReview;
     } else if (step === 'review') {
       if (st.reprice) {
         primaryLabel = 'Accept ₹' + st.reprice.amount;
@@ -1322,7 +1415,7 @@ class Component extends DCLogic {  state = {
       primaryLabel = 'Retry payment'; primaryDisabled = false; onPrimary = this.retryPay;
       primaryHint = 'Nothing was charged.';
     } else if (step === 'expired') {
-      primaryLabel = 'Choose seats again'; primaryDisabled = false;
+      primaryLabel = 'Choose passengers again'; primaryDisabled = false;
       primaryHint = 'The 10-minute hold ran out.';
       onPrimary = () => this.setState({ step: 'seats', bookingId: null, paymentId: null, error: null });
     } else if (step === 'done') {
@@ -1452,7 +1545,7 @@ class Component extends DCLogic {  state = {
       })) : [],
 
       seatRows: held.map(s => ({
-        id: s.seatNumber, type: s.seatType, price: unitPrice,
+        id: s.seatNumber, type: s.seatType, price: DLT.fare.split(unitPrice)?.base ?? '—',
         removable: ['seats', 'passengers', 'review'].indexOf(step) >= 0,
         onRemove: () => this.removeSeat(s.seatNumber),
       })),
@@ -1460,7 +1553,7 @@ class Component extends DCLogic {  state = {
       seatCountLabel: n === 1 ? '1 seat' : n + ' seats',
       seatList: (booking ? booking.passengers.map(p => p.seatNumber) : held.map(s => s.seatNumber)).join(', ') || '—',
       unitPrice, total,
-      summaryLineLabel, summaryLineAmount, summaryTotal,
+      departureFare, summaryLineLabel, summaryLineAmount, summaryTotal, summaryGst, summaryTotalLabel, summaryTaxNote,
       holdActive: holdLeft > 0, holdClock: DLT.fmt.countdown(holdLeft),
       holdBg: lowHold ? '#FFFDF6' : '#F4F7F3', holdFg: lowHold ? '#8A5A0E' : '#0E4B34',
 
@@ -1483,8 +1576,8 @@ class Component extends DCLogic {  state = {
       },
       waitlistCopy: waitOffer
         ? (waitOffer.status === 'CLAIMED'
-          ? 'Seat ' + waitOffer.seatNumber + ' is held for you. Finish the booking before the window closes or it passes to the next student.'
-          : 'Seat ' + waitOffer.seatNumber + ' on the ' + (waitTrip ? DLT.fmt.when(waitTrip.departureAt) : 'departure') +
+          ? 'Your place is held for you. Finish the booking before the window closes or it passes to the next student.'
+          : 'Your place on the ' + (waitTrip ? DLT.fmt.when(waitTrip.departureAt) : 'departure') +
             ' is reserved for you for 30 minutes. Nobody else can take it while the window is open.')
         : waitEntry
           ? 'You are on the list. If a seat is released it is reserved for you and you get 30 minutes to claim and pay for it before it passes on.'
@@ -1516,38 +1609,46 @@ class Component extends DCLogic {  state = {
           .catch(this.fail);
       },
       backToTrips: () => {
+        if (this._paymentInFlight) return;
+        const oldScope = st.tripId + ':' + (this._attempt || 0);
+        this._attempt = (this._attempt || 0) + 1;
         this._watchSeats(false);
         const trip = st.tripId, had = st.bookingId;
         this.setState({ step: 'trips', tripId: null, error: null }, () => {
           /* Discard first: releaseMine cannot free seats this booking owns. */
-          this._discardBooking(had).then(() => {
+          this._discardBooking(had, oldScope).then(() => {
             if (trip) DLT.seats.releaseMine(trip).catch(() => {});
             this._load({ quiet: true });
           });
         });
       },
-      /* "Change seats" is the control the removeSeat conflict now points at, so
+      /* "Change passengers" is the control the removeSeat conflict now points at, so
          it has to genuinely release the seats rather than just forget the
          booking id locally. Dropping the id alone left a PAYMENT_PENDING
          booking still holding them, and the student met the same refusal again
          on the next tap - and, per 018, a refusal to rebook those seats too. */
       editSeats: () => {
+        if (this._paymentInFlight) return;
+        const oldScope = st.tripId + ':' + (this._attempt || 0);
+        this._attempt = (this._attempt || 0) + 1;
         const had = st.bookingId;
         this.setState({ step: 'seats', bookingId: null, paymentId: null, error: null },
-          () => { this._discardBooking(had).then(() => this._load({ quiet: true })); });
+          () => { this._discardBooking(had, oldScope).then(() => this._load({ quiet: true })); });
       },
-      editPax: () => this.setState({ step: 'passengers', error: null }),
+      editPax: () => { if (!this._paymentInFlight) this.setState({ step: 'passengers', error: null }); },
       /* Nothing to clear in the page any more: the hold lives on the server and
          the guest cookie is HttpOnly. Starting over just resets local view state
          and reloads from the server. */
       restart: () => {
+        if (this._paymentInFlight) return;
+        const oldScope = st.tripId + ':' + (this._attempt || 0);
         this._watchSeats(false);
         const had = st.bookingId;
         this._attempt = (this._attempt || 0) + 1;
         this.setState({ step: 'trips', tripId: null, pax: {}, touched: false,
           bookingId: null, paymentId: null, orderId: null, error: null, notice: null,
           reprice: null, waitlist: null },
-          () => { this._discardBooking(had).then(() => this._load()); });
+          () => { this._discardBooking(had, oldScope).then(() => this._load()); });
       },
     };
   }

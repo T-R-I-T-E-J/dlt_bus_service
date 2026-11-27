@@ -1,0 +1,72 @@
+name: dlt-vps-fresh
+
+services:
+  db:
+    image: postgres:17-alpine
+    env_file:
+      - path: ${DLT_CONFIG_DIR:-/etc/dlt-vps}/database.env
+        format: raw
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-role.sql:/docker-entrypoint-initdb.d/10-dlt-role.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "dlt_prod"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: &logs
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  migrate:
+    image: dlt-api-tools:${DLT_IMAGE_TAG:-local}
+    build:
+      context: ../../backend
+      target: tools
+    profiles: [tools]
+    env_file:
+      - path: ${DLT_CONFIG_DIR:-/etc/dlt-vps}/migrate.env
+        format: raw
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  api:
+    image: dlt-api:${DLT_IMAGE_TAG:-local}
+    build:
+      context: ../../backend
+      target: runtime
+    env_file:
+      - path: ${DLT_CONFIG_DIR:-/etc/dlt-vps}/runtime.env
+        format: raw
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3100:3000"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 270s
+      retries: 3
+    logging: *logs
+
+volumes:
+  postgres-data:

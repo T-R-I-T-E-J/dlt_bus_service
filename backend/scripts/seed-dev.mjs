@@ -86,7 +86,7 @@ for (let d = 1; d <= 7; d++) {
   for (const [hour, vehicle] of [[8, vehicles[0]], [17, vehicles[1]]]) {
     const { rows: [t] } = await client.query(
       `INSERT INTO trips (route_id, vehicle_id, departure_at, price, status)
-       VALUES ($1, $2, (current_date + $3::int) + ($4::int || ' hours')::interval, 299, 'OPEN')
+       VALUES ($1, $2, (current_date + $3::int) + ($4::int || ' hours')::interval, 320, 'OPEN')
        RETURNING id`, [route.id, vehicle.id, d, hour]);
     await client.query('SELECT materialise_trip_seats($1)', [t.id]);
     made++;

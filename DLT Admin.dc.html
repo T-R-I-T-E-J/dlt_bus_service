@@ -1,8 +1,13 @@
 <!DOCTYPE html>
-<html>
+<html lang="en-IN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Admin — DLT</title>
+<meta name="description" content="DLT operations, boarding and booking management.">
+<link rel="canonical" href="https://dltservices.tech/admin">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<meta name="robots" content="noindex,nofollow">
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
 <link rel="preload" as="script" href="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z">
 <link rel="preload" as="script" href="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1">
@@ -10,14 +15,11 @@
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script src="./support.js"></script>
+<link rel="stylesheet" href="./dlt-mobile.css">
 </head>
-<body>
+<body data-dlt-page="admin">
 <x-dc>
 <helmet>
-<title>Admin — DLT</title>
-<link rel="icon" href="./favicon.svg" type="image/svg+xml">
-<meta name="robots" content="noindex, nofollow">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400;100,500;100,600;100,700;125,600;125,700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -40,6 +42,43 @@
     [data-m="side"] { position: static !important; height: auto !important; }
     [data-m="nav"] { flex-direction: row !important; flex-wrap: wrap !important; }
   }
+  [data-ops-mobile], [data-ops-board-tabs] { display: none; }
+  [data-m="shell"] > main { min-width: 0; }
+  @media (max-width: 900px) {
+    [data-m="side"] { position: sticky !important; top: 0; z-index: 40; padding: 14px 16px !important; gap: 12px !important; box-sizing: border-box; }
+    [data-m="nav"], [data-ops-desktop-account], [data-ops-spacer] { display: none !important; }
+    [data-ops-mobile] { display: flex; gap: 10px; align-items: center; }
+    [data-ops-board-tabs] { display: flex; gap: 8px; margin-top: 18px; }
+    [data-ops-board-tabs] button { flex: 1; min-height: 48px; border-radius: 6px; border: 1px solid #BFC6BC; padding: 10px; font-weight: 600; }
+    [data-ops-board-view="manifest"] [data-ops-scanner], [data-ops-board-view="scan"] [data-ops-passenger-panel] { display: none !important; }
+    [data-ops-mobile] select { flex: 1; min-width: 0; background: #FFFFFF; color: #0E1014; border: 0; border-radius: 6px; padding: 12px; }
+    [data-ops-mobile] button { background: none; color: #F7F5F0; border: 1px solid #70766E; border-radius: 6px; padding: 10px 12px; white-space: nowrap; }
+    [data-m="shell"] > main { padding: 22px 16px calc(36px + env(safe-area-inset-bottom,0px)) !important; }
+    [data-ops-layout] { grid-template-columns: minmax(0,1fr) !important; }
+    [data-ops-metrics] { grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 8px !important; }
+    [data-ops-metrics] > div { padding: 14px 12px !important; border-radius: 8px; }
+    main *, [data-m="side"] * { min-width: 0; }
+    input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px !important; min-height: 48px; max-width: 100%; box-sizing: border-box; }
+    main button { min-height: 44px; max-width: 100%; }
+    [data-m="wide"] { overflow: visible; }
+    [data-ops-table] { min-width: 0 !important; }
+    [data-ops-table-head] { display: none !important; }
+    [data-ops-row] { display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 14px 12px !important; margin: 10px; padding: 16px !important; background: #FFFFFF; border: 1px solid #DCDDD6 !important; border-radius: 8px; }
+    [data-ops-row] > * { min-width: 0; white-space: normal !important; overflow-wrap: anywhere; }
+    [data-ops-row] > :first-child { grid-column: 1 / -1; font-weight: 600; }
+    [data-cell-label]::before { content: attr(data-cell-label); display: block; font: 400 11px/1.4 Archivo,system-ui,sans-serif; letter-spacing: normal; text-transform: none; color: #5F6560; margin-bottom: 5px; }
+    [data-ops-actions] { grid-column: 1 / -1; display: flex !important; gap: 8px; flex-wrap: wrap; justify-content: flex-start !important; }
+    [data-ops-actions]::before { display: none; }
+    [data-ops-row] * { white-space: normal !important; overflow-wrap: anywhere; }
+    [data-ops-boarding-controls] { flex-wrap: wrap; width: 100%; justify-content: space-between; }
+    [data-ops-boarding-controls] > label { flex: 1; }
+    [data-ops-boarding-controls] select { width: 100%; }
+    [data-ops-tabs] { display: flex; flex-wrap: wrap; gap: 6px; }
+    [data-ops-manifest] [data-ops-row] { grid-template-columns: minmax(0,1fr) 70px !important; }
+    [data-ops-manifest] [data-ops-row] > :first-child { grid-column: 1; }
+    [data-ops-manifest] [data-ops-row] > :nth-child(2) { grid-column: 2; grid-row: 1; text-align: center; padding: 8px 6px; background: #EEF3EE; border-radius: 6px; font-size: 20px !important; font-weight: 700; }
+    [data-ops-manifest] [data-ops-row] > :nth-child(3) { grid-column: 1 / -1; }
+  }
 </style>
 <!-- QR decoding only. It never decides anything: DLT.boarding.scan remains the
      authority for pass, booking, payment, trip, cancellation, refund and prior
@@ -54,13 +93,21 @@
 <script src="./jsqr.vendor.js"></script>
 </helmet>
 
-<div data-m="shell" style="min-height:100vh;display:grid;grid-template-columns:236px minmax(0,1fr);background:#EFEDE6">
+<div data-m="shell" style="min-height:100vh;display:grid;grid-template-columns:236px minmax(0,1fr);background:#EFEDE6" data-ops-layout>
 
   <aside data-m="side" style="position:sticky;top:0;height:100vh;background:#0E1014;color:#F7F5F0;padding:20px 16px;display:flex;flex-direction:column;gap:20px">
     <a href="./DLT Homepage.dc.html" style="display:flex;align-items:baseline;gap:8px;color:#F7F5F0">
       <span style="font-stretch:125%;font-weight:700;font-size:18px;letter-spacing:.02em">DLT</span>
       <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#A9AFA6">Operations</span>
     </a>
+    <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+    <div data-ops-mobile>
+      <select aria-label="Operations section" value="{{ sectionName }}" onChange="{{ onSectionChange }}">
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="5"><option value="{{ n.label }}">{{ n.label }}</option></sc-for>
+      </select>
+      <button type="button" onClick="{{ signOut }}">Sign out</button>
+    </div>
+    </sc-if>
     <nav data-m="nav" aria-label="Admin sections" style="display:flex;flex-direction:column;gap:2px">
       <sc-for list="{{ nav }}" as="n" hint-placeholder-count="9">
         <button type="button" onClick="{{ n.onPick }}" aria-current="{{ n.on }}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;background:{{ n.bg }};color:{{ n.fg }};border:0;padding:11px 12px;border-radius:2px;font-size:13.5px;font-weight:{{ n.weight }};cursor:pointer;min-height:44px">
@@ -69,8 +116,8 @@
         </button>
       </sc-for>
     </nav>
-    <span style="flex:1"></span>
-    <div style="border-top:1px solid rgba(247,245,240,.16);padding-top:14px">
+    <span data-ops-spacer style="flex:1"></span>
+    <div data-ops-desktop-account style="border-top:1px solid rgba(247,245,240,.16);padding-top:14px">
       <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#A9AFA6">Signed in as</div>
       <div style="margin-top:7px;font-size:13.5px;font-weight:600">{{ roleName }}</div>
       <div style="margin-top:3px;font-size:12px;color:#A9AFA6">{{ roleScope }}</div>
@@ -113,7 +160,7 @@
       </div>
     </div>
 
-    <div style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px">
+    <div style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px" data-ops-layout data-ops-metrics>
       <sc-for list="{{ metrics }}" as="m" hint-placeholder-count="5">
         <div style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12);padding:16px 16px 18px">
           <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560">{{ m.label }}</div>
@@ -123,11 +170,11 @@
       </sc-for>
     </div>
 
-    <div style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start">
+    <div style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start" data-ops-layout>
       <div style="background:#FFFFFF;border:1px solid {{ alertBd }};border-top:2px solid {{ alertAccent }}">
         <div style="padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.1);font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:{{ alertAccent }}">{{ alertTitle }}</div>
         <sc-for list="{{ alerts }}" as="a" hint-placeholder-count="2">
-          <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.08)">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.08)" data-ops-layout>
             <div>
               <div style="font-size:13.5px;font-weight:600">{{ a.title }}</div>
               <div style="margin-top:4px;font-size:12.5px;color:#4A4F49">{{ a.detail }}</div>
@@ -142,7 +189,7 @@
       <div style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
         <div style="padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.1);font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Activity · from the audit trail</div>
         <sc-for list="{{ activity }}" as="a" hint-placeholder-count="6">
-          <div style="display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.08)">
+          <div style="display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.08)" data-ops-layout>
             <span style="font-family:'Martian Mono',monospace;font-size:9px;color:#7A7F77;font-variant-numeric:tabular-nums">{{ a.at }}</span>
             <span style="font-size:13px;color:#3D423C">{{ a.text }}</span>
           </div>
@@ -168,7 +215,7 @@
     <sc-if value="{{ newTripOpen }}" hint-placeholder-val="{{ false }}">
       <div style="margin:18px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;padding:clamp(18px,2.6vw,24px);animation:dltRise .25s ease">
         <h2 style="margin:0;font-size:17px;font-weight:600">New trip draft</h2>
-        <div style="margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px 16px">
+        <div style="margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px 16px" data-ops-layout>
           <label style="display:block">
             <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Date</span>
             <input type="date" value="{{ ntDate }}" onChange="{{ onNtDate }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
@@ -204,20 +251,20 @@
     </sc-if>
 
     <div data-m="wide" style="margin:20px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
-      <div style="min-width:900px">
-        <div style="display:grid;grid-template-columns:120px 84px minmax(160px,1fr) minmax(0,1fr) 96px 96px 130px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+      <div style="min-width:900px" data-ops-table>
+        <div style="display:grid;grid-template-columns:120px 84px minmax(160px,1fr) minmax(0,1fr) 96px 96px 130px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560" data-ops-table-head>
           <span>Date</span><span>Depart</span><span>Route</span><span>Vehicle</span><span>Seats</span><span>Revenue</span><span>Status</span><span>Action</span>
         </div>
         <sc-for list="{{ tripRows }}" as="t" hint-placeholder-count="6">
-          <div style="display:grid;grid-template-columns:120px 84px minmax(160px,1fr) minmax(0,1fr) 96px 96px 130px auto;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px">
-            <span style="font-weight:600">{{ t.date }}</span>
-            <span style="font-variant-numeric:tabular-nums">{{ t.depart }}</span>
-            <span style="color:#3D423C">{{ t.route }}</span>
-            <span style="color:#3D423C">{{ t.vehicle }}</span>
-            <span style="font-variant-numeric:tabular-nums">{{ t.seats }}</span>
-            <span style="font-variant-numeric:tabular-nums">{{ t.revenue }}</span>
-            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ t.statusFg }}">{{ t.status }}</span>
-            <span style="display:flex;gap:7px;flex-wrap:wrap">
+          <div style="display:grid;grid-template-columns:120px 84px minmax(160px,1fr) minmax(0,1fr) 96px 96px 130px auto;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px" data-ops-row>
+            <span style="font-weight:600" data-cell-label="Date">{{ t.date }}</span>
+            <span style="font-variant-numeric:tabular-nums" data-cell-label="Depart">{{ t.depart }}</span>
+            <span style="color:#3D423C" data-cell-label="Route">{{ t.route }}</span>
+            <span style="color:#3D423C" data-cell-label="Vehicle">{{ t.vehicle }}</span>
+            <span style="font-variant-numeric:tabular-nums" data-cell-label="Seats">{{ t.seats }}</span>
+            <span style="font-variant-numeric:tabular-nums" data-cell-label="Revenue">{{ t.revenue }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ t.statusFg }}" data-cell-label="Status">{{ t.status }}</span>
+            <span style="display:flex;gap:7px;flex-wrap:wrap" data-cell-label="Action" data-ops-actions>
               <button type="button" onClick="{{ t.onPrimary }}" style="border:1px solid {{ t.actBd }};background:{{ t.actBg }};color:{{ t.actFg }};padding:9px 13px;border-radius:2px;font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer;min-height:40px">{{ t.act }}</button>
               <sc-if value="{{ t.canSeats }}" hint-placeholder-val="{{ false }}">
                 <button type="button" onClick="{{ t.onSeats }}" style="border:1px solid rgba(14,16,20,.2);background:none;color:#0E1014;padding:9px 13px;border-radius:2px;font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer;min-height:40px">Seats &amp; staff</button>
@@ -261,7 +308,7 @@
             <span style="display:flex;align-items:center;gap:7px"><span aria-hidden="true" style="display:block;width:13px;height:13px;border-radius:2px;background:{{ l.bg }};border:1px solid {{ l.bd }}"></span>{{ l.label }}</span>
           </sc-for>
         </div>
-        <div role="group" aria-label="Seat map" style="margin:16px auto 0;display:grid;grid-template-columns:repeat(2,40px) 26px repeat(2,40px);gap:8px;justify-content:center">
+        <div role="group" aria-label="Seat map" style="margin:16px auto 0;display:grid;grid-template-columns:repeat(2,40px) 26px repeat(2,40px);gap:8px;justify-content:center" data-ops-layout>
           <sc-for list="{{ adminSeats }}" as="c" hint-placeholder-count="55">
             <sc-if value="{{ c.isSeat }}" hint-placeholder-val="{{ true }}">
               <button type="button" onClick="{{ c.onPick }}" disabled="{{ c.disabled }}" title="{{ c.title }}" aria-label="{{ c.title }}" style="height:40px;width:40px;border-radius:3px 3px 5px 5px;border:1px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;cursor:{{ c.cursor }}">{{ c.id }}</button>
@@ -346,7 +393,7 @@
     <sc-if value="{{ vehicleFormOpen }}" hint-placeholder-val="{{ false }}">
       <div style="margin:18px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;padding:18px 20px;animation:dltRise .25s ease">
         <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#0E4B34">{{ vehicleFormTitle }}</div>
-        <div style="margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 16px;max-width:760px">
+        <div style="margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px 16px;max-width:760px" data-ops-layout>
           <label style="display:block">
             <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Name</span>
             <input type="text" value="{{ vfName }}" onChange="{{ onVfName }}" placeholder="DLT-03" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
@@ -375,7 +422,7 @@
         </div>
       </div>
     </sc-if>
-    <div style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+    <div style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px" data-ops-layout>
       <sc-for list="{{ vehicles }}" as="v" hint-placeholder-count="3">
         <div style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12);padding:18px">
           <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
@@ -428,7 +475,7 @@
       <div style="margin:14px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;padding:18px 20px;animation:dltRise .25s ease">
         <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#0E4B34">Manual booking · Super Admin · §40</div>
         <p style="margin:10px 0 0;max-width:66ch;font-size:12.5px;line-height:1.6;color:#3D423C">A booking made outside the online flow. A complimentary seat is worth ₹0 and can never produce a refund; a paid-externally seat records the fare against a manual provider and is never presented as a Cashfree payment.</p>
-        <div style="margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px 16px;max-width:900px">
+        <div style="margin:14px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px 16px;max-width:900px" data-ops-layout>
           <label style="display:block">
             <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Departure</span>
             <select value="{{ mbTrip }}" onChange="{{ onMbTrip }}" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:13.5px">
@@ -555,17 +602,17 @@
 
         <sc-if value="{{ bkPax }}" hint-placeholder-val="{{ false }}">
           <div data-m="wide">
-            <div style="min-width:640px">
-              <div style="display:grid;grid-template-columns:minmax(0,1.3fr) 112px 132px 76px 130px;gap:12px;padding-bottom:11px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+            <div style="min-width:640px" data-ops-table>
+              <div style="display:grid;grid-template-columns:minmax(0,1.3fr) 112px 132px 76px 130px;gap:12px;padding-bottom:11px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560" data-ops-table-head>
                 <span>Passenger</span><span>Student ID</span><span>Phone</span><span>Seat</span><span>Boarding</span>
               </div>
               <sc-for list="{{ bkPassengers }}" as="p" hint-placeholder-count="2">
-                <div style="display:grid;grid-template-columns:minmax(0,1.3fr) 112px 132px 76px 130px;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px;font-variant-numeric:tabular-nums">
-                  <span style="font-weight:600">{{ p.name }}</span>
-                  <span style="color:#3D423C">{{ p.sid }}</span>
-                  <span style="color:#3D423C">{{ p.phone }}</span>
-                  <span>{{ p.seat }}</span>
-                  <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ p.fg }}">{{ p.state }}</span>
+                <div style="display:grid;grid-template-columns:minmax(0,1.3fr) 112px 132px 76px 130px;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px;font-variant-numeric:tabular-nums" data-ops-row>
+                  <span style="font-weight:600" data-cell-label="Passenger">{{ p.name }}</span>
+                  <span style="color:#3D423C" data-cell-label="Student ID">{{ p.sid }}</span>
+                  <span style="color:#3D423C" data-cell-label="Phone">{{ p.phone }}</span>
+                  <span data-cell-label="Seat">{{ p.seat }}</span>
+                  <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ p.fg }}" data-cell-label="Boarding">{{ p.state }}</span>
                 </div>
               </sc-for>
             </div>
@@ -583,17 +630,17 @@
           </dl>
           <sc-if value="{{ hasPaymentHistory }}" hint-placeholder-val="{{ false }}">
             <div data-m="wide" style="margin:20px 0 0;border:1px solid rgba(14,16,20,.12);background:#FFFFFF">
-              <div style="min-width:720px">
-                <div style="display:grid;grid-template-columns:92px 112px minmax(130px,1fr) 126px 130px;gap:12px;padding:11px 14px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+              <div style="min-width:720px" data-ops-table>
+                <div style="display:grid;grid-template-columns:92px 112px minmax(130px,1fr) 126px 130px;gap:12px;padding:11px 14px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560" data-ops-table-head>
                   <span>Amount</span><span>Status</span><span>Reference</span><span>Provider</span><span>Updated</span>
                 </div>
                 <sc-for list="{{ paymentHistory }}" as="p" hint-placeholder-count="3">
-                  <div style="display:grid;grid-template-columns:92px 112px minmax(130px,1fr) 126px 130px;gap:12px;align-items:start;padding:12px 14px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px;font-variant-numeric:tabular-nums">
-                    <span style="font-weight:600">{{ p.amount }}</span>
-                    <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ p.fg }}">{{ p.status }}</span>
-                    <span style="color:#3D423C;overflow-wrap:anywhere">{{ p.ref }}</span>
-                    <span style="color:#3D423C">{{ p.provider }}</span>
-                    <span style="color:#5F6560">{{ p.updated }}</span>
+                  <div style="display:grid;grid-template-columns:92px 112px minmax(130px,1fr) 126px 130px;gap:12px;align-items:start;padding:12px 14px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px;font-variant-numeric:tabular-nums" data-ops-row>
+                    <span style="font-weight:600" data-cell-label="Amount">{{ p.amount }}</span>
+                    <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ p.fg }}" data-cell-label="Status">{{ p.status }}</span>
+                    <span style="color:#3D423C;overflow-wrap:anywhere" data-cell-label="Reference">{{ p.ref }}</span>
+                    <span style="color:#3D423C" data-cell-label="Provider">{{ p.provider }}</span>
+                    <span style="color:#5F6560" data-cell-label="Updated">{{ p.updated }}</span>
                     <sc-if value="{{ p.failure }}" hint-placeholder-val="{{ false }}">
                       <span style="grid-column:1 / -1;color:#8A2F1C">{{ p.failure }}</span>
                     </sc-if>
@@ -604,16 +651,16 @@
           </sc-if>
           <sc-if value="{{ hasRefundHistory }}" hint-placeholder-val="{{ false }}">
             <div data-m="wide" style="margin:14px 0 0;border:1px solid rgba(14,16,20,.12);background:#FFFFFF">
-              <div style="min-width:620px">
-                <div style="display:grid;grid-template-columns:92px 128px minmax(130px,1fr) 160px;gap:12px;padding:11px 14px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+              <div style="min-width:620px" data-ops-table>
+                <div style="display:grid;grid-template-columns:92px 128px minmax(130px,1fr) 160px;gap:12px;padding:11px 14px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560" data-ops-table-head>
                   <span>Amount</span><span>Status</span><span>Reference</span><span>Created</span>
                 </div>
                 <sc-for list="{{ refundHistory }}" as="r" hint-placeholder-count="2">
-                  <div style="display:grid;grid-template-columns:92px 128px minmax(130px,1fr) 160px;gap:12px;align-items:start;padding:12px 14px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px;font-variant-numeric:tabular-nums">
-                    <span style="font-weight:600">{{ r.amount }}</span>
-                    <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ r.fg }}">{{ r.status }}</span>
-                    <span style="color:#3D423C;overflow-wrap:anywhere">{{ r.ref }}</span>
-                    <span style="color:#5F6560">{{ r.created }}</span>
+                  <div style="display:grid;grid-template-columns:92px 128px minmax(130px,1fr) 160px;gap:12px;align-items:start;padding:12px 14px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px;font-variant-numeric:tabular-nums" data-ops-row>
+                    <span style="font-weight:600" data-cell-label="Amount">{{ r.amount }}</span>
+                    <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ r.fg }}" data-cell-label="Status">{{ r.status }}</span>
+                    <span style="color:#3D423C;overflow-wrap:anywhere" data-cell-label="Reference">{{ r.ref }}</span>
+                    <span style="color:#5F6560" data-cell-label="Created">{{ r.created }}</span>
                     <span style="grid-column:1 / -1;color:#4A4F49">{{ r.reason }}</span>
                   </div>
                 </sc-for>
@@ -627,7 +674,7 @@
           <p style="margin:0;font-size:13px;line-height:1.6;color:#3D423C">One secure token per passenger. Boarding is recorded per scan with the staff member and a timestamp; a second scan of the same token is refused.</p>
           <div style="margin:16px 0 0;display:grid;gap:10px">
             <sc-for list="{{ bkPassengers }}" as="p" hint-placeholder-count="2">
-              <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid rgba(14,16,20,.12);padding:12px 14px">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid rgba(14,16,20,.12);padding:12px 14px" data-ops-layout>
                 <div>
                   <div style="font-size:13.5px;font-weight:600">{{ p.name }} · seat {{ p.seat }}</div>
                   <div style="margin-top:4px;font-size:12.5px;color:#4A4F49">{{ p.boardMeta }}</div>
@@ -647,7 +694,7 @@
 
         <sc-if value="{{ bkAudit }}" hint-placeholder-val="{{ false }}">
           <sc-for list="{{ bkTrail }}" as="a" hint-placeholder-count="4">
-            <div style="display:grid;grid-template-columns:140px minmax(0,1fr);gap:14px;padding:11px 0;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px">
+            <div style="display:grid;grid-template-columns:140px minmax(0,1fr);gap:14px;padding:11px 0;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px" data-ops-layout>
               <span style="font-family:'Martian Mono',monospace;font-size:9px;color:#7A7F77;font-variant-numeric:tabular-nums">{{ a.at }}</span>
               <span style="color:#3D423C">{{ a.text }}</span>
             </div>
@@ -668,9 +715,9 @@
     <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px">
       <div>
         <div style="font-family:'Martian Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:#5F6560">{{ boardTripLabel }}</div>
-        <h1 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(23px,2.5vw,30px);letter-spacing:-.02em">Boarding</h1>
+        <h1 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(23px,2.5vw,30px);letter-spacing:-.02em">Boarding &amp; passenger manifest</h1>
       </div>
-      <div style="display:flex;align-items:flex-end;gap:16px">
+      <div data-ops-boarding-controls style="display:flex;align-items:flex-end;gap:16px">
         <sc-if value="{{ canPickTrip }}" hint-placeholder-val="{{ false }}">
           <label style="display:block">
             <span style="display:block;font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Trip</span>
@@ -688,8 +735,12 @@
       </div>
     </div>
 
-    <div style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(336px,1fr));gap:16px;align-items:start">
-      <div style="background:#0E1014;color:#F7F5F0;border-top:2px solid #0E4B34;padding:20px">
+    <div data-ops-board-tabs role="tablist" aria-label="Boarding view">
+      <button type="button" role="tab" aria-selected="{{ manifestView }}" onClick="{{ showManifest }}" style="background:{{ manifestTabBg }};color:{{ manifestTabFg }}">Passengers ({{ manifestCount }})</button>
+      <button type="button" role="tab" aria-selected="{{ scannerView }}" onClick="{{ showScanner }}" style="background:{{ scannerTabBg }};color:{{ scannerTabFg }}">Scan pass</button>
+    </div>
+    <div data-ops-board-view="{{ boardView }}" style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(336px,1fr));gap:16px;align-items:start" data-ops-layout>
+      <div data-ops-scanner style="background:#0E1014;color:#F7F5F0;border-top:2px solid #0E4B34;padding:20px">
         <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px">
           <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5FAE86">Scanner</span>
           <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#A9AFA6">{{ cameraLabel }}</span>
@@ -738,25 +789,30 @@
         <p style="margin:14px 0 0;font-size:11.5px;line-height:1.55;color:#A9AFA6">Every scan is validated against the booking, the payment, the trip, cancellation, refund and prior boarding before a result is shown. The device never decides.</p>
       </div>
 
-      <div style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
+      <div data-ops-passenger-panel aria-label="Passenger manifest" style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
         <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.12)">
-          <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Manifest</span>
+          <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Passenger manifest</span>
           <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ pendingCount }} to board</span>
         </div>
         <div style="padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.1)">
-          <input type="search" value="{{ manifestQuery }}" onChange="{{ onManifestQuery }}" placeholder="Filter by name, student ID or seat" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.18);border-radius:2px;background:#FCFBF8;font-size:13px;min-height:44px" />
+          <input type="search" value="{{ manifestQuery }}" onChange="{{ onManifestQuery }}" aria-label="Find a passenger" placeholder="Name, student ID, seat or booking" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(14,16,20,.18);border-radius:2px;background:#FCFBF8;font-size:13px;min-height:44px" />
         </div>
         <div data-m="wide">
-          <div style="min-width:520px">
+          <div style="min-width:520px" data-ops-table data-ops-manifest>
             <sc-for list="{{ boardList }}" as="p" hint-placeholder-count="6">
-              <div style="display:grid;grid-template-columns:minmax(132px,1fr) 62px 116px auto;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px">
+              <div style="display:grid;grid-template-columns:minmax(132px,1fr) 62px 116px auto;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px" data-ops-row>
                 <div style="min-width:0">
                   <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</div>
                   <div style="margin-top:3px;font-size:12px;color:#4A4F49;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.sub }}</div>
                 </div>
                 <span style="font-variant-numeric:tabular-nums;white-space:nowrap">{{ p.seat }}<span style="color:#7A7F77;font-size:11px"> {{ p.typeShort }}</span></span>
                 <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ p.fg }}">{{ p.state }}</span>
-                <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end" data-ops-actions>
+                  <sc-if value="{{ p.canCall }}" hint-placeholder-val="{{ false }}">
+                    <a href="{{ p.callHref }}" aria-label="{{ p.callLabel }}" style="display:inline-flex;flex-direction:column;justify-content:center;min-height:44px;box-sizing:border-box;border:1px solid #0E4B34;background:#EEF3EE;color:#0E4B34;padding:9px 12px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600">
+                      <span>Call {{ p.contactNumber }}</span><span style="margin-top:3px;font-size:10px;font-weight:400">{{ p.contactLabel }}</span>
+                    </a>
+                  </sc-if>
                   <sc-for list="{{ p.actions }}" as="a" hint-placeholder-count="1">
                     <button type="button" onClick="{{ a.onPick }}" style="border:1px solid {{ a.bd }};background:none;color:{{ a.fg }};padding:8px 11px;border-radius:2px;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;min-height:40px">{{ a.label }}</button>
                   </sc-for>
@@ -775,13 +831,13 @@
     </div>
 
     <div data-m="wide" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
-      <div style="min-width:680px">
+      <div style="min-width:680px" data-ops-table>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.12)">
           <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Boarding activity</span>
           <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ boardActivityCount }} events</span>
         </div>
         <sc-for list="{{ boardActivity }}" as="a" hint-placeholder-count="5">
-          <div style="display:grid;grid-template-columns:132px minmax(0,1fr);gap:14px;padding:11px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px">
+          <div style="display:grid;grid-template-columns:132px minmax(0,1fr);gap:14px;padding:11px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px" data-ops-row>
             <span style="font-family:'Martian Mono',monospace;font-size:8.5px;color:#7A7F77;font-variant-numeric:tabular-nums">{{ a.at }}</span>
             <span style="color:#3D423C">{{ a.text }}</span>
           </div>
@@ -825,18 +881,18 @@
       </sc-for>
     </div>
     <div data-m="wide" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
-      <div style="min-width:940px">
-        <div style="display:grid;grid-template-columns:112px minmax(126px,1fr) 84px 138px 126px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+      <div style="min-width:940px" data-ops-table>
+        <div style="display:grid;grid-template-columns:112px minmax(126px,1fr) 84px 138px 126px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560" data-ops-table-head>
           <span>Booking</span><span>Student</span><span>Amount</span><span>Reference</span><span>Status</span><span>Action</span>
         </div>
         <sc-for list="{{ payRows }}" as="r" hint-placeholder-count="8">
-          <div style="display:grid;grid-template-columns:112px minmax(126px,1fr) 84px 138px 126px auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px;font-variant-numeric:tabular-nums">
-            <span style="font-weight:600">{{ r.code }}</span>
-            <span style="color:#3D423C">{{ r.student }}</span>
-            <span>{{ r.amount }}</span>
-            <span style="color:#3D423C;overflow:hidden;text-overflow:ellipsis">{{ r.ref }}</span>
-            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ r.fg }}">{{ r.status }}</span>
-            <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          <div style="display:grid;grid-template-columns:112px minmax(126px,1fr) 84px 138px 126px auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px;font-variant-numeric:tabular-nums" data-ops-row>
+            <span style="font-weight:600" data-cell-label="Booking">{{ r.code }}</span>
+            <span style="color:#3D423C" data-cell-label="Student">{{ r.student }}</span>
+            <span data-cell-label="Amount">{{ r.amount }}</span>
+            <span style="color:#3D423C;overflow:hidden;text-overflow:ellipsis" data-cell-label="Reference">{{ r.ref }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ r.fg }}" data-cell-label="Status">{{ r.status }}</span>
+            <span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end" data-cell-label="Action" data-ops-actions>
               <sc-for list="{{ r.actions }}" as="a" hint-placeholder-count="1">
                 <button type="button" onClick="{{ a.onPick }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:9px 12px;border-radius:2px;font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer;min-height:40px">{{ a.label }}</button>
               </sc-for>
@@ -876,17 +932,17 @@
       </select>
     </label>
     <div data-m="wide" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
-      <div style="min-width:680px">
-        <div style="display:grid;grid-template-columns:64px minmax(0,1fr) 128px 150px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+      <div style="min-width:680px" data-ops-table>
+        <div style="display:grid;grid-template-columns:64px minmax(0,1fr) 128px 150px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560" data-ops-table-head>
           <span>Pos</span><span>Student</span><span>Joined</span><span>Status</span><span>Action</span>
         </div>
         <sc-for list="{{ wlRows }}" as="w" hint-placeholder-count="3">
-          <div style="display:grid;grid-template-columns:64px minmax(0,1fr) 128px 150px auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px;font-variant-numeric:tabular-nums">
-            <span style="font-weight:600">{{ w.pos }}</span>
-            <span>{{ w.student }} <span style="color:#5F6560">· {{ w.studentId }}</span></span>
-            <span style="color:#3D423C">{{ w.joined }}</span>
-            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ w.fg }}">{{ w.status }}</span>
-            <span style="display:flex;justify-content:flex-end">
+          <div style="display:grid;grid-template-columns:64px minmax(0,1fr) 128px 150px auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px;font-variant-numeric:tabular-nums" data-ops-row>
+            <span style="font-weight:600" data-cell-label="Pos">{{ w.pos }}</span>
+            <span data-cell-label="Student">{{ w.student }} <span style="color:#5F6560">· {{ w.studentId }}</span></span>
+            <span style="color:#3D423C" data-cell-label="Joined">{{ w.joined }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ w.fg }}" data-cell-label="Status">{{ w.status }}</span>
+            <span style="display:flex;justify-content:flex-end" data-cell-label="Action" data-ops-actions>
               <sc-if value="{{ w.canMove }}" hint-placeholder-val="{{ false }}">
                 <button type="button" onClick="{{ w.onMove }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:9px 12px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px">Move to top</button>
               </sc-if>
@@ -921,21 +977,21 @@
     <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em">Students</h1>
     <p style="margin:9px 0 0;max-width:62ch;font-size:13px;line-height:1.6;color:#3D423C">Emergency contacts are not listed here. Revealing one is a sensitive action: it needs a reason and is written to the audit log.</p>
     <div data-m="wide" style="margin:18px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
-      <div style="min-width:820px">
-        <div style="display:grid;grid-template-columns:minmax(0,1fr) 120px 128px 84px 84px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+      <div style="min-width:820px" data-ops-table>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 120px 128px 84px 84px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560" data-ops-table-head>
           <span>Student</span><span>Student ID</span><span>Phone</span><span>Bookings</span><span>Email</span><span>Action</span>
         </div>
         <sc-for list="{{ students }}" as="s" hint-placeholder-count="6">
-          <div style="display:grid;grid-template-columns:minmax(0,1fr) 120px 128px 84px 84px auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px;font-variant-numeric:tabular-nums">
-            <div style="min-width:0">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 120px 128px 84px 84px auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px;font-variant-numeric:tabular-nums" data-ops-row>
+            <div style="min-width:0" data-cell-label="Student">
               <div style="font-weight:600">{{ s.name }}</div>
               <div style="margin-top:3px;font-size:12px;color:#5F6560;overflow:hidden;text-overflow:ellipsis">{{ s.email }}</div>
             </div>
-            <span style="color:#3D423C">{{ s.studentId }}</span>
-            <span style="color:#3D423C">{{ s.phone }}</span>
-            <span>{{ s.bookings }}</span>
-            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ s.verifiedFg }}">{{ s.verified }}</span>
-            <span style="display:flex;justify-content:flex-end">
+            <span style="color:#3D423C" data-cell-label="Student ID">{{ s.studentId }}</span>
+            <span style="color:#3D423C" data-cell-label="Phone">{{ s.phone }}</span>
+            <span data-cell-label="Bookings">{{ s.bookings }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ s.verifiedFg }}" data-cell-label="Email">{{ s.verified }}</span>
+            <span style="display:flex;justify-content:flex-end" data-cell-label="Action" data-ops-actions>
               <sc-if value="{{ s.canReveal }}" hint-placeholder-val="{{ false }}">
                 <button type="button" onClick="{{ s.onReveal }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:9px 12px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px;white-space:nowrap">Emergency contact</button>
               </sc-if>
@@ -1000,17 +1056,17 @@
     <h1 style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em">Requests</h1>
     <p style="margin:9px 0 0;max-width:62ch;font-size:13px;line-height:1.6;color:#3D423C">Notify-me requests, student ID change requests and account deletion requests. Messages are sent by hand at launch, so marking one notified is a real state change.</p>
     <div data-m="wide" style="margin:18px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
-      <div style="min-width:760px">
-        <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 150px 116px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+      <div style="min-width:760px" data-ops-table>
+        <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 150px 116px auto;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560" data-ops-table-head>
           <span>Kind</span><span>Who</span><span>Detail</span><span>Status</span><span>Action</span>
         </div>
         <sc-for list="{{ requests }}" as="r" hint-placeholder-count="4">
-          <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 150px 116px auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px">
-            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#3D423C">{{ r.kind }}</span>
-            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis">{{ r.who }}</span>
-            <span style="color:#3D423C;overflow:hidden;text-overflow:ellipsis">{{ r.detail }}</span>
-            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ r.fg }}">{{ r.status }}</span>
-            <span style="display:flex;justify-content:flex-end;gap:8px">
+          <div style="display:grid;grid-template-columns:150px minmax(0,1fr) 150px 116px auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:13px" data-ops-row>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#3D423C" data-cell-label="Kind">{{ r.kind }}</span>
+            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis" data-cell-label="Who">{{ r.who }}</span>
+            <span style="color:#3D423C;overflow:hidden;text-overflow:ellipsis" data-cell-label="Detail">{{ r.detail }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:{{ r.fg }}" data-cell-label="Status">{{ r.status }}</span>
+            <span style="display:flex;justify-content:flex-end;gap:8px" data-cell-label="Action" data-ops-actions>
               <sc-if value="{{ r.canAct }}" hint-placeholder-val="{{ false }}">
                 <button type="button" onClick="{{ r.onAct }}" style="border:1px solid rgba(14,16,20,.2);background:none;padding:9px 12px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:40px;white-space:nowrap">Mark notified</button>
               </sc-if>
@@ -1055,7 +1111,7 @@
       <button type="button" onClick="{{ exportPoll }}" style="border:1px solid rgba(14,16,20,.2);background:#FFFFFF;padding:11px 16px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Export responses</button>
     </div>
 
-    <div style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
+    <div style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px" data-ops-layout>
       <sc-for list="{{ pollMetrics }}" as="m" hint-placeholder-count="3">
         <div style="background:#FFFFFF;border:1px solid rgba(14,16,20,.12);padding:16px 18px">
           <div style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560">{{ m.label }}</div>
@@ -1069,7 +1125,7 @@
       <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:#5F6560">Votes by departure time</div>
       <div style="display:grid;gap:13px;margin:16px 0 0">
         <sc-for list="{{ pollTimes }}" as="t" hint-placeholder-count="12">
-          <div style="display:grid;grid-template-columns:68px minmax(0,1fr) 92px;gap:12px;align-items:center;font-size:13px;font-variant-numeric:tabular-nums">
+          <div style="display:grid;grid-template-columns:68px minmax(0,1fr) 92px;gap:12px;align-items:center;font-size:13px;font-variant-numeric:tabular-nums" data-ops-layout>
             <span style="font-weight:600">{{ t.label }}</span>
             <span aria-hidden="true" style="height:8px;background:#E2E0D8"><span style="display:block;width:{{ t.width }};height:8px;background:{{ t.color }}"></span></span>
             <span style="text-align:right;color:#3D423C">{{ t.votes }} · {{ t.percent }}%</span>
@@ -1079,16 +1135,16 @@
     </div>
 
     <div data-m="wide" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
-      <div style="min-width:860px">
-        <div style="display:grid;grid-template-columns:minmax(180px,1.4fr) minmax(130px,1fr) 120px 130px minmax(180px,1.2fr) 138px;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+      <div style="min-width:860px" data-ops-table>
+        <div style="display:grid;grid-template-columns:minmax(180px,1.4fr) minmax(130px,1fr) 120px 130px minmax(180px,1.2fr) 138px;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560" data-ops-table-head>
           <span>Preferred times</span><span>Name</span><span>Phone</span><span>Student ID</span><span>Email</span><span>Updated</span>
         </div>
         <sc-for list="{{ pollResponses }}" as="r" hint-placeholder-count="8">
-          <div style="display:grid;grid-template-columns:minmax(180px,1.4fr) minmax(130px,1fr) 120px 130px minmax(180px,1.2fr) 138px;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px">
-            <span style="font-weight:600;color:#0E4B34">{{ r.choices }}</span>
-            <span>{{ r.name }}</span><span>{{ r.phone }}</span><span>{{ r.studentId }}</span>
-            <span style="overflow:hidden;text-overflow:ellipsis">{{ r.email }}</span>
-            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;color:#6A7069">{{ r.updated }}</span>
+          <div style="display:grid;grid-template-columns:minmax(180px,1.4fr) minmax(130px,1fr) 120px 130px minmax(180px,1.2fr) 138px;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px" data-ops-row>
+            <span style="font-weight:600;color:#0E4B34" data-cell-label="Preferred times">{{ r.choices }}</span>
+            <span data-cell-label="Name">{{ r.name }}</span><span data-cell-label="Phone">{{ r.phone }}</span><span data-cell-label="Student ID">{{ r.studentId }}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis" data-cell-label="Email">{{ r.email }}</span>
+            <span style="font-family:'Martian Mono',monospace;font-size:8.5px;color:#6A7069" data-cell-label="Updated">{{ r.updated }}</span>
           </div>
         </sc-for>
       </div>
@@ -1140,16 +1196,16 @@
           <button type="button" onClick="{{ exportPreview }}" style="background:#0E1014;color:#F7F5F0;border:0;padding:11px 17px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Export CSV</button>
         </div>
         <div data-m="wide">
-          <div style="min-width:760px">
-            <div style="display:flex;gap:0;padding:10px 16px;border-bottom:1px solid rgba(14,16,20,.1)">
+          <div style="min-width:760px" data-ops-table>
+            <div data-ops-table-head style="display:flex;gap:0;padding:10px 16px;border-bottom:1px solid rgba(14,16,20,.1)">
               <sc-for list="{{ previewCols }}" as="c" hint-placeholder-count="6">
                 <span style="flex:1;font-family:'Martian Mono',monospace;font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">{{ c }}</span>
               </sc-for>
             </div>
             <sc-for list="{{ previewRows }}" as="r" hint-placeholder-count="6">
-              <div style="display:flex;gap:0;padding:11px 16px;border-bottom:1px solid rgba(14,16,20,.07);font-size:12.5px;font-variant-numeric:tabular-nums">
+              <div data-ops-row style="display:flex;gap:0;padding:11px 16px;border-bottom:1px solid rgba(14,16,20,.07);font-size:12.5px;font-variant-numeric:tabular-nums">
                 <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
-                  <span style="flex:1;color:#3D423C;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px">{{ c }}</span>
+                  <span data-cell-label="{{ c.label }}" style="flex:1;color:#3D423C;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:8px">{{ c.value }}</span>
                 </sc-for>
               </div>
             </sc-for>
@@ -1187,16 +1243,16 @@
       <button type="button" onClick="{{ exportAudit }}" style="border:1px solid rgba(14,16,20,.2);background:#FFFFFF;padding:11px 16px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Export CSV</button>
     </div>
     <div data-m="wide" style="margin:16px 0 0;background:#FFFFFF;border:1px solid rgba(14,16,20,.12)">
-      <div style="min-width:900px">
-        <div style="display:grid;grid-template-columns:140px 150px minmax(0,1fr) minmax(0,.9fr);gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560">
+      <div style="min-width:900px" data-ops-table>
+        <div style="display:grid;grid-template-columns:140px 150px minmax(0,1fr) minmax(0,.9fr);gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.12);font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560" data-ops-table-head>
           <span>When</span><span>Actor</span><span>Action</span><span>Reason</span>
         </div>
         <sc-for list="{{ auditRows }}" as="a" hint-placeholder-count="10">
-          <div style="display:grid;grid-template-columns:140px 150px minmax(0,1fr) minmax(0,.9fr);gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px">
-            <span style="font-family:'Martian Mono',monospace;font-size:9px;color:#7A7F77;font-variant-numeric:tabular-nums">{{ a.at }}</span>
-            <span style="color:#3D423C">{{ a.actor }}</span>
-            <span style="color:#0E1014">{{ a.action }}</span>
-            <span style="color:#4A4F49">{{ a.reason }}</span>
+          <div style="display:grid;grid-template-columns:140px 150px minmax(0,1fr) minmax(0,.9fr);gap:12px;padding:12px 16px;border-bottom:1px solid rgba(14,16,20,.08);font-size:12.5px" data-ops-row>
+            <span style="font-family:'Martian Mono',monospace;font-size:9px;color:#7A7F77;font-variant-numeric:tabular-nums" data-cell-label="When">{{ a.at }}</span>
+            <span style="color:#3D423C" data-cell-label="Actor">{{ a.actor }}</span>
+            <span style="color:#0E1014" data-cell-label="Action">{{ a.action }}</span>
+            <span style="color:#4A4F49" data-cell-label="Reason">{{ a.reason }}</span>
           </div>
         </sc-for>
       </div>
@@ -1238,10 +1294,10 @@ class Component extends DCLogic {
     },
     loading: {}, loadError: null,
     bkTab: 'Overview', bookingId: null, query: '', adminReason: '',
-    boardTripId: null, manualToken: '', manifestQuery: '', scan: null, choose: null,
+    boardView: 'manifest', boardTripId: null, manualToken: '', manifestQuery: '', scan: null, choose: null,
     cameraOn: false, cameraSupported: false, cameraError: null, engine: null,
     payFilter: 'All', wlTripId: null, auditQuery: '',
-    newTripOpen: false, ntDate: '', ntTime: '17:30', ntRoute: '', ntVehicle: '', ntPrice: 299,
+    newTripOpen: false, ntDate: '', ntTime: '17:30', ntRoute: '', ntVehicle: '', ntPrice: 320,
     validation: null, validationTripId: null,
     cancelTripId: null, cancelReason: '', template: null,
     repTripId: '', repFrom: '', repTo: '', preview: null,
@@ -1262,6 +1318,11 @@ class Component extends DCLogic {
   };
 
   async componentDidMount() {
+    DLT.setUnauthenticatedHandler(() => {
+      this._stopLiveRefresh();
+      this._stopCamera();
+      this.setState({ ready: true, cameraOn: false, toast: 'Your session ended. Sign in again.', toastKind: 'bad' });
+    });
     try { await DLT.boot(); } catch (e) { /* offline: renders signed-out */ }
     const d = new Date(); d.setDate(d.getDate() + 7);
     const supported = typeof window.BarcodeDetector === 'function' || typeof window.jsQR === 'function';
@@ -1270,16 +1331,17 @@ class Component extends DCLogic {
     const me = DLT.auth.current();
     if (!me || me.role === 'STUDENT') return;
     const section = me.role === 'BOARDING_STAFF' && !DLT.can(me.role, 'trip.read') ? 'Boarding' : 'Dashboard';
-    this.setState({ section });
+    this.setState({ section, boardView: me.role === 'BOARDING_STAFF' ? 'scan' : 'manifest' });
     if (section === 'Dashboard') {
       await Promise.all([this._loadCore(), this._loadSection(section)]);
     } else {
       await this._loadCore();
       await this._loadSection(section);
     }
-    this._startLiveRefresh();
+    if (DLT.auth.current()) this._startLiveRefresh();
   }
   componentWillUnmount() {
+    DLT.setUnauthenticatedHandler(null);
     this._stopLiveRefresh();
     this._stopCamera();
     clearTimeout(this._searchDebounce);
@@ -1390,7 +1452,8 @@ class Component extends DCLogic {
   }
 
   _go = (section) => {
-    this.setState({ section, toast: null });
+    if (section !== 'Boarding') this._stopCamera();
+    this.setState({ section, toast: null, prompt: null, reasonValue: '', cameraOn: section === 'Boarding' && this.state.cameraOn });
     this._loadSection(section);
   };
 
@@ -1408,10 +1471,13 @@ class Component extends DCLogic {
     return t ? t.id : null;
   }
   async _loadBoarding(opts = {}) {
+    const request = this._boardingRequest = (this._boardingRequest || 0) + 1;
     const me = DLT.auth.current();
     let scannerTrip = this.state.data.scannerTrip;
-    if (me.role === 'BOARDING_STAFF' && !scannerTrip) {
+    if (!me) return;
+    if (me.role === 'BOARDING_STAFF') {
       scannerTrip = await DLT.boarding.context();
+      if (request !== this._boardingRequest) return;
       this._patch({ scannerTrip });
     }
     const tripId = this._tripIdFor(me, { ...this.state, data: { ...this.state.data, scannerTrip } });
@@ -1420,7 +1486,8 @@ class Component extends DCLogic {
       DLT.boarding.manifest(tripId),
       DLT.boarding.events(tripId),
     ]);
-    this._patch({ manifest, boardingEvents });
+    if (request === this._boardingRequest && DLT.auth.current() &&
+        this._tripIdFor(DLT.auth.current(), this.state) === tripId) this._patch({ manifest, boardingEvents });
   }
 
   async _loadWaitlist() {
@@ -1435,28 +1502,37 @@ class Component extends DCLogic {
   /* ---- bookings: debounced search-as-you-type, then the drill-down ---- */
   async _searchBookings(force, opts = {}) {
     const q = this.state.query.trim();
+    const request = this._searchRequest = (this._searchRequest || 0) + 1;
     clearTimeout(this._searchDebounce);
     const run = async () => {
       try {
         const list = q.length >= 3 ? await DLT.admin.bookings({ q, limit: 500 }) : await DLT.admin.bookings({ limit: 500 });
+        if (request !== this._searchRequest || q !== this.state.query.trim()) return;
         this._patch({ bookingList: list });
-        const id = this.state.bookingId || (list[0] && list[0].id) || null;
+        const id = list.some(b => b.id === this.state.bookingId) ? this.state.bookingId : (list[0] && list[0].id) || null;
         if (id) await this._loadBooking(id, opts);
-        else this._patch({ booking: null });
+        else { this._bookingRequest = (this._bookingRequest || 0) + 1; this.setState({ bookingId: null }); this._patch({ booking: null, bookingQuote: null }); }
       } catch (e) { if (!opts.silent) this.bad(e); }
     };
     if (force) return run();
     this._searchDebounce = setTimeout(run, 300);
   }
   async _loadBooking(id, opts = {}) {
+    const request = this._bookingRequest = (this._bookingRequest || 0) + 1;
+    this.setState({ bookingId: id });
+    if (this.state.data.booking?.id !== id) this._patch({ booking: null, bookingQuote: null });
+    const current = () => request === this._bookingRequest;
     try {
       const booking = await DLT.admin.bookingDetail(id);
+      if (!current()) return;
       this._patch({ booking, bookingQuote: null });
-      if (DLT.auth.current().role === 'SUPER_ADMIN') {
-        try { this._patch({ bookingQuote: await DLT.bookings.cancellationQuote(id) }); }
-        catch (e) { /* non-fatal — the override panel just shows ₹0 until it loads */ }
+      if (DLT.auth.current()?.role === 'SUPER_ADMIN') {
+        try {
+          const bookingQuote = await DLT.bookings.cancellationQuote(id);
+          if (current()) this._patch({ bookingQuote });
+        } catch (e) { /* Quote failure leaves financial actions without a quote. */ }
       }
-    } catch (e) { if (!opts.silent) this.bad(e); }
+    } catch (e) { if (current() && !opts.silent) this.bad(e); }
   }
 
   /* ---- vehicles, seats: save/block/unblock, then reload what changed ---- */
@@ -1469,7 +1545,9 @@ class Component extends DCLogic {
     } catch (e) { this.bad(e); }
   }
   async _loadSeatMap(tripId, opts = {}) {
-    try { const r = await DLT.trips.seatMap(tripId); this._patch({ seatMap: r.rows }); }
+    const request = this._seatMapRequest = (this._seatMapRequest || 0) + 1;
+    try { const r = await DLT.trips.seatMap(tripId);
+      if (request === this._seatMapRequest && this.state.seatTripId === tripId) this._patch({ seatMap: r.rows }); }
     catch (e) { if (!opts.silent) this.bad(e); }
   }
   async _blockSeat(tripId, seat, reason) {
@@ -1513,69 +1591,103 @@ class Component extends DCLogic {
   };
 
   /* ---- camera scanning. Two decoders, one validation chain ---- */
-  _decoder() {
-    if (typeof window.BarcodeDetector === 'function') return 'native';
-    if (typeof window.jsQR === 'function') return 'jsqr';
-    return null;
+  async _decoder() {
+    if (typeof window.BarcodeDetector === 'function') {
+      try {
+        const formats = typeof window.BarcodeDetector.getSupportedFormats === 'function'
+          ? await window.BarcodeDetector.getSupportedFormats() : ['qr_code'];
+        if (formats.includes('qr_code'))
+          return { engine: 'native', detector: new window.BarcodeDetector({ formats: ['qr_code'] }) };
+      } catch (e) { /* jsQR is the fallback when QR detection is unsupported. */ }
+    }
+    return typeof window.jsQR === 'function' ? { engine: 'jsqr', detector: null } : null;
+  }
+  _attachVideo(el) {
+    if (!el || !this._stream) return;
+    el.muted = true;
+    el.playsInline = true;
+    if (el.srcObject !== this._stream) el.srcObject = this._stream;
+    Promise.resolve(el.play()).catch(() => {
+      this.setState({ cameraError: 'Camera playback could not start. Stop and restart the camera, or enter the boarding code.' });
+    });
   }
   async _startCamera() {
-    const engine = this._decoder();
-    if (!engine) {
-      this.setState({ cameraOn: false,
-        cameraError: 'No QR decoder is available in this browser. Enter the boarding code below instead.' });
-      return;
-    }
-    let stream;
+    if (this._cameraStarting || this._stream) return;
+    this._cameraStarting = true;
+    const run = this._cameraRun = (this._cameraRun || 0) + 1;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const decoder = await this._decoder();
+      if (!decoder) {
+        this.setState({ cameraOn: false,
+          cameraError: 'No QR decoder is available in this browser. Enter the boarding code below instead.' });
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        this.setState({ cameraOn: false,
+          cameraError: 'Camera scanning requires HTTPS and a supported browser. You can still enter the boarding code.' });
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false,
+      });
+      if (run !== this._cameraRun) { stream.getTracks().forEach(t => t.stop()); return; }
+      this._stream = stream;
+      this.setState({ cameraOn: true, cameraError: null, engine: decoder.engine }, () => this._attachVideo(this._video));
+      let detector = decoder.detector;
+      const canvas = document.createElement('canvas');
+      let frameInFlight = false;
+      this._scanLoop = setInterval(async () => {
+        const v = this._video;
+        if (frameInFlight || this._scanInFlight || this.state.choose || run !== this._cameraRun || !v || v.readyState < 2 || !v.videoWidth) return;
+        frameInFlight = true;
+        try {
+          let value = null;
+          if (detector) {
+            try {
+              const codes = await detector.detect(v);
+              value = codes && codes.length ? codes[0].rawValue : null;
+            } catch (e) {
+              if (typeof window.jsQR !== 'function') throw e;
+              detector = null;
+              this.setState({ engine: 'jsqr' });
+            }
+          }
+          if (!detector) {
+            // Preserve small QR detail, including downloaded passes on phones.
+            const w = Math.min(960, v.videoWidth), h = Math.round(v.videoHeight * w / v.videoWidth);
+            canvas.width = w; canvas.height = h;
+            const g = canvas.getContext('2d', { willReadFrequently: true });
+            g.drawImage(v, 0, 0, w, h);
+            const img = g.getImageData(0, 0, w, h);
+            const found = window.jsQR(img.data, w, h, { inversionAttempts: 'attemptBoth' });
+            value = found ? found.data : null;
+          }
+          if (run !== this._cameraRun) return;
+          if (!value) { this._lastCode = null; return; }
+          if (value !== this._lastCode) {
+            this._lastCode = value;
+            await this._doScan(value);
+          }
+        } catch (e) {
+          this.setState({ cameraError: 'This camera frame could not be decoded. Reposition the ticket or enter the boarding code.' });
+        } finally { frameInFlight = false; }
+      }, 300);
     } catch (e) {
       const name = e && e.name;
       const msg = name === 'NotAllowedError' || name === 'SecurityError'
         ? 'Camera permission was refused. Allow the camera in the browser, or enter the boarding code below.'
         : name === 'NotFoundError' || name === 'OverconstrainedError'
           ? 'No camera on this device. Enter the boarding code below.'
-          : 'The camera could not be started (' + (name || e.message || e) + '). Enter the boarding code below.';
+          : 'The camera could not be started. Enter the boarding code below.';
       this.setState({ cameraOn: false, cameraError: msg });
-      return;
-    }
-    this._stream = stream;
-    this.setState({ cameraOn: true, cameraError: null, engine });
-    setTimeout(() => {
-      if (this._video) { this._video.srcObject = stream; this._video.play(); }
-    }, 60);
-    const detector = engine === 'native' ? new window.BarcodeDetector({ formats: ['qr_code'] }) : null;
-    const canvas = document.createElement('canvas');
-    this._scanLoop = setInterval(async () => {
-      const v = this._video;
-      if (!v || v.readyState < 2 || !v.videoWidth) return;
-      let value = null;
-      try {
-        if (detector) {
-          const codes = await detector.detect(v);
-          value = codes && codes.length ? codes[0].rawValue : null;
-        } else {
-          /* sample the frame down before decoding: a 640-wide frame decodes in a
-             few milliseconds and keeps the door queue moving */
-          const w = 480, h = Math.round(v.videoHeight * (480 / v.videoWidth));
-          canvas.width = w; canvas.height = h;
-          const g = canvas.getContext('2d', { willReadFrequently: true });
-          g.drawImage(v, 0, 0, w, h);
-          const img = g.getImageData(0, 0, w, h);
-          const found = window.jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
-          value = found ? found.data : null;
-        }
-      } catch (e) { return; }
-      if (value && value !== this._lastCode) {
-        this._lastCode = value;
-        this._doScan(value);
-        setTimeout(() => { this._lastCode = null; }, 2500);
-      }
-    }, engine === 'native' ? 400 : 250);
+    } finally { this._cameraStarting = false; }
   }
   _stopCamera() {
+    this._cameraRun = (this._cameraRun || 0) + 1;
     clearInterval(this._scanLoop);
     if (this._stream) this._stream.getTracks().forEach(t => t.stop());
     this._stream = null;
+    this._lastCode = null;
   }
 
   /* §Boarding 5 — staff are scoped server-side to their assigned trip
@@ -1583,17 +1695,23 @@ class Component extends DCLogic {
      This is only for the console's own display and for ops/super, who may
      scope a desk scan explicitly. */
   async _doScan(code, passengerId) {
+    if (this._scanInFlight) return;
+    this._scanInFlight = true;
     const me = DLT.auth.current();
-    const tripId = this._tripIdFor(me, this.state);
+    const tripId = me ? this._tripIdFor(me, this.state) : null;
     try {
+      if (!tripId) throw new Error('Select the departure before scanning a ticket.');
       const res = await DLT.boarding.scan({ code, tripId, passengerId });
+      const currentUser = DLT.auth.current();
+      if (!currentUser || this._tripIdFor(currentUser, this.state) !== tripId) return;
       if (res.result === 'CHOOSE') {
         this.setState({ scan: res, choose: res, manualToken: code });
         return;
       }
       this.setState({ scan: res, choose: null, manualToken: '' });
       await this._loadBoarding();
-    } catch (e) { this.bad(e); }
+    } catch (e) { this._lastCode = null; this.bad(e); }
+    finally { this._scanInFlight = false; }
   }
 
   renderVals() {
@@ -1667,7 +1785,7 @@ class Component extends DCLogic {
     const boardingEvents = d.boardingEvents || [];
     const q = st.manifestQuery.trim().toLowerCase();
     const filteredManifest = manifest.filter(p => !q ||
-      (p.name + ' ' + p.studentId + ' ' + p.seatNumber).toLowerCase().indexOf(q) >= 0);
+      (p.name + ' ' + p.studentId + ' ' + p.seatNumber + ' ' + p.bookingCode + ' ' + (p.contactPhone || p.phone || '')).toLowerCase().indexOf(q) >= 0);
     const boardedCount = manifest.filter(p => p.boardingStatus === 'BOARDED').length;
     const scan = st.scan;
     const tone = !scan ? ['rgba(247,245,240,.06)', '#F7F5F0']
@@ -1723,8 +1841,8 @@ class Component extends DCLogic {
     /* ---------- reports ---------- */
     const repFilter = {
       tripId: st.repTripId || null,
-      from: st.repFrom ? new Date(st.repFrom + 'T00:00:00').toISOString() : null,
-      to: st.repTo ? new Date(st.repTo + 'T23:59:59').toISOString() : null,
+      from: st.repFrom ? new Date(st.repFrom + 'T00:00:00+05:30').toISOString() : null,
+      to: st.repTo ? new Date(st.repTo + 'T23:59:59+05:30').toISOString() : null,
     };
     /* occupancy/manifest/payments/posttrip (dlt-store.js kinds) have no
        server-side counterpart — see the report. 'trips' (real) covers most
@@ -1934,7 +2052,8 @@ class Component extends DCLogic {
         : isSuper ? 'Full access including reconciliation and audit'
         : 'Operations, no financial overrides',
       signOut: () => { DLT.auth.signOut().then(() => { location.href = './DLT Account.dc.html'; }); },
-      nav, isSuper,
+      nav, isSuper, sectionName: section,
+      onSectionChange: e => { if (nav.some(n => n.label === e.target.value)) this._go(e.target.value); },
       toast: st.toast, clearToast: () => this.setState({ toast: null }),
       toastAccent: st.toastKind === 'bad' ? '#A33A22' : '#0E4B34',
       toastBg: st.toastKind === 'bad' ? '#FFF9F7' : '#EEF3EE',
@@ -2151,7 +2270,7 @@ class Component extends DCLogic {
           if (!vid) throw new Error('Add a vehicle before creating a trip');
           const rid = st.ntRoute || (routes[0] || {}).id;
           if (!rid) throw new Error('No route is configured');
-          const when = new Date(st.ntDate + 'T' + st.ntTime + ':00');
+          const when = new Date(st.ntDate + 'T' + st.ntTime + ':00+05:30');
           if (isNaN(when.getTime())) throw new Error('Choose a date and time');
           const tr = await DLT.admin.saveTrip({ routeId: rid, vehicleId: vid, departureAt: when.toISOString(), price: Number(st.ntPrice) });
           const validation = await DLT.admin.validateDraft(tr.id);
@@ -2307,7 +2426,7 @@ class Component extends DCLogic {
 
       /* bookings */
       query: st.query,
-      onQuery: e => { this.setState({ query: e.target.value, bookingId: null }); this._searchBookings(false); },
+      onQuery: e => { this.setState({ query: e.target.value, bookingId: null }, () => this._searchBookings(false)); },
       hasResults: !st.loading.Bookings && bookingList.length > 0,
       noResults: !st.loading.Bookings && bookingList.length === 0,
       results: bookingList.map(b => ({
@@ -2316,7 +2435,7 @@ class Component extends DCLogic {
         bg: booking && b.id === booking.id ? '#0E1014' : '#FFFFFF',
         fg: booking && b.id === booking.id ? '#F7F5F0' : '#0E1014',
         bd: booking && b.id === booking.id ? '#0E1014' : 'rgba(14,16,20,.2)',
-        onPick: () => { this.setState({ bookingId: b.id }); this._loadBooking(b.id); },
+        onPick: () => { this.setState({ bookingId: b.id, bkTab: 'Overview', adminReason: '', overrideOpen: false }, () => this._loadBooking(b.id)); },
       })),
       hasBooking: !!booking,
       bkCode: booking ? booking.code : '',
@@ -2397,14 +2516,20 @@ class Component extends DCLogic {
 
       /* boarding */
       boardTripLabel: boardTripInfo
-        ? 'Trip ' + DLT.fmt.when(boardTripInfo.departureAt) + ' · ' + (boardTripInfo.vehicle || '') + ' · ' + String(boardTripInfo.status).replace('_', ' ')
+        ? 'Trip ' + DLT.fmt.when(boardTripInfo.departureAt) + ' IST · ' + (boardTripInfo.vehicle || '') + ' · ' + String(boardTripInfo.status).replace('_', ' ')
         : (isStaff ? 'You are not assigned to a departure — operations puts staff on the door'
           : 'No trip selected'),
       canPickTrip: !isStaff,
+      boardView: st.boardView,
+      manifestView: st.boardView === 'manifest', scannerView: st.boardView === 'scan',
+      manifestTabBg: st.boardView === 'manifest' ? '#0E4B34' : '#FFFFFF', manifestTabFg: st.boardView === 'manifest' ? '#FFFFFF' : '#0E1014',
+      scannerTabBg: st.boardView === 'scan' ? '#0E4B34' : '#FFFFFF', scannerTabFg: st.boardView === 'scan' ? '#FFFFFF' : '#0E1014',
+      showManifest: () => { this._stopCamera(); this.setState({ boardView: 'manifest' }); },
+      showScanner: () => this.setState({ boardView: 'scan' }),
       boardTripId: tripId || '',
       boardTripOptions: allTrips.filter(t => ['OPEN', 'BOOKING_CLOSED', 'BOARDING', 'DEPARTED'].indexOf(t.status) >= 0)
         .map(t => ({ id: t.id, label: DLT.fmt.when(t.departureAt) + ' · ' + t.status.replace('_', ' ') })),
-      onBoardTrip: e => { this.setState({ boardTripId: e.target.value, scan: null }); this._loadBoarding(); },
+      onBoardTrip: e => { this._stopCamera(); this._patch({ manifest: null, boardingEvents: [] }); this.setState({ boardTripId: e.target.value, scan: null, choose: null, manualToken: '', prompt: null, reasonValue: '' }, () => this._loadBoarding()); },
       boardedCount, manifestCount: manifest.length,
       pendingCount: manifest.filter(x => x.boardingStatus === 'NOT_BOARDED').length,
       scanResult: scan ? scan.result : 'Ready to scan',
@@ -2432,7 +2557,7 @@ class Component extends DCLogic {
         if (st.cameraOn) { this._stopCamera(); this.setState({ cameraOn: false }); }
         else this._startCamera();
       },
-      videoRef: el => { this._video = el; if (el && this._stream) { el.srcObject = this._stream; el.play(); } },
+      videoRef: el => { this._video = el; this._attachVideo(el); },
       manualToken: st.manualToken,
       onManualToken: e => this.setState({ manualToken: e.target.value }),
       scanManual: () => {
@@ -2484,7 +2609,15 @@ class Component extends DCLogic {
               }),
           });
         }
+        const rawPhone = String(x.contactPhone || x.phone || '').replace(/\D/g, '');
+        const callNumber = /^[6-9]\d{9}$/.test(rawPhone) ? '+91' + rawPhone
+          : /^91[6-9]\d{9}$/.test(rawPhone) ? '+' + rawPhone : null;
         return {
+          canCall: !isStaff && !!callNumber,
+          callHref: callNumber ? 'tel:' + callNumber : '',
+          contactNumber: x.contactPhone || x.phone || '',
+          contactLabel: x.contactSource === 'BOOKING' ? 'Booking contact' : 'Passenger contact',
+          callLabel: 'Call ' + x.name + ', seat ' + x.seatNumber,
           name: x.name,
           sub: x.studentId + (x.phone ? ' · ' + x.phone : '') + ' · ' + x.bookingCode,
           seat: x.seatNumber, typeShort: x.seatType === 'WINDOW' ? 'W' : 'A',
@@ -2568,7 +2701,7 @@ class Component extends DCLogic {
       previewTitle: st.preview ? st.preview.label : '',
       previewCount: st.preview ? st.preview.rows.length : 0,
       previewCols: st.preview && st.preview.rows.length ? Object.keys(st.preview.rows[0]) : [],
-      previewRows: st.preview ? st.preview.rows.map(r => ({ cells: Object.values(r).map(v => String(v == null ? '—' : v)) })) : [],
+      previewRows: st.preview ? st.preview.rows.map(r => ({ cells: Object.keys(st.preview.rows[0] || {}).map(label => ({ label, value: String(r[label] == null ? '—' : r[label]) })) })) : [],
       exportPreview: () => {
         if (!st.preview) return;
         window.open(DLT.admin.exportUrl(st.preview.kind, repFilter), '_blank');
