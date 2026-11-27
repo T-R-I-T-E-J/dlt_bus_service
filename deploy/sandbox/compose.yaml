@@ -1,0 +1,76 @@
+name: dlt-sandbox-review
+services:
+  db:
+    image: postgres:17-alpine
+    env_file:
+      - path: ${DLT_SANDBOX_CONFIG_DIR:-/etc/dlt-sandbox}/database.env
+        format: raw
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../vps/init-role.sql:/docker-entrypoint-initdb.d/10-dlt-role.sql:ro
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres, -d, dlt_sandbox]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
+    logging: &logs
+      driver: json-file
+      options: {max-size: 10m, max-file: '2'}
+  migrate:
+    image: dlt-sandbox-tools:review
+    build: {context: ../../backend, target: tools}
+    profiles: [tools]
+    env_file:
+      - path: ${DLT_SANDBOX_CONFIG_DIR:-/etc/dlt-sandbox}/migrate.env
+        format: raw
+    depends_on: {db: {condition: service_healthy}}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  prepare:
+    image: node:24-alpine
+    profiles: [tools]
+    working_dir: /src
+    command: [node, /src/deploy/sandbox/prepare.mjs]
+    volumes:
+      - ../..:/src:ro
+      - frontend-releases:/releases
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  api:
+    image: dlt-sandbox-api:review
+    build: {context: ../../backend, target: sandbox}
+    environment: {SANDBOX_BIND: 0.0.0.0}
+    env_file:
+      - path: ${DLT_SANDBOX_CONFIG_DIR:-/etc/dlt-sandbox}/runtime.env
+        format: raw
+    ports:
+      - 127.0.0.1:3110:3000
+      - 127.0.0.1:8186:8080
+    volumes: [frontend-releases:/srv/releases:ro]
+    depends_on: {db: {condition: service_healthy}}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
+    mem_limit: 512m
+    cpus: 1.0
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logs
+networks:
+  default: {internal: true}
+volumes:
+  postgres-data:
+  frontend-releases:

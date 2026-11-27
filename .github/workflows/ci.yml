@@ -57,3 +57,27 @@ jobs:
         run: node deploy/frontend/prepare.mjs --api-origin http://127.0.0.1:3100 --domain dltservices.tech --alias www.dltservices.tech --out "$RUNNER_TEMP/dlt-release"
       - name: Build production API image
         run: docker build --target runtime --tag dlt-api:ci backend
+      - name: Validate sandbox launchers and image
+        run: |
+          for script in backend/scripts/sandbox-*.mjs deploy/sandbox/*.mjs; do node --check "$script"; done
+          export DLT_SANDBOX_CONFIG_DIR="$RUNNER_TEMP/dlt-sandbox-config"
+          node deploy/sandbox/configure.mjs "$DLT_SANDBOX_CONFIG_DIR"
+          sandbox=(docker compose -p dlt-sandbox-ci -f deploy/sandbox/compose.yaml)
+          cleanup() {
+            result=$?
+            if (( result != 0 )); then "${sandbox[@]}" logs --tail 80 api db; fi
+            "${sandbox[@]}" down
+            exit "$result"
+          }
+          trap cleanup EXIT
+          "${sandbox[@]}" --profile tools build api migrate
+          "${sandbox[@]}" up -d --wait --wait-timeout 120 db
+          "${sandbox[@]}" run --rm migrate
+          "${sandbox[@]}" run --rm migrate node --experimental-strip-types scripts/sandbox-seed.mjs
+          "${sandbox[@]}" run --rm prepare
+          "${sandbox[@]}" up -d --wait --wait-timeout 120 api
+          curl -fsS http://127.0.0.1:3110/api/ready | node -e 'let s=""; process.stdin.on("data",d=>s+=d); process.stdin.on("end",()=>{const j=JSON.parse(s); if(!j.ok||!j.db.auditAppendOnly||j.email!=="memory") process.exit(1);});'
+          curl -fsS http://127.0.0.1:8186/review > /dev/null
+          curl -fsS http://127.0.0.1:8186/booking > /dev/null
+          curl -fsS http://127.0.0.1:8186/dlt-mobile.css > /dev/null
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8186/api/sandbox/inbox)" = 401

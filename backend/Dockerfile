@@ -14,8 +14,14 @@ USER node
 EXPOSE 3000
 CMD ["sh", "-c", "npm run preflight:prod && exec node --experimental-strip-types src/app.ts"]
 
+FROM runtime AS sandbox
+ENV NODE_ENV=test DLT_SANDBOX=true
+COPY scripts/sandbox-guard.mjs scripts/sandbox-server.mjs ./scripts/
+CMD ["node", "--experimental-strip-types", "scripts/sandbox-server.mjs"]
+
 # Privileged operations are an explicit one-off service, never the API startup.
 FROM runtime AS tools
 COPY migrations ./migrations
 COPY scripts/migrate.mjs scripts/bootstrap-admin.mjs scripts/configure-boarding-staff.mjs ./scripts/
+COPY scripts/sandbox-guard.mjs scripts/sandbox-seed.mjs ./scripts/
 CMD ["node", "scripts/migrate.mjs"]
