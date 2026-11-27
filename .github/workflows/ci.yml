@@ -1,0 +1,59 @@
+name: DLT CI
+on:
+  push:
+    branches: [master, codex/vps-frontend-deployment]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dlt-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    name: Tests and release build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: dlt_phase1_test_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dlt_phase1_test_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-password@127.0.0.1:5432/dlt_phase1_test_ci
+      NODE_ENV: test
+      EMAIL_TRANSPORT: memory
+      RAZORPAY_KEY_ID: ci-placeholder
+      RAZORPAY_KEY_SECRET: ci-placeholder
+      RAZORPAY_WEBHOOK_SECRET: ci-webhook-secret
+      ALLOW_AUDIT_PRIVILEGE: i-understand-the-risk
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+      - name: Frontend regression tests
+        run: node --test test/*.test.mjs
+      - name: Backend typecheck, migrations and database tests
+        working-directory: backend
+        run: npm run verify
+      - name: Validate deployment scripts
+        run: |
+          for script in deploy/vps/*.sh; do bash -n "$script"; done
+          node --check deploy/vps/check-ci.mjs
+      - name: Prepare frontend release
+        run: node deploy/frontend/prepare.mjs --api-origin http://127.0.0.1:3100 --domain dltservices.tech --alias www.dltservices.tech --out "$RUNNER_TEMP/dlt-release"
+      - name: Build production API image
+        run: docker build --target runtime --tag dlt-api:ci backend

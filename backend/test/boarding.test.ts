@@ -546,6 +546,23 @@ describe('manifest', () => {
       'least privilege is enforced in the projection, not by a caller remembering');
     const asOps = await boarding.manifest(TRIP_A, ops());
     assert.ok(asOps.passengers.every((p: any) => p.phone === '9876543210'));
+    assert.ok(asStaff.passengers.every((p: any) => p.contactPhone === null && p.contactSource === null));
+    assert.ok(asOps.passengers.every((p: any) => p.contactPhone === '9876543210' && p.contactSource === 'PASSENGER'));
+  });
+
+  test('operations calling falls back to the booking contact without exposing it to boarding staff', async () => {
+    const b = await confirmedBooking(TRIP_A, ['2A', '2B'], 'DLT-80999');
+    await q('UPDATE booking_passengers SET phone=NULL WHERE id=$1', [b.passengers[0].id]);
+    await q('UPDATE booking_passengers SET phone=$1 WHERE id=$2', ['9876543211', b.passengers[1].id]);
+    const m = await boarding.manifest(TRIP_A, ops());
+    const a = m.passengers.find((p: any) => p.seatNumber === '2A')!;
+    const other = m.passengers.find((p: any) => p.seatNumber === '2B')!;
+    assert.equal(a.contactPhone, '9876543210');
+    assert.equal(a.contactSource, 'BOOKING');
+    assert.equal(other.contactPhone, '9876543211');
+    assert.equal(other.contactSource, 'PASSENGER');
+    const restricted = await boarding.manifest(TRIP_A, staffA());
+    assert.ok(restricted.passengers.every((p: any) => p.phone === null && p.contactPhone === null));
   });
 
   test('staff get their ASSIGNED trip whatever id they ask for', async () => {

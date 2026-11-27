@@ -319,11 +319,22 @@ export async function manifest(tripIdInput: string | null | undefined, actor: Ac
      * snake_case, unlike every other projection in this codebase) so a
      * caller of manifest() sees the same field-naming convention as
      * everywhere else — passengerId, studentId, seatNumber, and so on. */
-    const { rows: raw } = await c.query('SELECT * FROM trip_manifest($1,$2::user_role)', [tripId, actor.role]);
+    const { rows: raw } = await c.query(
+      `SELECT m.*,
+              CASE WHEN $2::user_role = 'BOARDING_STAFF' THEN NULL
+                   ELSE COALESCE(NULLIF(m.phone, ''), b.contact_phone) END AS contact_phone,
+              CASE WHEN $2::user_role = 'BOARDING_STAFF' THEN NULL
+                   WHEN NULLIF(m.phone, '') IS NOT NULL THEN 'PASSENGER'
+                   ELSE 'BOOKING' END AS contact_source
+         FROM trip_manifest($1,$2::user_role) m
+         JOIN booking_passengers bp ON bp.id = m.passenger_id
+         JOIN bookings b ON b.id = bp.booking_id
+        ORDER BY bp.seat_row_order, bp.seat_number`, [tripId, actor.role]);
     const rows = raw.map((r: any) => ({
       passengerId: r.passenger_id, name: r.name, studentId: r.student_id,
       seatNumber: r.seat_number, seatType: r.seat_type, boardingStatus: r.boarding_status,
       bookingCode: r.booking_code, boardingCode: r.boarding_code, phone: r.phone,
+      contactPhone: r.contact_phone, contactSource: r.contact_source,
       boardedAt: r.boarded_at,
     }));
     const { rows: [t] } = await c.query(

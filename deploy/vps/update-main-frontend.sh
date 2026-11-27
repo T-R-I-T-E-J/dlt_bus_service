@@ -5,6 +5,7 @@ umask 077
 [[ "$EUID" -eq 0 ]] || { echo 'Run this on the VPS as root.' >&2; exit 1; }
 TASK_REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$TASK_REPO_DIR"
+bash "$TASK_REPO_DIR/deploy/vps/check-release.sh"
 test -s /var/www/dlt/active-main-release
 test -f /etc/nginx/sites-available/dlt-main
 test -L /etc/nginx/sites-enabled/dlt-main

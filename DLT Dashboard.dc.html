@@ -135,8 +135,8 @@
     </dl>
     <div style="margin:24px 0 0;display:flex;flex-wrap:wrap;gap:10px">
       <button type="button" onClick="{{ openUpcomingPass }}" style="background:#F7F5F0;color:#0E1014;border:0;padding:14px 20px;border-radius:2px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px">{{ passCta }}</button>
-      <button type="button" onClick="{{ openCancel }}" style="background:none;color:#F7F5F0;border:1px solid rgba(247,245,240,.4);padding:13px 19px;border-radius:2px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px">Cancel booking</button>
-      <button type="button" onClick="{{ openReceipt }}" style="background:none;color:#F7F5F0;border:0;padding:13px 8px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px;border-bottom:1px solid rgba(247,245,240,.4)">Receipt</button>
+      <button type="button" onClick="{{ openUpcomingCancel }}" style="background:none;color:#F7F5F0;border:1px solid rgba(247,245,240,.4);padding:13px 19px;border-radius:2px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px">Cancel booking</button>
+      <button type="button" onClick="{{ openUpcomingReceipt }}" style="background:none;color:#F7F5F0;border:0;padding:13px 8px;font-size:13.5px;font-weight:600;cursor:pointer;min-height:44px;border-bottom:1px solid rgba(247,245,240,.4)">Receipt</button>
     </div>
     <p style="margin:16px 0 0;font-size:12.5px;color:#C3C8BE">{{ cancelNote }}</p>
   </section>
@@ -339,7 +339,7 @@ class Component extends DCLogic {
     ready: false, loading: false, offline: false, authRequired: false,
     /* server state, filled only by _load() */
     data: { bookings: [], openTrips: [], waitlist: [], waitTrip: null,
-            passes: [], passesBookingId: null, quote: null },
+            passes: [], passesBookingId: null, quote: null, quoteBookingId: null },
     /* presentation only */
     tick: 0, filter: 'Upcoming', paxIndex: 0, passOpen: true,
     activeBookingId: null, cancelOpen: false, receiptOpen: false,
@@ -441,6 +441,8 @@ class Component extends DCLogic {
 
   selectBooking = (id, receipt = false) => {
     this._passRequest = (this._passRequest || 0) + 1;
+    this._quoteRequest = (this._quoteRequest || 0) + 1;
+    this.setState(s => ({ data: { ...s.data, quote: null, quoteBookingId: null } }));
     this.setState({ activeBookingId: id, paxIndex: 0, passOpen: !receipt,
       receiptOpen: receipt, cancelOpen: false }, () => {
       this._loadPasses().then(() => {
@@ -452,13 +454,16 @@ class Component extends DCLogic {
 
   /** The refund preview, quoted by the server. The browser never computes it. */
   async _loadQuote() {
+    const request = this._quoteRequest = (this._quoteRequest || 0) + 1;
     const b = this._activeBooking();
+    this.setState(s => ({ data: { ...s.data, quote: null, quoteBookingId: null } }));
     if (!b) return;
     try {
       const quote = await DLT.bookings.cancellationQuote(b.id);
-      this.setState(s => ({ data: Object.assign({}, s.data, { quote: quote }) }));
+      if (request !== this._quoteRequest || this._activeBooking()?.id !== b.id) return;
+      this.setState(s => ({ data: { ...s.data, quote, quoteBookingId: b.id } }));
     } catch (e) {
-      this.setState(s => ({ data: Object.assign({}, s.data, { quote: null }) }));
+      if (request === this._quoteRequest) this.fail(e);
     }
   }
 
@@ -600,7 +605,8 @@ class Component extends DCLogic {
      here — the UI must not imply an operation the backend cannot perform. */
   confirmCancel = async () => {
     const b = this._activeBooking();
-    if (!b) return;
+    if (!b || this._cancelInFlight || this.state.data.quoteBookingId !== b.id) return;
+    this._cancelInFlight = true;
     this.setState({ busy: true, error: null });
     try {
       const res = await DLT.bookings.cancel(b.id, 'Student cancellation');
@@ -612,12 +618,15 @@ class Component extends DCLogic {
           : 'Cancelled. Inside 24 hours the fare is not refundable, so no refund was raised. The seat has been released.',
       });
     } catch (e) { this.fail(e); }
+    finally { this._cancelInFlight = false; }
   };
 
-  openCancel = () => {
-    this.setState({ cancelOpen: true, receiptOpen: false, notice: null, error: null },
-      () => this._loadQuote());
+  openCancelFor = (id) => {
+    if (!id) return;
+    this.setState({ activeBookingId: id, cancelOpen: true, receiptOpen: false,
+      notice: null, error: null }, () => { this._loadPasses(); this._loadQuote(); });
   };
+  openCancel = () => this.openCancelFor(this._activeBooking()?.id);
 
   /* ------------------------------------------------------------ render
    *
@@ -784,7 +793,7 @@ class Component extends DCLogic {
       };
     }
 
-    const quote = st.cancelOpen && active ? st.data.quote : null;
+    const quote = st.cancelOpen && active && st.data.quoteBookingId === active.id ? st.data.quote : null;
 
     return {
       signedIn: true, signedOut: false,
@@ -830,6 +839,8 @@ class Component extends DCLogic {
       openPass: () => active && this.selectBooking(active.id),
       openUpcomingPass: () => upcoming && this.selectBooking(upcoming.id),
       openCancel: this.openCancel,
+      openUpcomingCancel: () => this.openCancelFor(upcoming?.id),
+      openUpcomingReceipt: () => upcoming && this.selectBooking(upcoming.id, true),
       closeCancel: () => this.setState({ cancelOpen: false }),
       cancelOpen: st.cancelOpen && !!active,
       quoteTitle: quote ? (quote.amount > 0 ? 'You’d get ₹' + quote.amount + ' back' : 'No refund is due') : 'Checking the refund…',

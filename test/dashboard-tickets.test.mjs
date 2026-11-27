@@ -65,3 +65,23 @@ test('ticket loading errors remain visible and can be retried',async()=>{
   fail=false;p.renderVals().openPass();await settle();
   assert.equal(p._passes().length,2);
 });
+
+test('an old cancellation quote cannot move to another selected booking',async()=>{
+ const pending={};
+ // The same booking context is shared by ticket, receipt and cancellation views.
+ const source=readFileSync(new URL('../DLT Dashboard.dc.html',import.meta.url),'utf8').match(/<script[^>]*data-dc-script[^>]*>([\s\S]*?)<\/script>/)[1];
+ class Logic{setState(update,done){Object.assign(this.state,typeof update==='function'?update(this.state):update);done?.();}}
+ const api={...DLT,auth:{current:()=>({name:'Same Student',role:'STUDENT'})},bookings:{cancellationQuote:id=>new Promise(r=>pending[id]=r)}};
+ const Page=new Function('DCLogic','DLT','window',source+'\nreturn Component;')(Logic,api,{DLT:api});
+ const view=new Page();Object.assign(view.state,{ready:true,activeBookingId:'first',cancelOpen:true});view.state.data.bookings=bookings;
+ const a=view._loadQuote();view.state.activeBookingId='second';const b=view._loadQuote();
+ pending.second({amount:640});await b;pending.first({amount:320});await a;
+ assert.equal(view.state.data.quote.amount,640);
+});
+
+test('the next-trip receipt and cancel controls target that trip even after viewing another booking',async()=>{
+ const p=page(async id=>passesFor(id));p.state.activeBookingId='second';
+ p.renderVals().openUpcomingReceipt();await settle();assert.equal(p._activeBooking().id,'first');
+ p.state.activeBookingId='second';p._loadQuote=async()=>{};
+ p.renderVals().openUpcomingCancel();assert.equal(p._activeBooking().id,'first');
+});
