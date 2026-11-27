@@ -2,7 +2,7 @@
 
 This review stack uses `/opt/dlt-sandbox`, `/etc/dlt-sandbox`, Compose project `dlt-sandbox-review`, its own `dlt_sandbox` database and volumes, and `dlt-sandbox-api:review` / `dlt-sandbox-tools:review` images. It does not install host Nginx configuration, change DNS, restart production containers, or read production environment files.
 
-Only localhost ports 3110 (API) and 8186 (review website) are published. PostgreSQL has no published port. The stack network is internal, and the API is limited to 512 MiB and one CPU. Database credentials and the synthetic-account password are newly generated on the VPS. Do not copy production credentials or database dumps into this stack.
+Only localhost ports 3110 (API) and 8186 (review website) are published, through a small credential-free TCP gateway. The API and PostgreSQL join only the internal backend network and have no published ports. The API is limited to 512 MiB and one CPU. Database credentials and the synthetic-account password are newly generated on the VPS. Do not copy production credentials or database dumps into this stack.
 
 The production image and startup remain unchanged. The dedicated sandbox image refuses a production database name, an owner runtime role, live Razorpay keys and external email credentials. Payments and refunds are disabled; seeded SUCCESS payment rows are explicitly simulated fixtures. Background payment reconciliation jobs are not started. Email stays in an in-memory inbox, available only to the sandbox Super Admin at `/api/sandbox/inbox`.
 
@@ -31,7 +31,7 @@ docker compose -p dlt-sandbox-review -f deploy/sandbox/compose.yaml up -d --wait
 docker compose -p dlt-sandbox-review -f deploy/sandbox/compose.yaml run --rm migrate
 docker compose -p dlt-sandbox-review -f deploy/sandbox/compose.yaml run --rm migrate node --experimental-strip-types scripts/sandbox-seed.mjs
 docker compose -p dlt-sandbox-review -f deploy/sandbox/compose.yaml run --rm prepare
-docker compose -p dlt-sandbox-review -f deploy/sandbox/compose.yaml up -d --wait --wait-timeout 120 api
+docker compose -p dlt-sandbox-review -f deploy/sandbox/compose.yaml up -d --wait --wait-timeout 120 api gateway
 curl -fsS http://127.0.0.1:3110/api/ready
 curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8186/review
 ```

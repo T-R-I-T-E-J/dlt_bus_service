@@ -39,8 +39,12 @@ test('the Compose sandbox has its own images and volumes, private ports, and no 
   const cfg=JSON.parse(execFileSync('docker',['compose','-p','dlt-sandbox-review','-f','deploy/sandbox/compose.yaml','--profile','tools','config','--format','json'],{cwd:new URL('..',import.meta.url),env:{...process.env,DLT_SANDBOX_CONFIG_DIR:dir},encoding:'utf8',stdio:['ignore','pipe','pipe']}));
   assert.equal(cfg.name,'dlt-sandbox-review');assert.equal(cfg.services.api.image,'dlt-sandbox-api:review');
   assert.equal(cfg.services.migrate.image,'dlt-sandbox-tools:review');assert.equal(cfg.services.db.ports,undefined);
-  assert.deepEqual(cfg.services.api.ports.map(p=>[p.host_ip,String(p.published)]),[['127.0.0.1','3110'],['127.0.0.1','8186']]);
-  assert.equal(cfg.networks.default.internal,true);
+  assert.equal(cfg.services.api.ports,undefined);
+  assert.deepEqual(cfg.services.gateway.ports.map(p=>[p.host_ip,String(p.published)]),[['127.0.0.1','3110'],['127.0.0.1','8186']]);
+  assert.equal(cfg.networks.backend.internal,true);
+  for (const service of ['db','api','migrate']) assert.deepEqual(Object.keys(cfg.services[service].networks),['backend']);
+  assert.equal(cfg.services.gateway.environment,undefined);
+  assert.deepEqual(Object.keys(cfg.services.gateway.networks).sort(),['backend','default']);
   assert.equal(cfg.volumes['postgres-data'].name,'dlt-sandbox-review_postgres-data');
   assert.ok(cfg.services.api.volumes.every(v=>!String(v.source).includes('/etc/dlt-vps')&&!String(v.source).includes('dlt-vps-fresh')));
   assert.equal(cfg.services.api.environment.DATABASE_URL.endsWith('/dlt_sandbox'),true);
