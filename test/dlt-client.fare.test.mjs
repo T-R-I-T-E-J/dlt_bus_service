@@ -93,3 +93,9 @@ test('boarding pass and receipt distinguish fare, tax and the actual charged tot
   assert.equal(receipt['Total charged'], '₹640');
   assert.match(view.openTripsLabel, /₹299 excluding tax/);
 });
+
+test('the home next-trip banner resolves route details from the public departure',()=>{
+ const p=screen('DLT Homepage.dc.html');p.state.ready=true;
+ p.state.data.trips=[trip];p.state.data.nextBooking={id:'booking',trip:{id:trip.id,departureAt:trip.departureAt,reportingAt:trip.reportingAt},passengers:[{seatNumber:'2A'}]};
+ const view=p.renderVals();assert.match(view.nextTripWhen,/Woxsen -> Miyapur/);assert.doesNotMatch(view.nextTripWhen,/undefined/);
+});

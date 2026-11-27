@@ -42,3 +42,10 @@ for (const action of ['toggleSeat', 'removeSeat']) test(action + ' ignores a res
  const pending=p[action]('2A');p.state.tripId='530pm';resolve();await pending;
  assert.equal(p.state.pax['2A'].name,'New trip passenger');
 });
+
+test('a trip already boarding cannot be selected or accidentally join the waitlist',async()=>{
+ let joined=0;
+ const p=booking({auth:{current:()=>({role:'STUDENT'})},waitlist:{join:async()=>{joined++;}}});
+ await p.pickTrip({id:'boarding-trip',status:'BOARDING',bookable:false,available:40});
+ assert.equal(joined,0);assert.match(p.state.error,/Booking is closed/);assert.notEqual(p.state.tripId,'boarding-trip');
+});

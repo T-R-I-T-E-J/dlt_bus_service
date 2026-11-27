@@ -2,7 +2,7 @@
 <html lang="en-IN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DLT Services | Woxsen to Miyapur Student Bus Booking</title>
 <meta name="description" content="DLT Services is the student-run Woxsen University to Miyapur Metro shuttle booking site. Check trips, book seats from Rs 299 excluding tax, pay online, and get QR boarding passes.">
 <link rel="canonical" href="https://dltservices.tech/">
@@ -154,8 +154,9 @@
   }
 
 </script>
+<link rel="stylesheet" href="./dlt-mobile.css">
 </head>
-<body>
+<body data-dlt-page="home">
 <x-dc>
 <helmet>
 <!-- The three.js import map is deliberately NOT here — it is in the document's
@@ -556,7 +557,7 @@
     <li style="border-top:2px solid rgba(14,16,20,.2);padding-top:13px">
       <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Step 02</div>
       <h3 style="margin:8px 0 0;font-size:15.5px;font-weight:600">Select your seat</h3>
-      <p style="margin:7px 0 0;font-size:13px;line-height:1.55;color:#3D423C">Window or aisle, up to five seats. Your choice is held for 10 minutes.</p>
+      <p style="margin:7px 0 0;font-size:13px;line-height:1.55;color:#3D423C">Reserve up to five places on the bus diagram. Your places are held for 10 minutes.</p>
     </li>
     <li style="border-top:2px solid rgba(14,16,20,.2);padding-top:13px">
       <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Step 03</div>
@@ -582,7 +583,7 @@
     <div>
       <span style="display:block;width:22px;height:2px;background:#0E4B34"></span>
       <h3 style="margin:14px 0 0;font-size:16px;font-weight:600;letter-spacing:-.01em">One route, done properly</h3>
-      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">A fixed departure, a named pickup point and a seat with your number on it. No haggling, no waiting at the gate.</p>
+      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.6;color:#3D423C">A fixed departure, a named pickup point and a reserved place on your departure. No haggling, no waiting at the gate.</p>
     </div>
     <div>
       <span style="display:block;width:22px;height:2px;background:#0E4B34"></span>
@@ -604,7 +605,7 @@
       <h2 style="margin:9px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(22px,2.4vw,30px);line-height:1.06;letter-spacing:-.018em">Getting to the city shouldn't be the hardest part of the week</h2>
     </div>
     <div style="display:flex;flex-direction:column;gap:14px;max-width:62ch">
-      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">DLT gives Woxsen students a predictable way to reach Miyapur: published departures, a named pickup point, a numbered seat and a fixed current fare of ₹{{ fare }} per seat (excluding tax).</p>
+      <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">DLT gives Woxsen students a predictable way to reach Miyapur: published departures, a named pickup point, a reserved place and a fixed current fare of ₹{{ fare }} per seat (excluding tax).</p>
       <p style="margin:0;font-size:13.5px;line-height:1.7;color:#3D423C">We are starting with Woxsen to Miyapur and adding Miyapur to Woxsen when the schedule is ready. The booking system already supports both directions, so each new trip works the same way.</p>
     </div>
   </div>
@@ -675,6 +676,7 @@
   <span style="flex:1"></span>
   <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.11em;text-transform:uppercase">Woxsen ⇄ Miyapur · INR</span>
 </footer>
+<nav class="dlt-phone-nav" aria-label="Mobile navigation"><a href="/booking" aria-current="page">Book tickets</a><a href="/my-trips">My trips</a><a href="/account">Account</a></nav>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{
   &quot;motionMode&quot;: {
@@ -838,7 +840,7 @@ class Component extends DCLogic {
         const mine = await api.bookings.mine();
         const upcoming = mine.filter(b => b.status === 'CONFIRMED'
           && b.trip && ['COMPLETED', 'DEPARTED'].indexOf(b.trip.status) < 0);
-        data.nextBooking = upcoming[0] || null;
+        data.nextBooking = upcoming.sort((a,b)=>new Date(a.trip.departureAt)-new Date(b.trip.departureAt))[0] || null;
       } catch (e) { data.nextBooking = null; }
     } else {
       data.nextBooking = null;
@@ -936,6 +938,7 @@ class Component extends DCLogic {
 
     /* the signed-in student's next trip, if they have one */
     const next = st.data.nextBooking;
+    const nextTrip = next && (trips.find(t => t.id === next.trip.id) || next.trip);
 
     const q = st.faqQuery.trim().toLowerCase();
     const faqGroups = FAQ.map(([category, items]) => ({
@@ -955,7 +958,7 @@ class Component extends DCLogic {
 
       hasNextTrip: !!next,
       nextTripWhen: next ? fmt.when(next.trip.departureAt) + ' · ' +
-        next.trip.origin + ' -> ' + next.trip.destination : '',
+        (nextTrip.origin && nextTrip.destination ? nextTrip.origin + ' -> ' + nextTrip.destination : 'Scheduled departure') : '',
       nextTripSeats: next
         ? 'Seat ' + next.passengers.map(p => p.seatNumber).join(', ') + ' · report ' + fmt.time(next.trip.reportingAt)
         : '',
@@ -980,7 +983,7 @@ class Component extends DCLogic {
           availFg: t.soldOut ? '#0E1014' : low ? '#8A5A0E' : '#3D423C',
           availWeight: low ? 600 : 500,
           priceFg: t.soldOut ? '#5F6560' : '#0E1014',
-          cta: t.soldOut ? 'Join waitlist' : 'Select seats',
+          cta: t.status && t.status !== 'OPEN' ? 'Booking closed' : t.soldOut ? 'Join waitlist' : 'Select seats',
           ctaBg: t.soldOut ? 'transparent' : '#0E1014',
           ctaFg: t.soldOut ? '#0E1014' : '#F7F5F0',
           /* §10 the chosen departure travels with the click */

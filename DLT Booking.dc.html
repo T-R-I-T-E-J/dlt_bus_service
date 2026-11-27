@@ -2,7 +2,7 @@
 <html lang="en-IN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Book DLT Services | Woxsen Miyapur Student Shuttle</title>
 <meta name="description" content="Book DLT Services student shuttle seats between Woxsen University and Miyapur Metro. Choose a departure, select seats, pay online, and get QR boarding.">
 <link rel="canonical" href="https://dltservices.tech/booking">
@@ -34,8 +34,9 @@
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script src="./support.js"></script>
+<link rel="stylesheet" href="./dlt-mobile.css">
 </head>
-<body>
+<body data-dlt-page="booking">
 <x-dc>
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -109,7 +110,7 @@
     <span data-m="hide" style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Book a seat</span>
   </a>
   <nav style="display:flex;align-items:center;gap:clamp(14px,2.4vw,28px);font-size:13.5px;font-weight:500">
-    <a href="/#help" style="color:#3D423C">Help</a>
+    <a data-phone-secondary href="/#help" style="color:#3D423C">Help</a>
     <a href="./DLT Dashboard.dc.html" style="color:#3D423C">My trips</a>
     <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
       <span style="display:flex;align-items:center;gap:9px">
@@ -201,7 +202,7 @@
                  phone number is asked for and no request is recorded, so the copy
                  must not imply an automatic alert. -->
             <a href="{{ whatsappUrl }}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;gap:8px;border:1px solid rgba(14,16,20,.2);padding:11px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Message us on WhatsApp<span aria-hidden="true" style="font-size:11px;color:#5F6560">↗</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Opens WhatsApp in a new tab</span></a>
-            <a href="/#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:11px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
+            <a data-phone-secondary href="/#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:11px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
           </div>
           <p style="margin:12px 0 0;max-width:52ch;font-size:12px;line-height:1.55;color:#5F6560">Email requests are logged for operations. WhatsApp opens a conversation — we reply there, and nothing is recorded automatically.</p>
         </sc-if>
@@ -259,9 +260,9 @@
       <button type="button" onClick="{{ backToTrips }}" style="background:none;border:0;padding:6px 0;font-size:13px;font-weight:600;color:#0E4B34;cursor:pointer;border-bottom:1px solid rgba(14,75,52,.4)">Change trip</button>
     </div>
 
-    <div role="note" style="margin:20px 0;padding:16px 18px;border-left:3px solid #0E4B34;background:#EEF3EE;font-size:14px;line-height:1.6"><strong>Open seating — sit anywhere.</strong> Seats are not assigned. This diagram is only a representation of the bus. Select one place per passenger to reserve space; choose any available seat when boarding, first come, first served.</div>
+    <div class="dlt-seating-notice" role="note" style="margin:20px 0;padding:16px 18px;border-left:3px solid #0E4B34;background:#EEF3EE;font-size:14px;line-height:1.6"><strong>No assigned seats.</strong> This diagram reserves space only. Sit anywhere on the bus, first come, first served.</div>
 
-    <div style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,auto));gap:10px 22px;align-items:center">
+    <div data-booking-legend style="margin:22px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,auto));gap:10px 22px;align-items:center">
       <sc-for list="{{ legend }}" as="l" hint-placeholder-count="5">
         <span style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:#3D423C">
           <span aria-hidden="true" style="display:block;width:15px;height:15px;border-radius:2px;background:{{ l.bg }};border:1px solid {{ l.bd }}"></span>
@@ -275,7 +276,7 @@
         <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">{{ vehicleLabel }} · 2 + 2 · {{ seatCount }} seats · {{ availableCount }} free</span>
         <span style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Front of coach ↑</span>
       </div>
-      <div role="group" aria-label="Bus representation for booking availability" style="margin:18px auto 0;display:grid;grid-template-columns:repeat(2,44px) 30px repeat(2,44px);gap:9px;justify-content:center">
+      <div data-bus-map role="group" aria-label="Bus representation for booking availability" style="margin:18px auto 0;display:grid;grid-template-columns:repeat(2,44px) 30px repeat(2,44px);gap:9px;justify-content:center">
         <sc-for list="{{ cells }}" as="c" hint-placeholder-count="55">
           <sc-if value="{{ c.isSeat }}" hint-placeholder-val="{{ true }}">
             <button type="button" onClick="{{ c.onClick }}" disabled="{{ c.disabled }}" aria-pressed="{{ c.pressed }}" aria-label="{{ c.aria }}" title="{{ c.aria }}" style="height:44px;width:44px;border-radius:3px 3px 6px 6px;border:1px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums;cursor:{{ c.cursor }};box-shadow:{{ c.shadow }};transition:background .12s ease, transform .12s ease" style-hover="{{ c.hover }}">{{ c.id }}</button>
@@ -309,7 +310,7 @@
             <span aria-hidden="true" style="font-size:12px;color:#5F6560">{{ p.chev }}</span>
           </button>
           <sc-if value="{{ p.open }}" hint-placeholder-val="{{ true }}">
-            <div style="padding:2px 18px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px 16px">
+            <div data-mobile-form style="padding:2px 18px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px 16px">
               <label style="display:block">
                 <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Full name</span>
                 <input type="text" value="{{ p.name }}" onChange="{{ p.onName }}" onBlur="{{ p.onBlur }}" autocomplete="name" placeholder="As on your student ID" style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid {{ p.nameBd }};border-radius:2px;background:#FCFBF8;font-size:14px" />
@@ -364,7 +365,7 @@
         <button type="button" onClick="{{ editPax }}" style="background:none;border:0;padding:6px 0;font-size:12.5px;font-weight:600;color:#0E4B34;cursor:pointer;border-bottom:1px solid rgba(14,75,52,.4)">Edit details</button>
       </div>
       <sc-for list="{{ pax }}" as="p" hint-placeholder-count="2">
-        <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(14,16,20,.09)">
+        <div data-review-passenger style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(14,16,20,.09)">
           <div>
             <div style="font-size:14px;font-weight:600">{{ p.name }}</div>
             <div style="margin-top:4px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">{{ p.sid }}</div>
@@ -395,7 +396,7 @@
       <div style="margin:20px 0 0;border:1px solid rgba(14,16,20,.14);border-top:2px solid #0E4B34;background:#FFFFFF;padding:20px 22px">
         <h2 style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.01em">{{ authTitle }}</h2>
         <p style="margin:8px 0 0;max-width:48ch;font-size:13px;line-height:1.6;color:#3D423C">Your seats stay held while you sign in. We need an account to attach the booking, the passes and any refund to.</p>
-        <div style="margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;max-width:560px">
+        <div data-mobile-form style="margin:16px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;max-width:560px">
           <sc-if value="{{ authIsSignUp }}" hint-placeholder-val="{{ false }}">
             <label style="display:block">
               <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Full name</span>
@@ -516,7 +517,7 @@
     </dl>
     <div style="margin:22px 0 0;display:flex;flex-wrap:wrap;gap:10px">
       <a href="./DLT Dashboard.dc.html" style="display:flex;align-items:center;background:#0E1014;color:#F7F5F0;padding:13px 20px;border-radius:2px;font-size:13px;font-weight:600;min-height:44px;box-sizing:border-box">Track it in My Trips</a>
-      <a href="/#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
+      <a data-phone-secondary href="/#help" style="display:flex;align-items:center;border:1px solid rgba(14,16,20,.2);padding:12px 19px;border-radius:2px;font-size:13px;font-weight:600;color:#0E1014;min-height:44px;box-sizing:border-box">Contact support</a>
     </div>
   </section>
   </sc-if>
@@ -926,6 +927,7 @@ class Component extends DCLogic {  state = {
   pickTrip = async (trip) => {
     try {
       if (this._paymentInFlight) return;
+      if (trip.status && trip.status !== 'OPEN') throw new Error('Booking is closed for this departure. Choose an open departure.');
       if (!trip.bookable) {
         const me = DLT.auth.current();
         if (!me) { location.href = './DLT Account.dc.html?next=book'; return; }
@@ -1293,11 +1295,11 @@ class Component extends DCLogic {  state = {
         : t.status === 'BOOKING_CLOSED' ? 'Booking closed'
         : t.available <= 8 ? t.available + ' seats left' : 'Seats available',
       availFg: t.soldOut ? '#5F6560' : t.available <= 8 ? '#8A5A0E' : '#3D423C',
-      cta: t.soldOut ? 'Join waitlist' : t.status === 'BOOKING_CLOSED' ? 'Closed' : 'Book tickets',
+      cta: t.status !== 'OPEN' ? 'Booking closed' : t.soldOut ? 'Join waitlist' : 'Book tickets',
       ctaBg: t.bookable ? '#0E1014' : 'transparent',
       ctaFg: t.bookable ? '#F7F5F0' : '#0E1014',
       ctaBd: '#0E1014',
-      busy: t.status === 'BOOKING_CLOSED',
+      busy: t.status !== 'OPEN',
       onPick: () => this.pickTrip(t),
     }));
 

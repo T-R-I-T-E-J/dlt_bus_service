@@ -85,3 +85,22 @@ test('the next-trip receipt and cancel controls target that trip even after view
  p.state.activeBookingId='second';p._loadQuote=async()=>{};
  p.renderVals().openUpcomingCancel();assert.equal(p._activeBooking().id,'first');
 });
+
+test('the next trip follows departure time rather than newest booking order',()=>{
+ const p=page(async id=>passesFor(id));
+ p.state.activeBookingId=null;
+ p.state.data.bookings=[{...bookings[1],trip:{...trip,departureAt:'2029-02-01T12:00:00Z'}},{...bookings[0],trip:{...trip,departureAt:'2029-02-01T07:30:00Z'}}];
+ assert.equal(p._activeBooking().id,'first');assert.equal(p.renderVals().upcomingCode,'DLT-1');
+});
+test('the ticket booking picker fetches that booking before showing its passes',async()=>{
+ const p=page(async id=>passesFor(id));await p._loadPasses();
+ p.renderVals().onPassBooking({target:{value:'second'}});await settle();
+ assert.equal(p.renderVals().passBookingId,'second');assert.match(p.renderVals().passBookingOptions[1].label,/DLT-2/);
+ assert.deepEqual(p._passes().map(x=>x.qrToken),['demo-second-3A','demo-second-3B']);
+});
+
+test('an unpaid retry cannot hide confirmed tickets for the same departure',()=>{
+ const p=page(async id=>passesFor(id));p.state.activeBookingId=null;
+ p.state.data.bookings=[{...bookings[1],id:'pending-retry',status:'PAYMENT_PENDING'},{...bookings[0]}];
+ assert.equal(p._activeBooking().id,'first');assert.equal(p.renderVals().upcomingCode,'DLT-1');
+});

@@ -2,7 +2,7 @@
 <html lang="en-IN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sign in — DLT</title>
 <meta name="description" content="Sign in or create a DLT account to book the Woxsen to Miyapur student shuttle.">
 <link rel="canonical" href="https://dltservices.tech/account">
@@ -15,8 +15,9 @@
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script src="./support.js"></script>
+<link rel="stylesheet" href="./dlt-mobile.css">
 </head>
-<body>
+<body data-dlt-page="account">
 <x-dc>
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -51,7 +52,7 @@
     <span style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">{{ kicker }}</span>
   </a>
   <nav style="display:flex;align-items:center;gap:clamp(14px,2.4vw,26px);font-size:13.5px;font-weight:500">
-    <a href="./DLT Homepage.dc.html#help" style="color:#3D423C">Help</a>
+    <a data-phone-secondary href="./DLT Homepage.dc.html#help" style="color:#3D423C">Help</a>
     <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
       <a href="./DLT Dashboard.dc.html" style="color:#3D423C">My trips</a>
       <button type="button" onClick="{{ signOut }}" style="background:none;border:1px solid rgba(14,16,20,.2);padding:9px 14px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Sign out</button>
@@ -76,7 +77,7 @@
     <h1 id="auth-h" style="margin:10px 0 0;font-stretch:125%;font-weight:700;font-size:clamp(24px,2.8vw,34px);line-height:1.05;letter-spacing:-.02em">{{ formTitle }}</h1>
     <p style="margin:11px 0 0;max-width:48ch;font-size:13.5px;line-height:1.6;color:#3D423C">{{ formBlurb }}</p>
 
-    <div style="margin:24px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 16px">
+    <div data-mobile-form style="margin:24px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 16px">
       <sc-if value="{{ isSignUp }}" hint-placeholder-val="{{ false }}">
         <label style="display:block">
           <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Full name</span>
@@ -143,7 +144,7 @@
   <section aria-labelledby="p1" style="margin:26px 0 0;border:1px solid rgba(14,16,20,.14);background:#FFFFFF;padding:clamp(20px,3vw,28px)">
     <h2 id="p1" style="margin:0;font-size:17px;font-weight:600;letter-spacing:-.01em">Your details</h2>
     <p style="margin:8px 0 0;max-width:56ch;font-size:13px;line-height:1.6;color:#3D423C">Name, phone and emergency contact are yours to change. Your student ID is identity information — a change goes to operations for review rather than taking effect straight away.</p>
-    <div style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 16px">
+    <div data-mobile-form style="margin:20px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 16px">
       <label style="display:block">
         <span style="display:block;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560;margin-bottom:6px">Full name</span>
         <input type="text" value="{{ fName }}" onChange="{{ onFName }}" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid rgba(14,16,20,.2);border-radius:2px;background:#FCFBF8;font-size:14px" />
@@ -228,6 +229,7 @@
 </sc-if>
 
 </main>
+<nav class="dlt-phone-nav" aria-label="Mobile navigation"><a href="/booking">Book tickets</a><a href="/my-trips">My trips</a><a href="/account" aria-current="page">Account</a></nav>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{
   &quot;$preview&quot;: { &quot;width&quot;: 1180, &quot;height&quot;: 860 }

@@ -37,7 +37,7 @@ await mkdir(publicDir);
 const pages = ['Homepage', 'Booking', 'Dashboard', 'Account', 'Admin', 'Policies']
   .map(name => `DLT ${name}.dc.html`);
 const files = [...pages, '404.html', 'dlt-client.js', 'dlt-qr.js', 'journey.js',
-  'jsqr.vendor.js', 'support.js', 'favicon.svg', 'robots.txt', 'sitemap.xml'];
+  'jsqr.vendor.js', 'support.js', 'dlt-mobile.css', 'favicon.svg', 'robots.txt', 'sitemap.xml'];
 for (const file of files) {
   let contents = await readFile(join(repo, file), 'utf8');
   if (/\.(html|xml|txt)$/.test(file)) {

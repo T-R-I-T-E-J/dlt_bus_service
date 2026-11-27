@@ -2,7 +2,7 @@
 <html lang="en-IN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>My trips — DLT</title>
 <meta name="description" content="View your DLT bookings, boarding passes and trip history.">
 <link rel="canonical" href="https://dltservices.tech/my-trips">
@@ -15,8 +15,9 @@
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script src="./support.js"></script>
+<link rel="stylesheet" href="./dlt-mobile.css">
 </head>
-<body>
+<body data-dlt-page="trips">
 <x-dc>
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -64,7 +65,7 @@
     <span data-m="hide" style="font-family:'Martian Mono',monospace;font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#5F6560">Dashboard</span>
   </a>
   <nav style="display:flex;align-items:center;gap:clamp(12px,2.4vw,22px);font-size:13.5px;font-weight:500">
-    <a href="./DLT Homepage.dc.html#help" style="color:#3D423C">Help</a>
+    <a data-phone-secondary href="./DLT Homepage.dc.html#help" style="color:#3D423C">Help</a>
     <a href="./DLT Booking.dc.html" style="background:#0E1014;color:#F7F5F0;padding:12px 17px;border-radius:2px;font-weight:600;font-size:13px;min-height:44px;display:flex;align-items:center;box-sizing:border-box">Book a seat</a>
     <a href="./DLT Account.dc.html" aria-label="Your account" style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#0E4B34;color:#F7F5F0;font-size:12px;font-weight:600">{{ initials }}</a>
   </nav>
@@ -188,7 +189,7 @@
   <section aria-labelledby="trips-h" style="margin:34px 0 0">
     <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:12px">
       <h2 id="trips-h" style="margin:0;font-stretch:125%;font-weight:700;font-size:clamp(20px,2.2vw,26px);letter-spacing:-.015em">My trips</h2>
-      <div role="group" aria-label="Filter trips" style="display:flex;flex-wrap:wrap;gap:8px">
+      <div data-trip-filters role="group" aria-label="Filter trips" style="display:flex;flex-wrap:wrap;gap:8px">
         <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
           <button type="button" aria-pressed="{{ f.on }}" onClick="{{ f.onPick }}" style="background:{{ f.bg }};color:{{ f.fg }};border:1px solid {{ f.bd }};padding:10px 14px;border-radius:2px;font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;min-height:44px">{{ f.label }} {{ f.count }}</button>
         </sc-for>
@@ -222,7 +223,7 @@
   </section>
 
   <!-- QUICK ACTIONS -->
-  <section aria-label="Quick actions" style="margin:34px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+  <section data-quick-actions aria-label="Quick actions" style="margin:34px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
     <a href="./DLT Booking.dc.html" style="border:1px solid rgba(14,16,20,.14);background:#FFFFFF;padding:18px 18px 20px;color:#0E1014">
       <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#0E4B34">Book</div>
       <div style="margin-top:9px;font-size:14.5px;font-weight:600">Book a seat</div>
@@ -248,7 +249,12 @@
 </div>
 
 <!-- BOARDING PASS -->
-<aside data-m="pass" ref="{{ passPanelRef }}" aria-label="Boarding pass" style="position:sticky;top:84px;scroll-margin-top:84px">
+<aside id="boarding-pass" data-m="pass" ref="{{ passPanelRef }}" aria-label="Boarding pass" style="position:sticky;top:84px;scroll-margin-top:84px">
+  <label class="dlt-pass-picker">Choose booking
+    <select aria-label="Booking for boarding pass" value="{{ passBookingId }}" onChange="{{ onPassBooking }}">
+      <sc-for list="{{ passBookingOptions }}" as="b" hint-placeholder-count="2"><option value="{{ b.id }}">{{ b.label }}</option></sc-for>
+    </select>
+  </label>
   <sc-if value="{{ passOpen }}" hint-placeholder-val="{{ true }}">
   <div style="border:1px solid rgba(14,16,20,.16);background:#FFFFFF;animation:dltRise .3s ease">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid rgba(14,16,20,.12)">
@@ -257,7 +263,7 @@
     </div>
 
     <sc-if value="{{ multiPass }}" hint-placeholder-val="{{ false }}">
-      <div data-m="noprint" role="group" aria-label="Passenger" style="display:flex;border-bottom:1px solid rgba(14,16,20,.12)">
+      <div data-pass-tabs data-m="noprint" role="group" aria-label="Passenger" style="display:flex;border-bottom:1px solid rgba(14,16,20,.12)">
         <sc-for list="{{ passengers }}" as="p" hint-placeholder-count="2">
           <button type="button" aria-pressed="{{ p.on }}" onClick="{{ p.onPick }}" style="flex:1;background:{{ p.bg }};border:0;border-bottom:2px solid {{ p.bd }};padding:13px 10px;font-size:12.5px;font-weight:600;color:{{ p.fg }};cursor:pointer;min-height:44px">{{ p.first }} · {{ p.seat }}</button>
         </sc-for>
@@ -265,25 +271,31 @@
     </sc-if>
 
     <div style="padding:20px 18px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+      <div data-pass-person style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
         <div>
           <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560">Passenger</div>
-          <div style="margin-top:6px;font-size:17px;font-weight:600;letter-spacing:-.01em">{{ paxName }}</div>
+          <div data-pass-name style="margin-top:6px;font-size:17px;font-weight:600;letter-spacing:-.01em">{{ paxName }}</div>
           <div style="margin-top:4px;font-size:12.5px;color:#4A4F49;font-variant-numeric:tabular-nums">{{ paxSid }}</div>
         </div>
         <div style="text-align:right">
-          <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560">Seat</div>
+          <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#5F6560" data-pass-reference>Seat reference</div>
           <div style="margin-top:6px;font-stretch:125%;font-weight:700;font-size:26px;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ paxSeat }}</div>
           <div style="margin-top:4px;font-size:12px;color:#4A4F49">{{ paxSeatType }}</div>
         </div>
       </div>
 
-      <div style="margin:18px 0 0;padding:16px 0;border-top:1px dashed rgba(14,16,20,.2);border-bottom:1px dashed rgba(14,16,20,.2);display:flex;flex-direction:column;align-items:center;gap:10px">
-        <canvas ref="{{ qrRef }}" width="176" height="176" role="img" aria-label="Boarding QR for {{ paxName }}, seat {{ paxSeat }}" style="width:176px;height:176px;image-rendering:pixelated;opacity:{{ qrOpacity }}"></canvas>
+      <div class="dlt-seating-notice"><strong>Open seating — sit anywhere.</strong> First come, first served. The seat reference is for booking only; it does not assign a physical seat.</div>
+      <div class="dlt-pass-departure"><span>Departure · Indian Standard Time</span>{{ passDeparture }}</div>
+      <div data-pass-qr style="margin:18px 0 0;padding:16px 0;border-top:1px dashed rgba(14,16,20,.2);border-bottom:1px dashed rgba(14,16,20,.2);display:flex;flex-direction:column;align-items:center;gap:10px">
+        <canvas ref="{{ qrRef }}" width="220" height="220" role="img" aria-label="Boarding QR for {{ paxName }}, seat {{ paxSeat }}" style="width:176px;height:176px;image-rendering:pixelated;opacity:{{ qrOpacity }}"></canvas>
         <div style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#5F6560;text-align:center">{{ qrCaption }}</div>
       </div>
 
-      <dl style="margin:18px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;font-variant-numeric:tabular-nums">
+      <div data-ticket-actions data-m="noprint" style="margin:16px 0 0;display:flex;gap:9px">
+        <button type="button" onClick="{{ savePng }}" style="flex:1;border:1px solid #0E4B34;background:#0E4B34;color:#FFFFFF;padding:12px 14px;border-radius:4px;font-size:14px;font-weight:600;cursor:pointer;min-height:48px">Download ticket (PNG)</button>
+        <button type="button" onClick="{{ printPass }}" style="flex:1;background:none;border:1px solid rgba(14,16,20,.2);padding:12px 14px;border-radius:4px;font-size:14px;font-weight:600;cursor:pointer;min-height:48px">Print / PDF</button>
+      </div>
+      <dl data-pass-facts style="margin:18px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;font-variant-numeric:tabular-nums">
         <sc-for list="{{ passFacts }}" as="f" hint-placeholder-count="8">
           <div>
             <dt style="font-family:'Martian Mono',monospace;font-size:9px;letter-spacing:.11em;text-transform:uppercase;color:#5F6560;margin-bottom:4px">{{ f.k }}</dt>
@@ -292,10 +304,6 @@
         </sc-for>
       </dl>
 
-      <div data-m="noprint" style="margin:20px 0 0;display:flex;gap:9px">
-        <button type="button" onClick="{{ printPass }}" style="flex:1;background:#0E1014;color:#F7F5F0;border:0;padding:13px 14px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Print / PDF</button>
-        <button type="button" onClick="{{ savePng }}" style="flex:1;border:1px solid rgba(14,16,20,.2);background:none;padding:12px 14px;border-radius:2px;font-size:12.5px;font-weight:600;cursor:pointer;min-height:44px">Download ticket (PNG)</button>
-      </div>
       <p data-m="noprint" style="margin:12px 0 0;font-size:11.5px;line-height:1.5;color:#5F6560">{{ passNote }}</p>
     </div>
   </div>
@@ -314,6 +322,7 @@
 </div>
 </sc-if>
 </main>
+<nav class="dlt-phone-nav" aria-label="Mobile navigation"><a href="/booking">Book tickets</a><a href="/my-trips" aria-current="page">My trips</a><a href="/account">Account</a></nav>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{
   &quot;$preview&quot;: { &quot;width&quot;: 1280, &quot;height&quot;: 900 }
@@ -497,7 +506,7 @@ class Component extends DCLogic {
       const found = all.filter(b => (b.id === this.state.activeBookingId || b.code === this.state.activeBookingId))[0];
       if (found) return found;
     }
-    return all.filter(b => this._bucket(b) === 'Upcoming')[0] || all[0] || null;
+    return all.filter(b => this._bucket(b) === 'Upcoming').sort((a,b)=>new Date(a.trip.departureAt)-new Date(b.trip.departureAt) || Number(b.status==='CONFIRMED')-Number(a.status==='CONFIRMED'))[0] || all[0] || null;
   }
 
   _passes() {
@@ -529,7 +538,7 @@ class Component extends DCLogic {
     const p = passes[Math.min(this.state.paxIndex, passes.length - 1)];
     if (!p || !p.qrToken || !window.DLTQR) throw new Error('Your ticket is still loading. Try downloading it again in a moment.');
     /* a real pass image: the whole pass drawn to canvas, not just the QR */
-    const W = 760, H = 1200, cv = document.createElement('canvas');
+    const W = 760, H = 1320, cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const g = cv.getContext('2d');
     g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, W, H);
@@ -553,21 +562,27 @@ class Component extends DCLogic {
     label('PASSENGER', 44, 150); value(p.name, 44, 184, 30);
     label('STUDENT ID', 44, 224); value(p.studentId, 44, 252, 22);
     g.textAlign = 'right';
-    label('SEAT', W - 44, 150);
+    label('SEAT REF', W - 44, 150);
     g.fillStyle = '#0E1014'; g.font = '700 52px Archivo, sans-serif'; g.fillText(p.seatNumber, W - 44, 196);
-    g.font = '500 18px Archivo, sans-serif'; g.fillStyle = '#4A4F49'; g.fillText(p.seatType, W - 44, 224);
+    g.font = '500 18px Archivo, sans-serif'; g.fillStyle = '#4A4F49'; g.fillText('Reference only', W - 44, 224);
     g.textAlign = 'left';
     line(288);
+    g.fillStyle = '#EEF3EE'; g.fillRect(44, 306, W - 88, 86);
+    g.fillStyle = '#0E4B34'; g.font = '700 23px Archivo, sans-serif';
+    g.fillText('OPEN SEATING — SIT ANYWHERE', 60, 340);
+    g.font = '500 18px Archivo, sans-serif';
+    g.fillText('First come, first served. Seat reference is not an assigned seat.', 60, 372);
+
 
     const qrCanvas = document.createElement('canvas');
     qrCanvas.width = 360; qrCanvas.height = 360;
     const qr = DLTQR.draw(qrCanvas, p.qrToken, { dark: p.passStatus === 'VALID' ? '#0E1014' : '#9DA298' });
     if (!qr) throw new Error('The ticket QR could not be generated. Try downloading it again.');
-    g.drawImage(qrCanvas, (W - 360) / 2, 316);
+    g.drawImage(qrCanvas, (W - 360) / 2, 420);
     g.textAlign = 'center';
-    label('SCAN AT THE DOOR · ONE SCAN PER PASSENGER', W / 2, 706);
+    label('SCAN AT THE DOOR · ONE SCAN PER PASSENGER', W / 2, 810);
     g.textAlign = 'left';
-    line(740);
+    line(844);
 
     /* No PICKUP row: no column holds a pickup point, and a printed boarding pass
        is the last place to guess at one. */
@@ -581,7 +596,7 @@ class Component extends DCLogic {
     ];
     facts.forEach(([k, v], i) => {
       const x = 44 + (i % 2) * (W / 2 - 22);
-      const y = 790 + Math.floor(i / 2) * 78;
+      const y = 894 + Math.floor(i / 2) * 78;
       label(k, x, y); value(v, x, y + 30, 19);
     });
     g.fillStyle = '#5F6560'; g.font = '500 12px "Martian Mono", monospace';
@@ -666,7 +681,7 @@ class Component extends DCLogic {
     all.forEach(b => { const k = this._bucket(b); counts[k] = (counts[k] || 0) + 1; });
     const active = this._activeBooking();
     const upcoming = all.filter(b => this._bucket(b) === 'Upcoming' &&
-      ['CONFIRMED', 'PAYMENT_PENDING', 'PAYMENT_HELD', 'BOOKING_PROCESSING'].indexOf(b.status) >= 0)[0];
+      ['CONFIRMED', 'PAYMENT_PENDING', 'PAYMENT_HELD', 'BOOKING_PROCESSING'].indexOf(b.status) >= 0).sort((a,b)=>new Date(a.trip.departureAt)-new Date(b.trip.departureAt) || Number(b.status==='CONFIRMED')-Number(a.status==='CONFIRMED'))[0];
     const openTrips = st.data.openTrips || [];
 
     /* ---- banners, driven entirely by server booking state ---- */
@@ -922,7 +937,7 @@ class Component extends DCLogic {
         onPick: () => this.setState({ paxIndex: i }),
       })),
       paxName: p ? p.name : '—', paxSid: p ? p.studentId : '—',
-      paxSeat: p ? p.seatNumber : '—', paxSeatType: p ? p.seatType : '',
+      paxSeat: p ? p.seatNumber : '—', paxSeatType: p ? 'Reference only' : '',
       passState: p ? (p.passStatus === 'VALID'
         ? (p.boardingStatus === 'BOARDED' ? 'Boarded' : 'Valid ' + DLT.fmt.date(p.departureAt))
         : p.passStatus === 'VOID' ? 'Void' : 'Issued on payment') : '—',
@@ -950,6 +965,10 @@ class Component extends DCLogic {
       passNote: p && p.passStatus !== 'VALID'
         ? 'Cancelled passes stay visible for your records but fail at the scanner.'
         : 'All departure times are IST (India). Download this ticket to Files or Photos before travelling. Show its QR offline at the door. One scan per passenger; cancelled passes remain invalid.',
+      passBookingId: active ? active.id : '',
+      passBookingOptions: all.filter(b => b.trip).map(b => ({id:b.id,label:b.code+' · '+DLT.fmt.when(b.trip.departureAt)+' · '+b.status.replace(/_/g,' ').toLowerCase()})),
+      onPassBooking: e => this.selectBooking(e.target.value),
+      passDeparture: p ? DLT.fmt.when(p.departureAt) : active && active.trip ? DLT.fmt.when(active.trip.departureAt) : '—',
       qrRef: el => { this._cv = el; if (el) this._paint(); },
       printPass: () => print(),
       savePng: this.savePng,

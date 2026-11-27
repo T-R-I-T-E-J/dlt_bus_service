@@ -1,0 +1,79 @@
+/* Phone layouts share the existing DLT colours and typography. */
+.dlt-phone-nav { display: none; }
+.dlt-seating-notice { margin: 16px 0; padding: 13px 14px; background: #EEF3EE; border-left: 3px solid #0E4B34; color: #183C2B; font-size: 14px; line-height: 1.55; }
+.dlt-seating-notice strong { display: block; margin-bottom: 3px; }
+.dlt-pass-picker { display: block; padding: 14px 18px; border-bottom: 1px solid #E4E5DE; font-size: 12px; color: #4A4F49; }
+.dlt-pass-picker select { display: block; width: 100%; min-width: 0; margin-top: 7px; padding: 11px 9px; border: 1px solid #BFC6BC; background: white; border-radius: 4px; font-size: 14px; }
+.dlt-pass-departure { margin-top: 14px; padding: 12px 0 0; border-top: 1px solid #E4E5DE; font-size: 17px; font-weight: 700; line-height: 1.4; color: #0E4B34; }
+.dlt-pass-departure span { display: block; font-size: 12px; font-weight: 400; color: #4A4F49; margin-bottom: 3px; }
+@media screen and (max-width: 720px) {
+  html { scroll-padding-top: 82px; }
+  body { -webkit-text-size-adjust: 100%; }
+  main, section, article, aside, label, dd { min-width: 0; }
+  main p { font-size: 15px !important; line-height: 1.6 !important; }
+  main h1 { font-size: clamp(25px, 7vw, 32px) !important; line-height: 1.14 !important; }
+  main button, header button, main a[role="button"] { min-height: 48px !important; touch-action: manipulation; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea { font-size: 16px !important; min-height: 48px; box-sizing: border-box; max-width: 100%; }
+  input, textarea, select, button { scroll-margin-block: 95px 130px; }
+  textarea { resize: vertical; }
+  [data-mobile-form] { grid-template-columns: minmax(0,1fr) !important; }
+  header { min-height: 64px; gap: 10px; }
+  header nav { gap: 10px !important; }
+  header nav a { display: inline-flex; align-items: center; min-height: 48px; }
+  header [data-phone-secondary] { display: none !important; }
+  .dlt-phone-nav { position: fixed; inset: auto 0 0; z-index: 35; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; padding: 7px 12px calc(7px + env(safe-area-inset-bottom,0px)); background: #FFFFFF; border-top: 1px solid #D9DDD5; }
+  .dlt-phone-nav a { display: flex; align-items: center; justify-content: center; text-align: center; min-height: 48px; padding: 6px; box-sizing: border-box; color: #3D423C; font-size: 13px; font-weight: 600; border-radius: 5px; }
+  .dlt-phone-nav a[aria-current="page"] { color: #0E4B34; background: #EEF3EE; }
+  body[data-dlt-page="home"], body[data-dlt-page="trips"], body[data-dlt-page="account"], body[data-dlt-page="policies"] { padding-bottom: calc(82px + env(safe-area-inset-bottom,0px)); }
+  body[data-dlt-page="booking"] [data-m="asidebar"] { gap: 12px !important; padding-inline: 14px !important; }
+  body[data-dlt-page="booking"] [data-m="barfacts"] { flex: 0 0 112px; }
+  body[data-dlt-page="booking"] [data-m="barfacts"] > :first-child { font-size: 10px !important; letter-spacing: .02em !important; white-space: normal !important; }
+  body[data-dlt-page="booking"] [data-m="barfacts"] > :nth-child(2) { font-size: 22px !important; }
+  body[data-dlt-page="booking"] [data-m="barfacts"] > :last-child { font-size: 11px !important; }
+  body[data-dlt-page="booking"] [data-m="asidebar"] > button { font-size: 15px !important; padding: 12px !important; line-height: 1.3; min-height: 54px !important; }
+  [data-booking-legend] { grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 10px !important; }
+  [data-bus-map] { grid-template-columns: repeat(2,48px) 22px repeat(2,48px) !important; gap: 8px !important; }
+  [data-bus-map] button { width: 48px !important; height: 48px !important; font-size: 13px !important; }
+  [data-review-passenger] { grid-template-columns: minmax(0,1fr) auto !important; gap: 9px !important; }
+  [data-review-passenger] > :last-child { grid-column: 1 / -1; }
+  body[data-dlt-page="trips"] [data-m="pass"] { scroll-margin-top: 78px; }
+  [data-pass-person] > :first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  [data-pass-person] > :last-child { flex: 0 0 86px; }
+  [data-pass-person] [data-pass-name] { font-size: 19px !important; }
+  [data-pass-person] [data-pass-reference] { font-size: 12px !important; letter-spacing: normal !important; text-transform: none !important; }
+  [data-pass-tabs] { overflow-x: auto; overscroll-behavior-inline: contain; }
+  [data-pass-tabs] button { flex: 1 0 98px !important; font-size: 14px !important; }
+  [data-pass-qr] { padding-block: 8px !important; margin-top: 12px !important; }
+  [data-pass-qr] canvas { width: 220px !important; height: 220px !important; max-width: 100%; }
+  [data-pass-qr] > div { overflow-wrap: anywhere; font-size: 10px !important; letter-spacing: 0 !important; }
+  [data-ticket-actions] { display: grid !important; grid-template-columns: minmax(0,1fr) 100px; gap: 8px !important; }
+  [data-ticket-actions] button { font-size: 14px !important; line-height: 1.35; }
+  [data-ticket-actions] button:first-child { color: white !important; background: #0E4B34 !important; border-color: #0E4B34 !important; }
+  [data-pass-facts] dt { font: 400 12px/1.4 Archivo,system-ui,sans-serif !important; letter-spacing: 0 !important; text-transform: none !important; }
+  [data-pass-facts] dd { font-size: 15px !important; line-height: 1.4; overflow-wrap: anywhere; }
+  [data-trip-filters] { display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)); width: 100%; }
+  [data-trip-filters] button { font-size: 12px !important; padding-inline: 8px !important; }
+  [data-quick-actions] { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  [data-quick-actions] > * { padding: 14px !important; min-width: 0; overflow-wrap: anywhere; }
+  body[data-dlt-page="admin"] [data-ops-row] { margin-inline: 8px; padding: 14px !important; }
+  body[data-dlt-page="admin"] [data-ops-row] > :first-child { font-size: 15px !important; line-height: 1.5; }
+  [data-ops-actions] > a, [data-ops-actions] > button { min-height: 48px !important; flex: 1 1 130px; font-size: 14px !important; text-align: center; align-items: center; }
+  body[data-dlt-page="admin"] [aria-label="Seat map"] { grid-template-columns: repeat(2,48px) 22px repeat(2,48px) !important; }
+  body[data-dlt-page="admin"] [aria-label="Seat map"] button { width: 48px !important; height: 48px !important; }
+  button[aria-label="Dismiss"] { min-width: 44px; flex-shrink: 0; }
+  [data-ops-scanner] { padding: 16px !important; }
+  [data-ops-scanner] video { max-width: 100%; }
+  [data-ops-mobile] select { font-size: 16px !important; }
+}
+@media screen and (max-width: 720px) and (min-height: 600px) {
+  body[data-dlt-page="home"] .journey-skip { bottom: calc(84px + env(safe-area-inset-bottom,0px)) !important; }
+  body[data-dlt-page="home"] .journey-progress { bottom: calc(144px + env(safe-area-inset-bottom,0px)) !important; }
+  body[data-dlt-page="home"] .journey-stop { bottom: calc(188px + env(safe-area-inset-bottom,0px)) !important; }
+}
+@media screen and (max-height: 500px) and (min-aspect-ratio: 1/1) {
+  .dlt-phone-nav { display: none; }
+}
+@media print {
+  .dlt-phone-nav, [data-ticket-actions], .dlt-pass-picker { display: none !important; }
+  .dlt-seating-notice { break-inside: avoid; border: 1px solid #0E4B34; }
+}
