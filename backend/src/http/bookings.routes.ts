@@ -7,7 +7,7 @@ import { z } from 'zod';
 import * as pay from '../domain/payments.ts';
 import * as boarding from '../domain/boarding.ts';
 import { MAX_SEATS_PER_BOOKING } from '../domain/seats.ts';
-import { requireAuth, requirePermission, GUEST_COOKIE } from './auth.routes.ts';
+import { requireAuth, requirePermission, requireVerifiedStudent, GUEST_COOKIE } from './auth.routes.ts';
 import { AppError } from '../domain/errors.ts';
 import type { PaymentProvider, NormalizedEvent } from '../domain/payment-provider.ts';
 import { invalidatePublicTripCache } from '../domain/cache.ts';
@@ -43,7 +43,7 @@ export default function bookingRoutes(provider: PaymentProvider) {
 
   /* ------------------------------------------------------------ bookings */
 
-  router.post('/bookings', jsonBody, async (req, res, next) => {
+  router.post('/bookings', requireVerifiedStudent, jsonBody, async (req, res, next) => {
     try {
       const key = req.get('Idempotency-Key');
       if (!key) throw new AppError('VALIDATION', 'An Idempotency-Key header is required');
@@ -127,7 +127,7 @@ export default function bookingRoutes(provider: PaymentProvider) {
 
   /* ------------------------------------------------------------ payments */
 
-  router.post('/payments/create', requireAuth, jsonBody, async (req, res, next) => {
+  router.post('/payments/create', requireAuth, requireVerifiedStudent, jsonBody, async (req, res, next) => {
     try {
       const { bookingId } = z.object({ bookingId: UUID }).parse(req.body);
       /* Note what is NOT accepted from the client: an amount. The fare is read

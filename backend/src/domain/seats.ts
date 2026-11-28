@@ -218,6 +218,10 @@ export async function myHeld(tripId: string, holder: Holder): Promise<SeatCell[]
  *  CONFLICT with the seat's real state, never a partial success. */
 export async function holdSeat(tripId: string, seatNumber: string, holder: Holder): Promise<SeatCell> {
   return tx(async (c) => {
+    // Lock the admission budget before any seat locks or counts. Locking only
+    // existing held rows misses an empty basket and concurrent new guests.
+    // Releases can only reduce these counts and need not take this lock.
+    await c.query("SELECT pg_advisory_xact_lock(hashtextextended('dlt:hold-budget:' || $1,0))", [tripId]);
     /* §12 basket cap, checked inside the same transaction as the hold so two
      * parallel requests cannot both see three seats and both add a fourth. */
     /* Lock this holder's HELD rows in the subquery (FOR UPDATE cannot sit on an

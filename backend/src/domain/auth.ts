@@ -20,6 +20,7 @@ import { tx, query } from '../db/index.ts';
 import { audit } from './audit.ts';
 import { AppError } from './errors.ts';
 import { sendEmail } from '../integrations/email/index.ts';
+import { withPasswordWork } from './password-work.ts';
 
 /* ---------------------------------------------------------------- config */
 
@@ -37,6 +38,10 @@ const ARGON2 = {
   parallelism: 1,
 } as const;
 
+const hashPassword = (password: string) => withPasswordWork(() => argon2.hash(password, ARGON2));
+const verifyPassword = (hash: string, password: string) =>
+  withPasswordWork(() => argon2.verify(hash, password).catch(() => false));
+
 /* HD-3. A hash to verify against when the account does not exist, so a missing
  * account costs the same time as a wrong password.
  *
@@ -46,7 +51,10 @@ const ARGON2 = {
  * useful stack. Now computed once, lazily, on the first sign-in attempt. */
 let decoyHash: Promise<string> | null = null;
 function getDecoyHash(): Promise<string> {
-  decoyHash ??= argon2.hash(randomBytes(32).toString('hex'), ARGON2);
+  decoyHash ??= hashPassword(randomBytes(32).toString('hex')).catch(error => {
+    decoyHash = null; // admission failure must not poison all future sign-ins
+    throw error;
+  });
   return decoyHash;
 }
 
@@ -56,7 +64,7 @@ const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 const newToken = (bytes = 32) => randomBytes(bytes).toString('base64url');
 
 /** A short human-typeable code for email verification and password reset. */
-const newCode = () => randomBytes(4).toString('hex').toUpperCase(); // 8 chars
+const newCode = () => randomBytes(8).toString('hex').toUpperCase(); // 16 chars; old issued codes still work
 
 function constantTimeEquals(a: string, b: string): boolean {
   const ab = Buffer.from(a), bb = Buffer.from(b);
@@ -120,7 +128,7 @@ export async function signUp(input: SignupInput, ctx: { ip?: string }): Promise<
   validateSignup(input);
   const email = input.email.trim().toLowerCase();
   const studentId = input.studentId?.trim() || null;
-  const passwordHash = await argon2.hash(input.password, ARGON2);
+  const passwordHash = await hashPassword(input.password);
 
   return tx(async (c) => {
     const dup = await c.query('SELECT 1 FROM users WHERE email = $1', [email]);
@@ -227,8 +235,7 @@ export async function signIn(
 
   /* Always verify SOMETHING, so a missing account and a wrong password take the
    * same time and leak nothing by timing. */
-  const ok = await argon2.verify(cred?.password_hash ?? await getDecoyHash(), password ?? '')
-    .catch(() => false);
+  const ok = await verifyPassword(cred?.password_hash ?? await getDecoyHash(), password ?? '');
 
   if (!cred || !ok) {
     await query('SELECT register_login_failure($1, $2, $3::interval)', [accountKey, LOGIN_MAX, LOGIN_WINDOW]);
@@ -241,7 +248,7 @@ export async function signIn(
 
   /* argon2 parameters change over time; rehash on login when they have. */
   if (argon2.needsRehash(cred.password_hash, ARGON2)) {
-    const fresh = await argon2.hash(password, ARGON2);
+    const fresh = await hashPassword(password);
     await query('UPDATE user_credentials SET password_hash = $1, updated_at = now() WHERE user_id = $2',
       [fresh, cred.id]);
   }
@@ -331,13 +338,19 @@ export async function requestPasswordReset(
 export async function resetPassword(code: string, password: string): Promise<{ ok: true }> {
   if (!password || password.length < 8)
     throw new AppError('VALIDATION', 'Use at least 8 characters');
-  const hash = await argon2.hash(password, ARGON2);
+  const codeHash = sha256((code ?? '').trim().toUpperCase());
+  // Reject arbitrary/expired codes before spending KDF resources. The locked
+  // lookup below still consumes the code atomically after hashing.
+  const { rows: [valid] } = await query(
+    'SELECT id FROM password_resets WHERE code_hash=$1 AND used_at IS NULL AND expires_at>now()', [codeHash]);
+  if (!valid) throw new AppError('INVALID', 'That reset link has expired');
+  const hash = await hashPassword(password);
 
   return tx(async (c) => {
     const { rows: [r] } = await c.query(
       `SELECT id, user_id FROM password_resets
         WHERE code_hash = $1 AND used_at IS NULL AND expires_at > now()
-        FOR UPDATE`, [sha256((code ?? '').trim().toUpperCase())]);
+        FOR UPDATE`, [codeHash]);
     if (!r) throw new AppError('INVALID', 'That reset link has expired');
 
     await c.query('UPDATE password_resets SET used_at = now() WHERE id = $1', [r.id]);
@@ -361,10 +374,10 @@ export async function changePassword(
     throw new AppError('VALIDATION', 'Use at least 8 characters');
   const { rows: [c0] } = await query(
     'SELECT password_hash FROM user_credentials WHERE user_id = $1', [userId]);
-  if (!c0 || !(await argon2.verify(c0.password_hash, currentPassword).catch(() => false)))
+  if (!c0 || !(await verifyPassword(c0.password_hash, currentPassword)))
     throw new AppError('INVALID_CREDENTIALS', 'Your current password is incorrect');
 
-  const hash = await argon2.hash(nextPassword, ARGON2);
+  const hash = await hashPassword(nextPassword);
   return tx(async (c) => {
     await c.query('UPDATE user_credentials SET password_hash = $1, updated_at = now() WHERE user_id = $2',
       [hash, userId]);

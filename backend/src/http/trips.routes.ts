@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import * as seats from '../domain/seats.ts';
-import { requireAuth, GUEST_COOKIE } from './auth.routes.ts';
+import { requireAuth, requireVerifiedStudent, GUEST_COOKIE } from './auth.routes.ts';
 import { AppError } from '../domain/errors.ts';
 import { cacheGet, cacheSet, invalidatePublicTripCache } from '../domain/cache.ts';
 
@@ -82,7 +82,7 @@ router.get('/trips/:id/seats', async (req, res, next) => {
 
 /* The one endpoint where two devices genuinely race. The domain delegates to a
  * locking SQL function; the loser gets 409 with the seat's real state. */
-router.post('/trips/:id/seats/:seatNumber/hold', async (req, res, next) => {
+router.post('/trips/:id/seats/:seatNumber/hold', requireVerifiedStudent, async (req, res, next) => {
   try {
     const id = UUID.parse(req.params.id);
     const seatNumber = z.string().regex(/^\d{1,2}[A-D]$/i).parse(req.params.seatNumber).toUpperCase();
@@ -147,7 +147,7 @@ router.post('/notify', notifyThrottle, async (req, res, next) => {
 
 /* ---------------------------------------------------------------- waitlist */
 
-router.post('/trips/:id/waitlist', requireAuth, async (req, res, next) => {
+router.post('/trips/:id/waitlist', requireAuth, requireVerifiedStudent, async (req, res, next) => {
   try {
     const seatsWanted = z.coerce.number().int().min(1).max(4).default(1).parse(req.body?.seatsWanted);
     res.status(201).json({ entry: await seats.joinWaitlist(
@@ -161,7 +161,7 @@ router.get('/waitlist/mine', requireAuth, async (req, res, next) => {
 });
 
 /* F-02 · the half that did not exist. */
-router.post('/waitlist/:id/claim', requireAuth, async (req, res, next) => {
+router.post('/waitlist/:id/claim', requireAuth, requireVerifiedStudent, async (req, res, next) => {
   try {
     res.json({ seat: await seats.claimOffer(UUID.parse(req.params.id), req.session!.userId) });
   } catch (e) { next(e); }
