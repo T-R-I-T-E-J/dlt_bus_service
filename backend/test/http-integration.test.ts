@@ -156,6 +156,8 @@ describe('HTTP integration — real Express, real middleware, real fetch', () =>
     for (const action of ['cancel','discard']) test(`POST /bookings authenticates the cookie, reads JSON and permits unpaid ${action}`, async () => {
       const jar = new Jar();
       await call(jar, 'POST', '/api/auth/signup', STUDENT);
+      // This fixture represents a student who has completed email verification.
+      await q('UPDATE users SET email_verified_at=now() WHERE email=$1', [STUDENT.email]);
       await call(jar, 'POST', '/api/auth/login', { email: STUDENT.email, password: STUDENT.password });
 
       const tripId = await seedTrip();

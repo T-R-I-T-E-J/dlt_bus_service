@@ -41,6 +41,16 @@ const loginThrottle = rateLimit({ windowMs: 60_000, limit: loginLimit, standardH
   message: { error: { code: 'RATE_LIMITED', message: 'Too many sign-in requests. Please wait a minute and try again.' } },
 });
 const resetThrottle = rateLimit({ windowMs: 60 * 60_000, limit: 5, standardHeaders: true });
+const authBudget = (name: string, fallback: number) => {
+  const limit = Number(process.env[name] ?? fallback);
+  if (!Number.isInteger(limit) || limit < 20 || limit > 2000)
+    throw new Error(`${name} must be an integer between 20 and 2000.`);
+  return rateLimit({ windowMs: 60_000, limit, standardHeaders: true,
+    message: { error: { code: 'RATE_LIMITED', message: 'Too many account requests. Please wait a minute and try again.' } },
+  });
+};
+const signupThrottle = authBudget('SIGNUP_RATE_LIMIT_PER_MINUTE', 240);
+const codeThrottle = authBudget('AUTH_CODE_RATE_LIMIT_PER_MINUTE', 480);
 
 const ctxOf = (req: Request) => ({
   ip: req.ip,
@@ -86,6 +96,15 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   next();
 }
 
+/** Unverified students may sign in, resend/enter their code and read existing
+ * tickets. They must not acquire authenticated inventory or checkout powers.
+ * Anonymous seat selection retains its separate guest abuse budgets. */
+export function requireVerifiedStudent(req: Request, _res: Response, next: NextFunction) {
+  if (req.session?.role === 'STUDENT' && !req.session.emailVerified)
+    return next(new AppError('FORBIDDEN', 'Verify your email in Account before booking. Your existing tickets remain available.'));
+  next();
+}
+
 /** Route guard. The permission is checked against the role in the DATABASE,
  *  read from the session — never from anything the client sent. */
 export function requirePermission(permission: string) {
@@ -100,7 +119,7 @@ export function requirePermission(permission: string) {
 
 /* ---------------------------------------------------------------- routes */
 
-router.post('/auth/signup', async (req, res, next) => {
+router.post('/auth/signup', signupThrottle, async (req, res, next) => {
   try {
     const body = SignupBody.parse(req.body);
     const user = await auth.signUp(body, { ip: req.ip });
@@ -149,7 +168,7 @@ router.get('/auth/me', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/auth/verify-email', async (req, res, next) => {
+router.post('/auth/verify-email', codeThrottle, async (req, res, next) => {
   try {
     const { code } = CodeBody.parse(req.body);
     res.json({ user: await auth.verifyEmail(code) });
@@ -169,7 +188,7 @@ router.post('/auth/forgot-password', resetThrottle, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/auth/reset-password', async (req, res, next) => {
+router.post('/auth/reset-password', codeThrottle, async (req, res, next) => {
   try {
     const { code, password } = ResetBody.parse(req.body);
     res.json(await auth.resetPassword(code, password));
